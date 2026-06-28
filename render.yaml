@@ -1,0 +1,12 @@
+# Render.com Blueprint — one free web service that builds the site and runs the
+# multiplayer server (which also serves the built site, so the URL hosts both the
+# game and the WebSocket). Render → New → Blueprint → pick this repo.
+services:
+  - type: web
+    name: magestone
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm run server
+    healthCheckPath: /
+    autoDeploy: true

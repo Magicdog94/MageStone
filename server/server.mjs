@@ -8,6 +8,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import pg from 'pg';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, 'data');
@@ -24,6 +25,43 @@ if (existsSync(USERS_FILE)) {
   }
 }
 const saveUsers = () => writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+
+// Accounts persist to Postgres when DATABASE_URL is set (production), else to the
+// local JSON file (dev). Same tiny interface either way: getUser / putUser.
+const DATABASE_URL = process.env.DATABASE_URL;
+const pool = DATABASE_URL
+  ? new pg.Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } })
+  : null;
+if (pool) pool.on('error', (e) => console.error('pg pool error:', e.message));
+
+async function initStore() {
+  if (!pool) {
+    console.log('Using local file for accounts (set DATABASE_URL for a real DB).');
+    return;
+  }
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS users (key text PRIMARY KEY, salt text NOT NULL, hash text NOT NULL, display text NOT NULL)',
+  );
+  console.log('Using Postgres for accounts.');
+}
+async function getUser(key) {
+  if (pool) {
+    const r = await pool.query('SELECT salt, hash, display FROM users WHERE key = $1', [key]);
+    return r.rows[0] || null;
+  }
+  return users[key] || null;
+}
+async function putUser(key, u) {
+  if (pool) {
+    await pool.query(
+      'INSERT INTO users(key, salt, hash, display) VALUES($1, $2, $3, $4) ON CONFLICT (key) DO NOTHING',
+      [key, u.salt, u.hash, u.display],
+    );
+  } else {
+    users[key] = u;
+    saveUsers();
+  }
+}
 
 const hashPw = (pw, salt) => scryptSync(pw, salt, 64).toString('hex');
 const makeUser = (pw, display) => {
@@ -109,27 +147,26 @@ function leaveRoom(ws, s) {
   else broadcastLobby(g);
 }
 
-function handle(ws, s, m) {
+async function handle(ws, s, m) {
   switch (m.t) {
     case 'signup': {
       const display = (m.username || '').trim();
       const key = display.toLowerCase();
       if (display.length < 3) return send(ws, { t: 'authErr', message: 'Username must be at least 3 characters.' });
       if ((m.password || '').length < 4) return send(ws, { t: 'authErr', message: 'Password must be at least 4 characters.' });
-      if (users[key]) return send(ws, { t: 'authErr', message: 'That username is taken.' });
-      users[key] = makeUser(m.password, display);
-      saveUsers();
+      if (await getUser(key)) return send(ws, { t: 'authErr', message: 'That username is taken.' });
+      await putUser(key, makeUser(m.password, display));
       return authSuccess(ws, s, key, display);
     }
     case 'signin': {
       const key = (m.username || '').trim().toLowerCase();
-      const user = users[key];
+      const user = await getUser(key);
       if (!user || !checkPw(user, m.password || '')) return send(ws, { t: 'authErr', message: 'Wrong username or password.' });
       return authSuccess(ws, s, key, user.display || key);
     }
     case 'auth': {
       const key = tokens.get(m.token);
-      const user = key && users[key];
+      const user = key ? await getUser(key) : null;
       if (!user) return send(ws, { t: 'authErr', message: 'Session expired — sign in again.' });
       s.username = key;
       s.display = user.display || key;
@@ -246,7 +283,10 @@ wss.on('connection', (ws) => {
     } catch {
       return;
     }
-    handle(ws, sockets.get(ws), m);
+    Promise.resolve(handle(ws, sockets.get(ws), m)).catch((e) => {
+      console.error('handler error:', e.message);
+      send(ws, { t: 'error', message: 'Server error — try again.' });
+    });
   });
   ws.on('close', () => {
     const s = sockets.get(ws);
@@ -264,4 +304,9 @@ wss.on('connection', (ws) => {
 });
 
 const PORT = process.env.PORT || 8787;
-httpServer.listen(PORT, () => console.log(`MageStone multiplayer server listening on :${PORT}`));
+initStore()
+  .then(() => httpServer.listen(PORT, () => console.log(`MageStone server listening on :${PORT}`)))
+  .catch((e) => {
+    console.error('Failed to initialise the accounts database:', e.message);
+    process.exit(1);
+  });

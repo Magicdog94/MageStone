@@ -10,3 +10,9 @@ services:
     startCommand: npm run server
     healthCheckPath: /
     autoDeploy: true
+    envVars:
+      # Paste your Postgres connection string here at deploy time so accounts
+      # persist across restarts/redeploys (e.g. a free Neon or Supabase DB).
+      # Leave unset and the server falls back to an ephemeral local file.
+      - key: DATABASE_URL
+        sync: false

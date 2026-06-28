@@ -19,14 +19,28 @@ no credit card, supports WebSockets).
    ```
    (The folder is already `git init`-ed with a first commit, so this just pushes it.)
 
-## 2. Deploy on Render
+## 2. Get a free Postgres database (so accounts survive redeploys)
+Accounts are stored in Postgres when the server sees a `DATABASE_URL`; without one
+it falls back to a local file that the host wipes on each deploy. Pick either:
+
+- **Neon** — <https://neon.tech> → sign up (free, no card) → create a project →
+  copy the **connection string** (looks like `postgresql://user:pass@…/dbname?sslmode=require`).
+- **Supabase** — <https://supabase.com> → new project → Settings ▸ Database →
+  copy the **Connection string (URI)**.
+
+Keep that string for the next step. (The server creates its `users` table itself.)
+
+## 3. Deploy on Render
 1. Sign up / log in at <https://render.com> (free, no card needed).
 2. **New ▸ Blueprint** → connect your GitHub → pick the `magestone` repo.
    Render reads `render.yaml` and configures a free web service automatically.
    *(Or **New ▸ Web Service** manually: Runtime **Node**, Build `npm ci && npm run build`, Start `npm run server`.)*
-3. Click **Apply / Create**. First build takes a few minutes.
-4. When it's live you'll get a URL like `https://magestone.onrender.com` — share it.
+3. When prompted for the **`DATABASE_URL`** env var, paste your Postgres connection
+   string from step 2. (Or add it later under the service's **Environment** tab.)
+4. Click **Apply / Create**. First build takes a few minutes.
+5. When it's live you'll get a URL like `https://magestone.onrender.com` — share it.
    Anyone can open it, **Sign Up**, create a game, and others join by **Game ID + password**.
+   Accounts now persist even when the free service sleeps or redeploys.
 
 ## How it works
 - `npm run build` produces `dist/`; `npm run server` (`server/server.mjs`) serves
@@ -37,9 +51,9 @@ no credit card, supports WebSockets).
 ## Good to know (free tier)
 - Render's free service **sleeps after ~15 min idle**; the first visit after that
   takes ~30–60 s to wake. Fine for playing with friends.
-- **Accounts persist** to `server/data/users.json` on the service's disk. On the
-  free tier that disk is **ephemeral** (wiped on redeploy/restart), so accounts can
-  reset. For durable accounts, attach a Render disk or a database (ask me).
+- **Accounts persist** in your Postgres DB (step 2), so they survive sleeps and
+  redeploys. (Without a `DATABASE_URL`, the server uses an ephemeral local file.)
+- **Sessions don't persist** across a server restart — players just sign in again.
 - **Game rooms are in memory** — a server restart ends any in-progress match.
 - It's a trust-based prototype (the player whose turn it is is authoritative).
 

@@ -1171,12 +1171,9 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  /* Zoom into the central framed cover so it fills the page edge-to-edge and the
-     blurred margins baked into the hero are cropped away. */
-  object-position: 50% 50%;
-  transform: scale(1.4);
-  /* anchor the zoom near the title so it stays; the lower banner crops instead */
-  transform-origin: 50% 24%;
+  /* The cover art is pre-cropped to the framed artwork (no blurred margins), so
+     just fill the page; bias upward so the title stays as the page narrows. */
+  object-position: 50% 16%;
 }
 /* gentle scrim: keep the art bright, only darken the bottom for the controls */
 .entry-photo-wrap::after {

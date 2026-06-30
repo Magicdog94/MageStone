@@ -578,13 +578,22 @@ export function collect(state: GameState, unitId: string): GameState {
   if (!dice) return state;
   const here = stonesAt(state, unit.cell);
   const ids = new Set(here.map((s) => s.id));
+  // Already-activated (gold) stones a slain Mage dropped stay activated when
+  // re-collected; plain (silver) stones become carried (need activating on base).
+  const gainedActivated = here.filter((s) => s.activated).length;
+  const gainedCarried = here.length - gainedActivated;
+  const note = gainedActivated > 0 ? ` (${gainedActivated} already activated)` : '';
   return checkVictory({
     ...state,
     dice,
     stones: state.stones.map((s) => (ids.has(s.id) ? { ...s, collected: true } : s)),
-    units: state.units.map((u) => (u.id === unitId ? { ...u, carried: u.carried + here.length } : u)),
+    units: state.units.map((u) =>
+      u.id === unitId
+        ? { ...u, carried: u.carried + gainedCarried, activated: u.activated + gainedActivated }
+        : u,
+    ),
     unitsActedThisTurn: markActed(state, unitId),
-    log: [...state.log, `${unit.owner}'s Mage collects ${here.length} MageStone(s).`],
+    log: [...state.log, `${unit.owner}'s Mage collects ${here.length} MageStone(s)${note}.`],
   });
 }
 

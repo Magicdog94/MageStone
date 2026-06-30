@@ -1,53 +1,48 @@
-// Procedural adventure theme, synthesised with the Web Audio API (no asset, works
-// offline). Upbeat and questy in the spirit of a classic RPG main theme — an
-// original tune, not a copy: a bright D-major melody over a I–V–vi–IV loop with a
-// driving root/fifth bass, rhythmic chord stabs, and a light kick/snare/hat groove.
-// Starts on the first user gesture (autoplay is blocked until then) and keeps
-// playing across the landing screen and into matches — the graph is a module
-// singleton, untied to any component, so screen changes never interrupt it.
+// Procedural "medieval folklore" score, synthesised with the Web Audio API (no
+// asset, works offline). An original tune in the style of medieval folk — a D
+// Dorian melody over a droning bagpipe/hurdy-gurdy fifth, soft lute-pluck
+// harmony and a frame-drum lilt in 6/8. Not a copy of any track. Starts on the
+// first user gesture (autoplay is blocked until then) and keeps playing across
+// the landing screen and into matches — the graph is a module singleton.
 
 import { create } from 'zustand';
 
 const VOL = 0.2; // master volume when unmuted
 
-// ---- tempo / structure ----
-const BPM = 116;
-const BEAT = 60 / BPM;
-const EIGHTH = BEAT / 2;
-const STEPS_PER_BAR = 8; // eighth-notes per bar
-const BARS = 8; // 8-bar theme (two passes of the 4-chord loop)
+// ---- tempo / structure (lively 6/8 jig) ----
+const EIGHTH = 0.21; // seconds per eighth-note (faster = merrier)
+const STEPS_PER_BAR = 6; // 6 eighths → two dotted-quarter pulses
+const BARS = 8;
 const TOTAL_STEPS = STEPS_PER_BAR * BARS;
 
-// I–V–vi–IV in D major (bright, heroic). notes = triad, root = bass root.
-const PROG = [
-  { notes: [293.66, 369.99, 440.0], root: 73.42 }, // D   (D F# A)
-  { notes: [277.18, 329.63, 440.0], root: 110.0 }, // A   (C# E A)
-  { notes: [293.66, 369.99, 493.88], root: 61.74 }, // Bm  (D F# B)
-  { notes: [293.66, 392.0, 493.88], root: 98.0 }, // G   (D G B)
-];
+// Bright D major (D E F# G A B C#). Drone on D + its fifth A — the bagpipe bourdon.
+const D2 = 73.42, A2 = 110.0;
+const D4 = 293.66, Fs4 = 369.99, G4 = 392.0, A4 = 440.0, B4 = 493.88;
+const Cs5 = 554.37, D5 = 587.33, E5 = 659.25, Fs5 = 739.99, G5 = 783.99, A5 = 880.0;
 
-// Lead melody as [freq, durationInEighths] over the full 8 bars (0 = rest).
-const D5 = 587.33, E5 = 659.25, Fs5 = 739.99, G5 = 783.99, A5 = 880.0, B5 = 987.77;
-const A4 = 440.0, B4 = 493.88, Cs5 = 554.37;
+// Joyful major pad: D (I) and G (IV), alternating each pair of bars.
+const DCH = [D4, Fs4, A4];
+const GCH = [G4, B4, D5];
+
+// Lead melody as [freq, durationInEighths] over the 8-bar phrase (0 = rest).
 const MELODY: [number, number][] = [
-  // Bar 1 (D)
-  [D5, 2], [Fs5, 1], [E5, 1], [D5, 2], [A4, 2],
-  // Bar 2 (A)
-  [Cs5, 2], [E5, 1], [Cs5, 1], [A4, 2], [B4, 2],
-  // Bar 3 (Bm)
-  [D5, 2], [Fs5, 2], [A5, 2], [Fs5, 2],
-  // Bar 4 (G)
-  [G5, 2], [Fs5, 1], [E5, 1], [D5, 4],
-  // Bar 5 (D)
-  [Fs5, 2], [A5, 1], [G5, 1], [Fs5, 2], [E5, 2],
-  // Bar 6 (A)
-  [E5, 2], [Cs5, 2], [A4, 4],
-  // Bar 7 (Bm)
-  [B4, 2], [D5, 2], [Fs5, 2], [B5, 2],
-  // Bar 8 (G)
-  [A5, 2], [G5, 2], [Fs5, 2], [D5, 2],
+  // Bar 1
+  [A4, 1], [D5, 1], [Fs5, 1], [A5, 1], [Fs5, 1], [D5, 1],
+  // Bar 2
+  [E5, 1], [Fs5, 1], [G5, 1], [Fs5, 1], [E5, 1], [D5, 1],
+  // Bar 3
+  [Fs5, 1], [A5, 1], [Fs5, 1], [E5, 1], [D5, 1], [E5, 1],
+  // Bar 4
+  [D5, 3], [A4, 3],
+  // Bar 5
+  [B4, 1], [D5, 1], [Fs5, 1], [G5, 1], [Fs5, 1], [E5, 1],
+  // Bar 6
+  [Fs5, 2], [D5, 1], [A4, 2], [D5, 1],
+  // Bar 7
+  [G4, 1], [A4, 1], [B4, 1], [Cs5, 1], [D5, 1], [E5, 1],
+  // Bar 8
+  [Fs5, 3], [D5, 3],
 ];
-// Expand melody into a per-step trigger map.
 const LEAD_AT: ({ freq: number; dur: number } | undefined)[] = [];
 {
   let s = 0;
@@ -60,7 +55,7 @@ const LEAD_AT: ({ freq: number; dur: number } | undefined)[] = [];
 // ---- audio graph (lazily built on first start) ----
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
-let padFilter: BiquadFilterNode | null = null;
+let reedFilter: BiquadFilterNode | null = null;
 let echo: DelayNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
 let running = false;
@@ -76,30 +71,28 @@ function buildGraph() {
   master.gain.value = 0.0001;
   master.connect(ctx.destination);
 
-  // Warm lowpass bus for pad/bass.
-  padFilter = ctx.createBiquadFilter();
-  padFilter.type = 'lowpass';
-  padFilter.frequency.value = 1600;
-  padFilter.Q.value = 0.4;
-  padFilter.connect(master);
+  // Reedy lowpass bus for drone + pad (bagpipe/hurdy-gurdy timbre).
+  reedFilter = ctx.createBiquadFilter();
+  reedFilter.type = 'lowpass';
+  reedFilter.frequency.value = 1900;
+  reedFilter.Q.value = 0.6;
+  reedFilter.connect(master);
 
-  // Feedback delay → shimmer on the lead.
+  // Light echo for the lute lead.
   echo = ctx.createDelay(1.0);
-  echo.delayTime.value = BEAT * 0.75;
+  echo.delayTime.value = EIGHTH * 1.5;
   const fb = ctx.createGain();
-  fb.gain.value = 0.28;
+  fb.gain.value = 0.26;
   const wet = ctx.createGain();
-  wet.gain.value = 0.22;
+  wet.gain.value = 0.2;
   echo.connect(fb).connect(echo);
   echo.connect(wet).connect(master);
 
-  // White-noise buffer for the hats/snare.
   noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.4, ctx.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
 }
 
-/** One oscillator voice with an exponential decay envelope. */
 function voice(
   freq: number,
   t0: number,
@@ -122,7 +115,6 @@ function voice(
   o.stop(t0 + dur + 0.05);
 }
 
-/** A filtered noise burst — used for hats and the snare. */
 function noise(t0: number, dur: number, opts: { type: BiquadFilterType; freq: number; peak: number }) {
   if (!ctx || !master || !noiseBuf) return;
   const src = ctx.createBufferSource();
@@ -138,51 +130,46 @@ function noise(t0: number, dur: number, opts: { type: BiquadFilterType; freq: nu
   src.stop(t0 + dur + 0.02);
 }
 
-/** A punchy kick: pitch-dropping sine. */
-function kick(t0: number) {
+/** A soft frame-drum thud. */
+function drum(t0: number, peak: number) {
   if (!ctx || !master) return;
   const o = ctx.createOscillator();
   o.type = 'sine';
-  o.frequency.setValueAtTime(135, t0);
-  o.frequency.exponentialRampToValueAtTime(48, t0 + 0.12);
+  o.frequency.setValueAtTime(120, t0);
+  o.frequency.exponentialRampToValueAtTime(55, t0 + 0.1);
   const g = ctx.createGain();
-  g.gain.setValueAtTime(0.5, t0);
-  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.2);
+  g.gain.setValueAtTime(peak, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
   o.connect(g).connect(master);
   o.start(t0);
-  o.stop(t0 + 0.24);
+  o.stop(t0 + 0.26);
 }
 
 function scheduleStep(s: number, t: number) {
-  if (!padFilter) return;
+  if (!reedFilter) return;
   const bar = Math.floor(s / STEPS_PER_BAR);
-  const chord = PROG[bar % PROG.length];
   const inBar = s % STEPS_PER_BAR;
-  const onBeat = inBar % 2 === 0; // quarter-note beats
 
-  // Bass: root/fifth pulse on every beat for drive.
-  if (onBeat) {
-    const beatIdx = inBar / 2; // 0..3
-    const f = beatIdx % 2 === 0 ? chord.root : chord.root * 1.5;
-    voice(f, t, BEAT * 0.9, { type: 'sawtooth', peak: 0.14, dest: padFilter });
+  if (inBar === 0) {
+    // droning bourdon (D + fifth A) under the whole bar
+    voice(D2, t, EIGHTH * 6.4, { type: 'sawtooth', peak: 0.07, attack: 0.25, dest: reedFilter });
+    voice(A2, t, EIGHTH * 6.4, { type: 'sawtooth', peak: 0.05, attack: 0.25, dest: reedFilter });
+    // soft lute-pluck chord
+    const chord = bar % 4 < 2 ? DCH : GCH;
+    for (const f of chord) voice(f, t, EIGHTH * 2.2, { type: 'triangle', peak: 0.032, attack: 0.01, dest: reedFilter });
   }
 
-  // Chord stabs on beats 1 and 3 (rhythmic harmony).
-  if (inBar === 0 || inBar === 4) {
-    for (const f of chord.notes) {
-      voice(f, t, BEAT * 0.5, { type: 'sawtooth', peak: 0.04, attack: 0.004, dest: padFilter });
-    }
-  }
+  // frame-drum on the two dotted-quarter pulses; tambourine on the offbeats
+  if (inBar === 0) drum(t, 0.32);
+  if (inBar === 3) drum(t, 0.24);
+  if (inBar === 1 || inBar === 2 || inBar === 4 || inBar === 5)
+    noise(t, 0.05, { type: 'highpass', freq: 6500, peak: inBar === 4 ? 0.07 : 0.045 });
 
-  // Drums.
-  if (inBar === 0 || inBar === 4) kick(t); // beats 1 & 3
-  if (inBar === 2 || inBar === 6) noise(t, 0.14, { type: 'bandpass', freq: 1900, peak: 0.22 }); // backbeat snare
-  noise(t, 0.03, { type: 'highpass', freq: 8000, peak: onBeat ? 0.05 : 0.09 }); // hats on every eighth
-
-  // Lead melody, echoed for shimmer.
+  // lute lead, lightly echoed, with a soft octave sparkle for a merry ring
   const lead = LEAD_AT[s];
   if (lead) {
-    voice(lead.freq, t, EIGHTH * lead.dur * 0.96, { type: 'triangle', peak: 0.14, attack: 0.006, echo: true });
+    voice(lead.freq, t, EIGHTH * lead.dur * 0.95, { type: 'triangle', peak: 0.13, attack: 0.006, echo: true });
+    voice(lead.freq * 2, t, EIGHTH * lead.dur * 0.6, { type: 'triangle', peak: 0.03, attack: 0.004, echo: true });
   }
 }
 

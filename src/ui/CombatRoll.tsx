@@ -89,9 +89,13 @@ export function CombatRoll({ combat, runId }: { combat: CombatResult; runId: num
       <span className="cr-vs">vs</span>
 
       <div className="cr-side">
-        <span className="cr-name">Defender</span>
+        <span className="cr-name">
+          {combat.defenderKind === 'mage' && combat.defenseFaces > 6
+            ? `Defender (d${combat.defenseFaces})`
+            : 'Defender'}
+        </span>
         <div className="cr-dice">
-          <RollingDie final={combat.defenseRoll} faces={6} kind={combat.defenderKind} runId={runId} />
+          <RollingDie final={combat.defenseRoll} faces={combat.defenseFaces} kind={combat.defenderKind} runId={runId} />
         </div>
         <span className="cr-total">{done ? combat.defenseRoll : '…'}</span>
       </div>

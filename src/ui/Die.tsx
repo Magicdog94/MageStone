@@ -11,12 +11,17 @@ const PIPS: Record<number, [number, number][]> = {
 
 type DieKind = 'mage' | 'priest' | 'warrior';
 
-// Die kind is conveyed by colour: warrior red, mage blue, priest green.
-const STYLE: Record<DieKind, { face: string; pip: string; border: string }> = {
-  mage: { face: '#2f5fb0', pip: '#eef4ff', border: '#84a6e0' },
-  priest: { face: '#2e8b57', pip: '#ecfaf1', border: '#79c6a0' },
-  warrior: { face: '#b23636', pip: '#f7efe3', border: '#dd9a9a' },
+// Die kind is conveyed by colour: warrior red, mage blue, priest green. Marbled
+// stone face + gilt frame + gold-dome pips, matching the 3D dice & token art.
+const STYLE: Record<DieKind, { c1: string; c2: string }> = {
+  mage: { c1: '#2f63b6', c2: '#163a82' },
+  priest: { c1: '#22844c', c2: '#0e5530' },
+  warrior: { c1: '#ab2d31', c2: '#6e171a' },
 };
+const GOLD = '#c9a23a';
+const GOLD_BRIGHT = '#f0d27a';
+// A shaded gold dome for the pips.
+const PIP_BG = 'radial-gradient(circle at 35% 30%, #fff2bf 0%, #f6e191 42%, #c9a23a 76%, #7c5a1e 100%)';
 
 interface DieProps {
   value: number;
@@ -29,9 +34,7 @@ interface DieProps {
 
 export function PipDie({ value, kind = 'warrior', state = 'idle', onClick, size = 48, title }: DieProps) {
   const sk = STYLE[kind];
-  const face = sk.face;
-  const pip = sk.pip;
-  const border = state === 'selected' ? '#ffd54a' : sk.border;
+  const border = state === 'selected' ? '#ffd54a' : GOLD;
   const dim = state === 'used' || state === 'discarded';
   const cells = PIPS[value] ?? [];
 
@@ -46,9 +49,12 @@ export function PipDie({ value, kind = 'warrior', state = 'idle', onClick, size 
         width: size,
         height: size,
         borderRadius: size * 0.18,
-        background: face,
+        background: `linear-gradient(135deg, ${sk.c1}, ${sk.c2})`,
         border: `2px solid ${border}`,
-        boxShadow: state === 'selected' ? '0 0 10px #ffd54a' : '0 2px 4px rgba(0,0,0,.4)',
+        boxShadow:
+          state === 'selected'
+            ? `0 0 10px #ffd54a, inset 0 0 0 1px ${GOLD_BRIGHT}`
+            : `inset 0 0 0 1px rgba(240,210,122,0.45), 0 2px 4px rgba(0,0,0,.4)`,
         cursor: onClick ? 'pointer' : 'default',
         opacity: dim ? 0.32 : 1,
         padding: 0,
@@ -76,12 +82,13 @@ export function PipDie({ value, kind = 'warrior', state = 'idle', onClick, size 
             key={i}
             style={{
               position: 'absolute',
-              left: `${15 + cx * 28}%`,
-              top: `${15 + cy * 28}%`,
-              width: size * 0.16,
-              height: size * 0.16,
+              left: `${22 + cx * 28}%`,
+              top: `${22 + cy * 28}%`,
+              width: size * 0.18,
+              height: size * 0.18,
               borderRadius: '50%',
-              background: pip,
+              background: PIP_BG,
+              boxShadow: 'inset 0 -1px 1px rgba(0,0,0,.35), 0 1px 1.5px rgba(0,0,0,.5)',
               transform: 'translate(-50%,-50%)',
             }}
           />

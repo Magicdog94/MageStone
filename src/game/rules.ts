@@ -4,7 +4,7 @@
 
 import {
   cellExists,
-  edgeOwner,
+  edgeRotation,
   inNexus,
   sameCell,
   rotateCell,
@@ -17,6 +17,7 @@ import type {
   Die,
   DieKind,
   GameState,
+  MageStone,
   PlayerColor,
   Unit,
 } from './types';
@@ -63,25 +64,30 @@ function orthAdjacent(a: Cell, b: Cell): boolean {
   return Math.abs(a.r - b.r) + Math.abs(a.c - b.c) === 1;
 }
 
-/** A player's home cell for a given formation slot column (red-frame). */
-function homeCell(player: PlayerColor, col: number): Cell {
-  return rotateCell({ r: 0, c: col }, PLAYER_ROTATION[player]);
+/** The board seat (quarter-turns from the top) a colour occupies this game. */
+function seatOf(state: GameState, player: PlayerColor): number {
+  return state.seats?.[player] ?? PLAYER_ROTATION[player];
 }
-const mageHome = (p: PlayerColor) => homeCell(p, 8);
+
+/** A player's home cell for a given formation slot column (top-frame). */
+function homeCell(state: GameState, player: PlayerColor, col: number): Cell {
+  return rotateCell({ r: 0, c: col }, seatOf(state, player));
+}
+const mageHome = (state: GameState, p: PlayerColor) => homeCell(state, p, 8);
 
 /** The 8 cells of a player's home edge (its base). */
-function baseCellsOf(player: PlayerColor): Cell[] {
-  return [4, 5, 6, 7, 8, 9, 10, 11].map((c) => homeCell(player, c));
+function baseCellsOf(state: GameState, player: PlayerColor): Cell[] {
+  return [4, 5, 6, 7, 8, 9, 10, 11].map((c) => homeCell(state, player, c));
 }
 
-/** Is the unit standing on one of its own base cells? */
-export function onOwnBase(unit: Unit): boolean {
-  return edgeOwner(unit.cell.r, unit.cell.c) === unit.owner;
+/** Is the unit standing on its own home edge (its base)? */
+export function onOwnBase(state: GameState, unit: Unit): boolean {
+  return edgeRotation(unit.cell.r, unit.cell.c) === seatOf(state, unit.owner);
 }
 
 /** Is an enemy unit currently occupying any of this player's base cells? */
 function enemyInBase(state: GameState, player: PlayerColor): boolean {
-  const cells = baseCellsOf(player);
+  const cells = baseCellsOf(state, player);
   return state.units.some(
     (u) => u.owner !== player && cells.some((bc) => sameCell(bc, u.cell)),
   );
@@ -90,7 +96,7 @@ function enemyInBase(state: GameState, player: PlayerColor): boolean {
 /** First free base cell (preferring the unit's home slot), or null. */
 function freeBaseCell(state: GameState, player: PlayerColor, preferred: Cell): Cell | null {
   if (!unitAt(state, preferred)) return preferred;
-  for (const c of baseCellsOf(player)) if (!unitAt(state, c)) return c;
+  for (const c of baseCellsOf(state, player)) if (!unitAt(state, c)) return c;
   return null;
 }
 
@@ -108,7 +114,7 @@ function respawnOrQueue(
   log: string[],
   activated: number,
 ): GameState {
-  const home = homeCell(owner, kind === 'mage' ? 8 : 7);
+  const home = homeCell(state, owner, kind === 'mage' ? 8 : 7);
   if (!enemyInBase(state, owner)) {
     const cell = freeBaseCell(state, owner, home);
     if (cell) {
@@ -132,7 +138,7 @@ export function resolveRespawns(state: GameState): GameState {
   for (const p of state.pendingRespawns) {
     const scratch = { ...state, units };
     if (!enemyInBase(scratch, p.owner)) {
-      const home = homeCell(p.owner, p.kind === 'mage' ? 8 : 7);
+      const home = homeCell(scratch, p.owner, p.kind === 'mage' ? 8 : 7);
       const cell = freeBaseCell(scratch, p.owner, home);
       if (cell) {
         units = [
@@ -346,8 +352,12 @@ export function plannedAttackers(state: GameState, attackerId: string, targetId:
 }
 
 /**
- * Exact win/draw/lose probabilities for an attack (attacker's summed roll vs the
- * defender's 1d6). Warriors contribute n×d6; a lone Mage rolls its power die.
+ * Win/lose probabilities for an attack (attacker's summed roll vs the defender's
+ * die — d6, or a defending Mage's power die). Warriors contribute n×d6; a lone
+ * Mage attacks with its power die. Because combat
+ * **rerolls any draw** (see `resolveAttack`), the odds are conditioned on a
+ * decisive result: P(win | not draw) = win / (win + lose). `draw` is therefore
+ * always 0 here — kept in the shape for compatibility.
  */
 export function combatOdds(
   state: GameState,
@@ -368,18 +378,22 @@ export function combatOdds(
     }
     dist = next;
   }
+  // The defender rolls a d6, unless it's a Mage — then its power die (d12/d20).
+  const defFaces = target.kind === 'mage' ? magePowerDie(target.activated) : 6;
   let win = 0;
-  let draw = 0;
   let lose = 0;
   for (const [a, pa] of dist) {
-    for (let d = 1; d <= 6; d++) {
-      const p = pa / 6;
+    for (let d = 1; d <= defFaces; d++) {
+      const p = pa / defFaces;
       if (a > d) win += p;
-      else if (a === d) draw += p;
-      else lose += p;
+      else if (a < d) lose += p;
+      // a === d is a draw → rerolled, so it doesn't contribute to either side.
     }
   }
-  return { win, draw, lose };
+  // Renormalise over decisive outcomes (draws are rerolled away).
+  const decisive = win + lose;
+  if (decisive === 0) return { win: 0, draw: 0, lose: 0 };
+  return { win: win / decisive, draw: 0, lose: lose / decisive };
 }
 
 /**
@@ -414,19 +428,24 @@ export function resolveAttack(
   }
   dice = scratch.dice;
 
-  // Roll attack.
-  const attackDice: number[] = [];
-  let attackFaces = 6;
-  if (isMage) {
-    attackFaces = magePowerDie(attackers[0].activated);
-    attackDice.push(dN(attackFaces, rng));
-  } else {
-    for (let i = 0; i < attackers.length; i++) attackDice.push(dN(6, rng));
-  }
-  const attackRoll = attackDice.reduce((a, b) => a + b, 0);
-  const defenseRoll = dN(6, rng);
+  // Roll attack vs the defender's die, rerolling any **draw** so combat is always
+  // decisive (a tie is silently re-rolled — the UI only ever sees a win or loss).
+  // A defending Mage rolls its own power die (d12/d20 by activated stones), not a
+  // d6 — so a powered-up Mage is much harder to kill.
+  const attackFaces = isMage ? magePowerDie(attackers[0].activated) : 6;
+  const defenseFaces = target.kind === 'mage' ? magePowerDie(target.activated) : 6;
+  let attackDice: number[];
+  let attackRoll: number;
+  let defenseRoll: number;
+  do {
+    attackDice = isMage
+      ? [dN(attackFaces, rng)]
+      : Array.from({ length: attackers.length }, () => dN(6, rng));
+    attackRoll = attackDice.reduce((a, b) => a + b, 0);
+    defenseRoll = dN(defenseFaces, rng);
+  } while (attackRoll === defenseRoll);
 
-  // Highest roll wins; the loser is defeated outright. Draw wastes the action.
+  // Highest roll wins; the loser is defeated outright. (Draws never reach here.)
   let outcome: CombatResult['outcome'];
   let defeatedId: string | null = null;
   let next: GameState = {
@@ -441,7 +460,8 @@ export function resolveAttack(
     outcome = 'win';
     defeatedId = target.id;
     next = bumpKill(defeatUnit(next, target.id), state.current);
-  } else if (attackRoll < defenseRoll) {
+  } else {
+    // attackRoll < defenseRoll (equality was rerolled away above).
     outcome = 'lose';
     if (target.kind === 'priest') {
       // A Priest that wins its defence is not a killer — the attacker survives.
@@ -454,8 +474,6 @@ export function resolveAttack(
       defeatedId = attackers[0].id; // coordinated: only one attacker falls
       next = bumpKill(defeatUnit(next, attackers[0].id), target.owner);
     }
-  } else {
-    outcome = 'draw';
   }
 
   const combat: CombatResult = {
@@ -467,12 +485,12 @@ export function resolveAttack(
     attackDice,
     attackFaces,
     defenseRoll,
+    defenseFaces,
     outcome,
     defeatedId,
     defenderCell: target.cell,
   };
-  const verb =
-    outcome === 'win' ? 'defeats' : outcome === 'lose' ? 'is repelled by' : 'draws with';
+  const verb = outcome === 'win' ? 'defeats' : 'is repelled by';
   const label = isMage ? 'Mage' : attackers.length > 1 ? `${attackers.length} Warriors` : 'Warrior';
   next = {
     ...next,
@@ -522,15 +540,24 @@ export function defeatUnit(state: GameState, unitId: string): GameState {
   }
 
   // Mage: drop all unactivated + 1 activated stone; keep the remaining activated
-  // stones, which return with the Mage when it respawns.
+  // stones, which return with the Mage when it respawns. The dropped activated
+  // stone is flagged so it shows gold on the board.
   const droppedActivated = unit.activated > 0 ? 1 : 0;
   const retainedActivated = unit.activated - droppedActivated;
   const dropCount = unit.carried + droppedActivated;
-  const dropped = Array.from({ length: dropCount }, () => ({
-    id: `stone-${stoneCounter++}`,
-    cell: unit.cell,
-    collected: false,
-  }));
+  const dropped: MageStone[] = [
+    ...Array.from({ length: unit.carried }, () => ({
+      id: `stone-${stoneCounter++}`,
+      cell: unit.cell,
+      collected: false,
+    })),
+    ...Array.from({ length: droppedActivated }, () => ({
+      id: `stone-${stoneCounter++}`,
+      cell: unit.cell,
+      collected: false,
+      activated: true,
+    })),
+  ];
   log.push(`${unit.owner}'s Mage is struck down, scattering ${dropCount} MageStone(s).`);
 
   const base = { ...state, units, stones: [...state.stones, ...dropped], log };
@@ -564,7 +591,7 @@ export function collect(state: GameState, unitId: string): GameState {
 export function canActivate(state: GameState, unitId: string): boolean {
   const u = unitById(state, unitId);
   // A Mage may only activate carried MageStones while standing on its own base.
-  return !!u && u.kind === 'mage' && canAct(state, unitId) && u.carried > 0 && onOwnBase(u);
+  return !!u && u.kind === 'mage' && canAct(state, unitId) && u.carried > 0 && onOwnBase(state, u);
 }
 
 export function activate(state: GameState, unitId: string): GameState {
@@ -754,7 +781,7 @@ export function checkVictory(state: GameState): GameState {
   // MageStone victory: a Mage with 6+ activated stones standing on its base.
   for (const player of state.players) {
     const mage = state.units.find((u) => u.kind === 'mage' && u.owner === player);
-    if (mage && mage.activated >= STONES_TO_WIN && sameCell(mage.cell, mageHome(player))) {
+    if (mage && mage.activated >= STONES_TO_WIN && sameCell(mage.cell, mageHome(state, player))) {
       return { ...state, winner: player, log: [...state.log, `${player} wins by MageStone power!`] };
     }
   }

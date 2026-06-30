@@ -9,8 +9,14 @@
   --gold-bright: #eccb78;
   --gold-dim: #8a6a22;
   --gold-line: rgba(201, 162, 74, 0.5);
-  --panel-1: rgba(26, 21, 15, 0.94);
-  --panel-2: rgba(13, 10, 7, 0.97);
+  /* ---- emerald accents (box-cover theme): deep green leather + gilt ---- */
+  --emerald: #1f5138;
+  --emerald-deep: #0c2118;
+  --emerald-bright: #2f7a52;
+  /* Panels are dark emerald-black so the HUD/modals read as the same material
+     as the box's green leather. */
+  --panel-1: rgba(18, 33, 25, 0.95);
+  --panel-2: rgba(8, 17, 12, 0.97);
   --ink: #ece3cf;
   --ink-dim: #a99f86;
   --display: 'Cinzel', 'Trajan Pro', Georgia, serif;
@@ -56,8 +62,37 @@
 .app {
   position: fixed;
   inset: 0;
-  background: #07090c;
+  background: radial-gradient(120% 100% at 50% 0%, #0b1f16 0%, #07120c 55%, #040805 100%);
   overflow: hidden;
+}
+
+/* ---------------- music toggle (persists across screens) ---------------- */
+.music-toggle {
+  position: fixed;
+  left: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--gold-line);
+  background: linear-gradient(180deg, rgba(20, 44, 31, 0.9), rgba(7, 17, 11, 0.92));
+  color: var(--gold-bright);
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  transition: color var(--ease), border-color var(--ease), box-shadow var(--ease), transform var(--ease);
+}
+.music-toggle:hover {
+  color: #fff3d6;
+  border-color: var(--gold);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55), 0 0 14px rgba(120, 230, 175, 0.25);
+}
+.music-toggle.off {
+  color: var(--ink-dim);
 }
 
 /* ---------------- brand ---------------- */
@@ -193,6 +228,18 @@
   transform: translateY(2px);
   box-shadow: 0 1px 0 #5e4715, 0 3px 8px rgba(0, 0, 0, 0.5);
 }
+.hud .primary:disabled,
+.winner button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.55) brightness(0.72);
+  box-shadow: 0 2px 0 #3a2c0d, 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+.hud .primary:disabled:hover {
+  filter: grayscale(0.55) brightness(0.72);
+}
+.hud .primary:disabled:active {
+  transform: none;
+}
 
 .hud .ghost,
 .unit-actions button {
@@ -236,6 +283,128 @@
   background: linear-gradient(180deg, var(--gold-bright), var(--gold-dim));
 }
 
+/* ---------------- team-colour picker (New Game) ---------------- */
+.team-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  width: 100%;
+}
+.team-swatch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--control-md);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--gold-line);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.32);
+  color: var(--ink-dim);
+  text-align: left;
+  transition: border-color var(--ease), box-shadow var(--ease), color var(--ease),
+    background var(--ease);
+}
+.team-swatch:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--team) 55%, var(--gold-line));
+}
+.team-swatch.active {
+  color: var(--ink);
+  border-color: var(--team);
+  background: color-mix(in srgb, var(--team) 18%, rgba(0, 0, 0, 0.32));
+  box-shadow: 0 0 0 1px var(--team), 0 0 14px color-mix(in srgb, var(--team) 40%, transparent);
+}
+.team-dot {
+  width: var(--icon-md);
+  height: var(--icon-md);
+  border-radius: 50%;
+  background: var(--team);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35), 0 0 8px color-mix(in srgb, var(--team) 60%, transparent);
+  flex: none;
+}
+.team-swatch:not(.active) .team-dot {
+  opacity: 0.4;
+}
+.team-name {
+  font-family: var(--display);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+/* 4-player: every colour is in, so the swatches are shown selected but inert. */
+.team-swatch.locked {
+  cursor: default;
+  opacity: 0.92;
+}
+
+/* ---------------- MageStone layout picker (New Game) ---------------- */
+.layout-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  width: 100%;
+}
+.layout-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-1);
+  border: 1px solid var(--gold-line);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.32);
+  color: var(--ink-dim);
+  transition: border-color var(--ease), box-shadow var(--ease), color var(--ease),
+    background var(--ease);
+}
+.layout-tile:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--gold) 55%, var(--gold-line));
+}
+.layout-tile.active {
+  color: var(--ink);
+  border-color: var(--gold-bright);
+  background: color-mix(in srgb, var(--gold) 16%, rgba(0, 0, 0, 0.32));
+  box-shadow: 0 0 0 1px var(--gold-bright), 0 0 14px color-mix(in srgb, var(--gold) 35%, transparent);
+}
+.layout-map {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  background: radial-gradient(circle at 50% 45%, rgba(40, 32, 18, 0.9), rgba(14, 11, 6, 0.95));
+}
+.layout-nexus {
+  fill: color-mix(in srgb, var(--gold) 38%, transparent);
+}
+.layout-grid line {
+  stroke: rgba(201, 162, 74, 0.28);
+  stroke-width: 0.05;
+}
+.layout-stone {
+  fill: var(--gold-bright);
+  stroke: rgba(0, 0, 0, 0.45);
+  stroke-width: 0.06;
+}
+.layout-random {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  background: radial-gradient(circle at 50% 45%, rgba(40, 32, 18, 0.9), rgba(14, 11, 6, 0.95));
+  font-family: var(--display);
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--gold-bright);
+}
+.layout-name {
+  font-size: var(--text-xs);
+  letter-spacing: 0.3px;
+}
+
 /* ---------------- top player-status strip ---------------- */
 .player-strip {
   position: absolute;
@@ -260,6 +429,11 @@
   font-family: var(--display);
   color: var(--ink-dim);
   transition: border-color var(--ease), box-shadow var(--ease), color var(--ease);
+}
+.pstat-token {
+  display: inline-block;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
 }
 .pstat.active {
   color: var(--ink);
@@ -810,38 +984,306 @@
   inset: 0;
   display: grid;
   place-items: center;
-  background: radial-gradient(120% 90% at 50% 0%, #161109 0%, #0a0805 60%, #050403 100%);
+  /* Deep emerald leather, like the box face, with a dark vignette. */
+  background:
+    radial-gradient(130% 100% at 50% -10%, #1c4632 0%, #0e2419 45%, #061009 80%, #030704 100%);
   color: var(--ink);
   font-family: var(--serif);
   overflow: auto;
 }
+/* how-to-play button (centres its icon + label) */
+.how-to-play {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ---------------- tutorial (how to play) ---------------- */
+.tut-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgba(3, 7, 5, 0.78);
+  backdrop-filter: blur(4px);
+  overflow: auto;
+}
+.tut-panel {
+  position: relative;
+  width: min(560px, 96vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  border: 2px solid var(--gold-line);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(20, 44, 31, 0.97), rgba(7, 16, 11, 0.99));
+  box-shadow: inset 0 0 0 1px rgba(236, 203, 120, 0.22), 0 24px 70px rgba(0, 0, 0, 0.75);
+}
+.tut-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.tut-step {
+  font-family: var(--display);
+  font-size: var(--text-sm);
+  color: var(--gold);
+  letter-spacing: 0.08em;
+}
+.tut-title {
+  flex: 1;
+  margin: 0;
+  font-family: var(--display);
+  font-size: var(--text-lg);
+  color: var(--gold-bright);
+  letter-spacing: 0.02em;
+}
+.tut-close {
+  border: 1px solid var(--gold-line);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--ink-dim);
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  line-height: 1;
+}
+.tut-close:hover {
+  color: var(--gold-bright);
+  border-color: var(--gold);
+}
+.tut-stage {
+  border: 1px solid var(--gold-line);
+  border-radius: var(--radius-md);
+  background: radial-gradient(120% 100% at 50% 0%, #0c2118, #060f0a);
+  padding: var(--space-2);
+}
+.tut-art {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.tut-svg-label {
+  fill: var(--ink);
+  font-family: var(--serif);
+  font-size: 11px;
+}
+.tut-svg-btn {
+  fill: #1c1407;
+  font-family: var(--display);
+  font-size: 12px;
+  font-weight: 700;
+}
+.tut-text {
+  margin: 0;
+  min-height: 3.6em;
+  font-family: var(--serif);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  color: var(--ink);
+}
+.tut-dots {
+  display: flex;
+  justify-content: center;
+  gap: 7px;
+}
+.tut-dot {
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--gold-line);
+  background: transparent;
+  cursor: pointer;
+}
+.tut-dot.on {
+  background: var(--gold-bright);
+  border-color: var(--gold-bright);
+}
+.tut-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.entry .tut-foot .primary:disabled,
+.entry .tut-foot .ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* cover mode (landing): controls floated low over the box-front artwork */
+.entry--cover {
+  place-items: stretch;
+}
+.entry-cover {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: clamp(28px, 7vh, 70px);
+}
+/* No box — buttons sit directly on the artwork. */
+.entry-cover-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0;
+}
+/* Lift the controls off the busy art with a drop-shadow instead of a panel. */
+.entry-cover-controls .primary,
+.entry-cover-controls .ghost,
+.entry-cover-controls .link-btn {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
+}
+.entry-cover-controls .link-btn {
+  box-shadow: none;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+}
+.entry-cover .entry-status {
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+.entry-cover .entry-status {
+  margin-top: var(--space-1);
+}
+
+/* dueling-mages backdrop (recreated box cover) */
+.entry-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+/* real cover art (public/cover-art.png), drawn over the SVG fallback */
+.entry-photo-wrap {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.entry-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Zoom into the central framed cover so it fills the page edge-to-edge and the
+     blurred margins baked into the hero are cropped away. */
+  object-position: 50% 50%;
+  transform: scale(1.4);
+  /* anchor the zoom near the title so it stays; the lower banner crops instead */
+  transform-origin: 50% 24%;
+}
+/* gentle scrim: keep the art bright, only darken the bottom for the controls */
+.entry-photo-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* Only a faint darkening at the very bottom so the controls stay legible. */
+  background: linear-gradient(180deg, rgba(3, 8, 5, 0) 70%, rgba(3, 8, 5, 0.5) 100%);
+}
+.entry-castle {
+  opacity: 0.9;
+}
+.entry-clash {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: em-pulse 2.6s ease-in-out infinite;
+}
+.entry-bolt {
+  animation: em-flicker 1.7s ease-in-out infinite;
+}
+@keyframes em-pulse {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+@keyframes em-flicker {
+  0%, 100% { opacity: 0.9; }
+  45% { opacity: 0.5; }
+  70% { opacity: 1; }
+}
+
+/* arcane-glow halo + faint engraved sigil ring behind the content */
 .entry-bg {
   position: absolute;
   inset: 0;
-  background: radial-gradient(60% 50% at 50% 35%, rgba(201, 162, 74, 0.08), transparent 70%);
+  background:
+    radial-gradient(46% 40% at 50% 30%, rgba(120, 230, 175, 0.07), transparent 70%),
+    radial-gradient(70% 60% at 50% 32%, rgba(201, 162, 74, 0.1), transparent 72%);
   pointer-events: none;
 }
 .entry-inner {
   position: relative;
   width: min(760px, 92vw);
-  padding: var(--space-8) var(--space-4);
+  margin: var(--space-6) 0;
+  padding: clamp(28px, 5vw, 56px) clamp(20px, 4vw, 44px);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-5);
+  /* ornate gilt frame on green leather — echoes the box border */
+  border: 2px solid var(--gold-line);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(18, 40, 28, 0.86), rgba(6, 15, 10, 0.92));
+  backdrop-filter: blur(3px);
+  box-shadow:
+    inset 0 0 0 1px rgba(236, 203, 120, 0.22),
+    inset 0 0 64px rgba(0, 0, 0, 0.6),
+    0 24px 70px rgba(0, 0, 0, 0.7);
+}
+/* gilt corner flourishes (double-rule corners) */
+.entry-inner::before,
+.entry-inner::after {
+  content: '';
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  border: 2px solid var(--gold);
+  opacity: 0.85;
+  pointer-events: none;
+}
+.entry-inner::before {
+  top: 8px;
+  left: 8px;
+  border-right: none;
+  border-bottom: none;
+  border-top-left-radius: 8px;
+}
+.entry-inner::after {
+  bottom: 8px;
+  right: 8px;
+  border-left: none;
+  border-top: none;
+  border-bottom-right-radius: 8px;
 }
 .entry-title {
   font-family: var(--display);
-  font-size: clamp(40px, 8vw, 72px);
+  font-weight: 700;
+  font-size: clamp(40px, 8vw, 74px);
   letter-spacing: 0.04em;
-  color: var(--gold-bright);
-  text-shadow: 0 2px 18px rgba(201, 162, 74, 0.35);
+  background: linear-gradient(180deg, #f6e4ab 0%, #d8b65f 42%, #9c7b2c 78%, #f0d999 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 2px 22px rgba(201, 162, 74, 0.35);
 }
 .entry-tag {
   font-size: var(--text-lg);
   color: var(--ink-dim);
   letter-spacing: 0.06em;
   margin-top: -8px;
+}
+/* gilt compass-star emblem (echoes the box cover) */
+.star-emblem {
+  width: clamp(76px, 13vw, 128px);
+  height: auto;
+  margin-bottom: -10px;
+  filter: drop-shadow(0 0 14px rgba(120, 230, 175, 0.28)) drop-shadow(0 3px 8px rgba(0, 0, 0, 0.6));
 }
 .entry-actions {
   display: flex;

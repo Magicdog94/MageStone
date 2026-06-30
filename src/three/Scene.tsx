@@ -4,55 +4,43 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { ContactShadows, Environment, Lightformer, OrbitControls } from '@react-three/drei';
 import { Board } from './Board';
 import { DiceLayer } from './Dice';
-import { ClashEffect, DeathAnimations, Gravestones, Stones, Units } from './Pieces';
+import { BoardTokens, ClashEffect, DeathAnimations, Units } from './Pieces';
+import { castleHallTexture } from './textures';
 import { useGame } from '../store';
 
 /**
- * Skybox — the source art is a 4×3 horizontal-cross cubemap (up / left-front-
- * right-back / down). three dropped its cross loader, so slice the six faces
- * into a CubeTexture and set it as the scene background. The studio Environment
- * still drives reflections; this only paints the sky behind the board.
+ * Castle-hall backdrop — a procedural torch-lit great hall painted onto an
+ * equirectangular texture and set as the scene background (a skydome), so the
+ * board reads as resting on a table inside a medieval castle. The studio
+ * Environment still drives the gold reflections; this only paints the hall.
  */
-function Skybox() {
+function CastleBackdrop() {
   const scene = useThree((s) => s.scene);
   useEffect(() => {
-    const img = new Image();
-    let tex: THREE.CubeTexture | null = null;
-    img.onload = () => {
-      const f = img.width / 4; // 4 faces wide → face edge in px
-      const cut = (col: number, row: number) => {
-        const c = document.createElement('canvas');
-        c.width = c.height = f;
-        c.getContext('2d')!.drawImage(img, col * f, row * f, f, f, 0, 0, f, f);
-        return c;
-      };
-      // CubeTexture order [+x, -x, +y, -y, +z, -z] from the cross cells:
-      //   .  U  .  .        +y = (1,0)
-      //   L  F  R  B    -x=(0,1) +z=(1,1) +x=(2,1) -z=(3,1)
-      //   .  D  .  .        -y = (1,2)
-      tex = new THREE.CubeTexture([cut(2, 1), cut(0, 1), cut(1, 0), cut(1, 2), cut(1, 1), cut(3, 1)]);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.needsUpdate = true;
-      scene.background = tex;
-    };
-    img.src = '/sky-cubemap.png';
+    const tex = castleHallTexture();
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    const prev = scene.background;
+    // Three.js scene background is an imperative API; assigning it is the side
+    // effect this hook exists for.
+    // eslint-disable-next-line react-hooks/immutability
+    scene.background = tex;
     return () => {
-      if (scene.background === tex) scene.background = null;
-      tex?.dispose();
+      if (scene.background === tex) scene.background = prev;
     };
   }, [scene]);
   return null;
 }
 
-/** Procedural studio environment — drives metallic gold reflections, no HDRI. */
+/** Procedural studio environment — drives metallic gold reflections, no HDRI.
+ *  Warm torch-lit tones to match the castle hall. */
 function StudioEnv() {
   return (
     <Environment resolution={256} frames={1}>
-      <color attach="background" args={['#05070a']} />
-      <Lightformer intensity={3} position={[0, 6, 2]} scale={[12, 12, 1]} color="#fff3d6" />
-      <Lightformer intensity={1.6} position={[-6, 3, 4]} scale={[6, 8, 1]} color="#9fb6e0" />
-      <Lightformer intensity={1.4} position={[6, 3, -4]} scale={[6, 8, 1]} color="#ffd9a0" />
-      <Lightformer intensity={0.8} position={[0, 2, -8]} scale={[14, 6, 1]} color="#3a4a66" />
+      <color attach="background" args={['#0a0805']} />
+      <Lightformer intensity={3} position={[0, 6, 2]} scale={[12, 12, 1]} color="#ffe6b8" />
+      <Lightformer intensity={1.8} position={[-6, 3, 4]} scale={[6, 8, 1]} color="#e8a04a" />
+      <Lightformer intensity={1.5} position={[6, 3, -4]} scale={[6, 8, 1]} color="#ffcf8a" />
+      <Lightformer intensity={0.7} position={[0, 2, -8]} scale={[14, 6, 1]} color="#5a3a1e" />
     </Environment>
   );
 }
@@ -139,12 +127,12 @@ export function Scene() {
       gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
       onPointerMissed={() => clearSelection(null)}
     >
-      <fog attach="fog" args={['#0a0d12', 30, 70]} />
+      <fog attach="fog" args={['#0e0a07', 32, 74]} />
 
-      <Skybox />
+      <CastleBackdrop />
       <StudioEnv />
-      <hemisphereLight args={['#aeb8cc', '#161410', 0.35]} />
-      <ambientLight intensity={0.12} />
+      <hemisphereLight args={['#c2a472', '#171009', 0.4]} />
+      <ambientLight intensity={0.14} color={'#d8b98a'} />
       <directionalLight
         position={[10, 18, 8]}
         intensity={2.4}
@@ -157,13 +145,13 @@ export function Scene() {
         shadow-camera-top={16}
         shadow-camera-bottom={-16}
       />
-      <directionalLight position={[-12, 9, -6]} intensity={0.5} color={'#6f8bd0'} />
+      {/* warm torch fill from the side */}
+      <directionalLight position={[-12, 9, -6]} intensity={0.6} color={'#e0883a'} />
 
       <Suspense fallback={null}>
         <Board />
       </Suspense>
-      <Stones />
-      <Gravestones />
+      <BoardTokens />
       <Suspense fallback={null}>
         <Units />
         <DeathAnimations />

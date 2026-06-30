@@ -40,13 +40,25 @@ export const NEXUS_CELLS: Cell[] = [
   { r: 8, c: 8 },
 ];
 
-/** Which player edge (if any) a cell belongs to. */
+/** Which player edge (if any) a cell belongs to (canonical colour mapping). */
 export function edgeOwner(r: number, c: number): PlayerColor | null {
   if (!exists(r, c)) return null;
   if (r === 0) return 'red'; // top
   if (c === N - 1) return 'blue'; // right
   if (r === N - 1) return 'green'; // bottom
   if (c === 0) return 'yellow'; // left
+  return null;
+}
+
+/** Which outer edge a cell lies on, as quarter-turns from the top
+ *  (0=top, 1=right, 2=bottom, 3=left), or null if it isn't an edge cell.
+ *  Seat-based — pair with `GameState.seats` to find the actual owner. */
+export function edgeRotation(r: number, c: number): number | null {
+  if (!exists(r, c)) return null;
+  if (r === 0) return 0; // top
+  if (c === N - 1) return 1; // right
+  if (r === N - 1) return 2; // bottom
+  if (c === 0) return 3; // left
   return null;
 }
 

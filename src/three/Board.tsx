@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import { useTexture } from '@react-three/drei';
-import { allCells, cellKey, CUT, N } from '../game/board';
+import { allCells, cellKey, CUT, edgeRotation, inNexus, N } from '../game/board';
 import type { Cell } from '../game/types';
-import { BOARD, CELL, TILE_SURFACE, cellToWorld } from './coords';
-import { groundBumpTexture, woodBumpTexture } from './textures';
+import { BOARD, CELL, COLORS, TILE_SURFACE, cellToWorld } from './coords';
+import { emeraldBoardTexture, groundBumpTexture, woodBumpTexture } from './textures';
 import { attackTargetIds, moveDestinations, useGame } from '../store';
 
 // Elevation stack (low → high): recessed map tiles, then the raised gold
@@ -18,17 +18,13 @@ const TILE_INSET = 0.94; // tile size within the cell → thin gold trim
 // Wooden tabletop the board rests on: the board's cut-corner octagon silhouette
 // offset outward by half a tile, bevelled, four × the gold-trim height (it grows
 // downward), sitting flush under the board tiles.
-const TABLE_H = GOLD_H * 4;
-const TABLE_MARGIN = 0.5; // half-tile wood border around the board
+const TABLE_H = GOLD_H * 5;
+const TABLE_MARGIN = 1.5; // wide wooden table surface around the board
 const TABLE_TOP_Y = TILE_TOP - TILE_H; // 0.02 — board tiles rest on this surface
 
-// The board art (public/map-texture.png) is the full painted board — ornate
-// frame, gem slots, then the playfield. Only the inner playfield maps onto the
-// 16×16 tiles; this inset is the fraction of the image to skip on each side so
-// the painted playfield lines up with the coded grid (the frame/gems fall in the
-// excluded margin, where the 3D gold lattice + tabletop + pieces take over).
-// Tune this single number to slide the art in/out relative to the grid.
-const MAP_INSET = 0.113;
+// The board surface is a single procedural emerald-marble texture (no pictorial
+// art) spanned full-bleed across the 16×16 grid: each tile samples its own slice
+// so the marbling flows continuously under the raised gold lattice.
 
 /** Board outline (cut-corner octagon) as a minimal corner-only vertex loop. */
 function boardOutline(): [number, number][] {
@@ -121,11 +117,11 @@ function Tabletop() {
       <meshStandardMaterial
         map={wood}
         bumpMap={bump}
-        bumpScale={0.04}
-        color="#5e4429"
-        roughness={0.72}
+        bumpScale={0.06}
+        color="#43301d"
+        roughness={0.82}
         metalness={0}
-        envMapIntensity={0.4}
+        envMapIntensity={0.35}
       />
     </mesh>
   );
@@ -141,12 +137,12 @@ function Tabletop() {
 function tileGeometry(cell: Cell): THREE.BoxGeometry {
   const g = new THREE.BoxGeometry(CELL * TILE_INSET, TILE_H, CELL * TILE_INSET);
   const uv = g.attributes.uv as THREE.BufferAttribute;
-  // Map cell c/row r into the inset playfield sub-rect [MAP_INSET, 1-MAP_INSET].
-  const span = 1 - 2 * MAP_INSET;
-  const u0 = MAP_INSET + (cell.c / N) * span;
-  const u1 = MAP_INSET + ((cell.c + 1) / N) * span;
-  const v0 = MAP_INSET + ((N - 1 - cell.r) / N) * span; // +z edge
-  const v1 = MAP_INSET + ((N - cell.r) / N) * span; // -z edge
+  // Full-bleed: each tile samples its own [c/N,(c+1)/N] × [(N-1-r)/N,(N-r)/N]
+  // slice of the marble so the surface is continuous across the whole board.
+  const u0 = cell.c / N;
+  const u1 = (cell.c + 1) / N;
+  const v0 = (N - 1 - cell.r) / N; // +z edge
+  const v1 = (N - cell.r) / N; // -z edge
   for (let i = 0; i < uv.count; i++) {
     uv.setXY(i, u0 + uv.getX(i) * (u1 - u0), v0 + uv.getY(i) * (v1 - v0));
   }
@@ -176,20 +172,27 @@ function Tile({
   cell,
   legal,
   target,
+  baseColor,
+  nexus,
   map,
   bump,
 }: {
   cell: Cell;
   legal: boolean;
   target: boolean;
+  /** Team colour for a home-base tile, or null for ordinary tiles. */
+  baseColor: string | null;
+  /** True for the central 2×2 Nexus tiles (gilded). */
+  nexus: boolean;
   map: THREE.Texture;
   bump: THREE.Texture;
 }) {
   const moveTo = useGame((s) => s.moveTo);
-  // Every tile (including the 2×2 Nexus) samples its slice of the board art, so
-  // the painted Nexus mandala shows through instead of a gold cap.
+  // Every tile samples its slice of the emerald-marble surface; the 2×2 Nexus is
+  // gilded by a warmer multiplier so the ritual zone still reads at the centre.
   const geom = useMemo(() => tileGeometry(cell), [cell]);
   const pos = cellToWorld(cell, 0);
+  const baseTint = baseColor ?? (nexus ? BOARD.nexus : BOARD.stone);
 
   return (
     <group position={[pos[0], 0, pos[2]]}>
@@ -213,17 +216,27 @@ function Tile({
         <meshStandardMaterial
           map={map}
           bumpMap={bump}
-          bumpScale={0.02}
-          // Darken the map: it's pre-lit painted art, so multiply it down and
-          // damp the environment IBL so the scene lights don't wash it out.
-          color={legal ? BOARD.highlight : '#9c9c9c'}
-          envMapIntensity={0.45}
-          roughness={0.9}
-          metalness={0}
-          emissive={legal ? BOARD.highlight : '#000000'}
-          emissiveIntensity={legal ? 0.4 : 0}
+          bumpScale={0.025}
+          // The emerald-marble texture carries the colour; tiles multiply it with
+          // a neutral stone tint (or team/nexus tint). Home bases tint toward their
+          // team colour so ownership reads at a glance; the Nexus is gilded.
+          color={legal ? BOARD.highlight : baseTint}
+          envMapIntensity={0.5}
+          roughness={0.82}
+          metalness={nexus ? 0.25 : 0.05}
+          emissive={legal ? BOARD.highlight : baseColor ? baseColor : nexus ? BOARD.nexus : '#000000'}
+          emissiveIntensity={legal ? 0.4 : baseColor ? 0.32 : nexus ? 0.16 : 0}
         />
       </mesh>
+
+      {/* Translucent team wash sitting above the painted art, so the base square
+          reads as that team's colour while the artwork still shows beneath. */}
+      {baseColor && !legal && (
+        <mesh position={[0, TILE_TOP + 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[CELL * TILE_INSET, CELL * TILE_INSET]} />
+          <meshBasicMaterial color={baseColor} transparent opacity={0.42} />
+        </mesh>
+      )}
 
       {legal && (
         <mesh position={[0, TILE_TOP + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -293,12 +306,7 @@ function GoldInlay() {
 
 export function Board() {
   const cells = useMemo(() => allCells(), []);
-  const map = useTexture('/map-texture.png', (t) => {
-    const tex = t as THREE.Texture;
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 8;
-    tex.needsUpdate = true;
-  });
+  const map = useMemo(() => emeraldBoardTexture(), []);
   const bump = useMemo(() => groundBumpTexture(), []);
   const game = useGame((s) => s.game);
   const selUnit = useGame((s) => s.selectedUnitId);
@@ -313,12 +321,22 @@ export function Board() {
     return new Set(game.units.filter((u) => ids.has(u.id)).map((u) => cellKey(u.cell)));
   }, [game, selUnit]);
 
+  // Home-base tiles get their seated team's colour. Seats are decoupled from
+  // colour, so look up which playing colour occupies each edge this game.
+  const seatColor = useMemo(() => {
+    const byRotation: Record<number, string> = {};
+    for (const p of game.players) byRotation[game.seats[p]] = COLORS[p];
+    return byRotation;
+  }, [game.players, game.seats]);
+
   return (
     <group>
       <Tabletop />
       <GoldInlay />
       {cells.map((cell) => {
         const k = cellKey(cell);
+        const rot = edgeRotation(cell.r, cell.c);
+        const baseColor = rot !== null ? seatColor[rot] ?? null : null;
         return (
           <Tile
             key={k}
@@ -327,6 +345,8 @@ export function Board() {
             bump={bump}
             legal={legalKeys.has(k)}
             target={targetKeys.has(k)}
+            baseColor={baseColor}
+            nexus={inNexus(cell.r, cell.c)}
           />
         );
       })}

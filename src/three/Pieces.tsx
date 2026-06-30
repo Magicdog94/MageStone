@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import * as THREE from 'three';
 import { SkeletonUtils } from 'three-stdlib';
 import { useFrame } from '@react-three/fiber';
 import { Billboard, useAnimations, useGLTF } from '@react-three/drei';
-import type { CombatResult, PlayerColor, Unit, UnitKind } from '../game/types';
+import type { CombatResult, Unit, UnitKind } from '../game/types';
+import { cellKey, sameCell } from '../game/board';
 import { COLORS, TILE_SURFACE, cellToWorld } from './coords';
 import { attackTargetIds, useGame, type DeathEvent } from '../store';
 import { combatOdds, plannedAttackers } from '../game/rules';
+import { useTokens, type TokenKind } from './tokens';
 
 const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3);
 const easeOutBack = (x: number) => {
@@ -40,12 +42,6 @@ function pickAction(
   return anim === 'idle' ? actions[names[0]] : null;
 }
 
-/** A small per-unit hash → stable phase offset so idle motion isn't in lockstep. */
-function phaseFromId(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
-  return (h / 0xffff) * Math.PI * 2;
-}
 
 /** Procedural strike pose over a normalised attack timeline lt∈[0,1]: wind back,
  *  thrust forward (toward the faced target) with a pitch, then recover. */
@@ -86,13 +82,16 @@ const MODEL_FORWARD: Record<UnitKind, number> = {
   priest: 0,
 };
 
-// Inward-facing yaw per player edge, so every unit faces the board centre.
-const FACING_YAW: Record<PlayerColor, number> = {
-  red: 0, // top edge → face +Z (into the board)
-  blue: -Math.PI / 2, // right edge → face -X
-  green: Math.PI, // bottom edge → face -Z
-  yellow: Math.PI / 2, // left edge → face +X
-};
+// Inward-facing yaw per board *seat* (quarter-turns from the top), so every unit
+// faces the centre regardless of which colour occupies the seat. Seats are
+// decoupled from colour, so this must key off `GameState.seats`, not the colour.
+const SEAT_YAW = [
+  0, // 0 top edge → face +Z (into the board)
+  -Math.PI / 2, // 1 right edge → face -X
+  Math.PI, // 2 bottom edge → face -Z
+  Math.PI / 2, // 3 left edge → face +X
+];
+const seatYaw = (seat: number | undefined) => SEAT_YAW[seat ?? 0] ?? 0;
 
 // Units are tinted a single flat team colour (see StaticGLB). The source sculpts
 // are a single untextured mesh, so one clean team-coloured PBR material reads best.
@@ -448,12 +447,19 @@ function UnitPiece({ unit }: { unit: Unit }) {
   const yawInited = useRef(false);
   const lungeStart = useRef(-1e9); // attacker thrust timestamp
   const flinchStart = useRef(-1e9); // defender stagger timestamp
-  const target = cellToWorld(unit.cell, TILE_SURFACE);
-  const facingY = FACING_YAW[unit.owner] + MODEL_FORWARD[unit.kind];
+  // Sit the unit on TOP of any disk stack on its square (so the base never sinks
+  // into a stone/gravestone) — one disk-height per token at the cell.
+  const tokenLift = useMemo(() => {
+    let n = 0;
+    for (const st of game.stones) if (!st.collected && sameCell(st.cell, unit.cell)) n++;
+    for (const g of game.gravestones) if (sameCell(g.cell, unit.cell)) n++;
+    return n * DISK_H;
+  }, [game.stones, game.gravestones, unit.cell]);
+  const target = cellToWorld(unit.cell, TILE_SURFACE + tokenLift);
+  const facingY = seatYaw(game.seats[unit.owner]) + MODEL_FORWARD[unit.kind];
 
   // If the GLB has skeletal clips, they drive the body; else procedural motion.
   const hasClips = useHasClips(unit.kind);
-  const idlePhase = useMemo(() => phaseFromId(unit.id), [unit.id]);
   // Desired clip state, held in a ref (polled per frame by AnimatedGLB) so the
   // transient attack pulse never causes React re-renders.
   const anim = useRef<UnitAnim>('idle');
@@ -528,11 +534,9 @@ function UnitPiece({ unit }: { unit: Unit }) {
       let rz = 0;
       if (!hasClips) {
         // Procedural full-body motion (the clips would do this on a rigged model).
+        // Units stand stationary when idle (no hover); only motion is event-driven.
         const now = performance.now();
         const tt = now / 1000;
-        // Idle breathing + gentle sway, out of phase per unit.
-        py += Math.sin(tt * 1.7 + idlePhase) * 0.013;
-        rz += Math.sin(tt * 0.9 + idlePhase) * 0.013;
         // Walk bob + forward lean while gliding between cells.
         if (o) {
           const dx = target[0] - o.position.x;
@@ -613,92 +617,109 @@ export function Units() {
   );
 }
 
-function SpinStone({ position }: { position: [number, number, number] }) {
-  const mesh = useRef<THREE.Mesh>(null);
-  useFrame((_, dt) => {
-    if (mesh.current) mesh.current.rotation.y += dt * 1.6;
-  });
-  return (
-    <group position={position}>
-      <mesh ref={mesh}>
-        <octahedronGeometry args={[0.16]} />
-        <meshStandardMaterial
-          color={'#3fcf8e'}
-          emissive={'#1f8f5f'}
-          emissiveIntensity={0.8}
-          roughness={0.15}
-          metalness={0.1}
-        />
-      </mesh>
-      <pointLight color={'#39d98a'} intensity={0.4} distance={1.6} />
-    </group>
-  );
-}
+// ---- MageStones & gravestones as solid, stacking coin-chips --------------
 
-export function Stones() {
-  const stones = useGame((s) => s.game.stones);
-  return (
-    <group>
-      {stones
-        .filter((s) => !s.collected)
-        .map((s) => (
-          <SpinStone key={s.id} position={cellToWorld(s.cell, TILE_SURFACE + 0.4)} />
-        ))}
-    </group>
-  );
-}
+const DISK_H = 0.08; // thin chip — only a hairline edge shows
+const DISK_R = TARGET_BASE / 2; // exactly the unit-base radius, so they align
+// The coin is re-centred to fill its texture; size the decal so it spans the
+// whole disk and drapes a touch past the edge → no metal rim shows on top.
+const DECAL = DISK_R * 2 * 1.08;
+// Edge colour matched to each coin (low metalness + emissive so it stays that
+// hue instead of reflecting the scene as grey/silver).
+const SIDE_COLOR: Record<TokenKind, string> = {
+  activated: '#b8902f', // gold
+  unactivated: '#9aa0a6', // silver
+  gravestone: '#33363b', // dark iron
+};
 
-/** A single grave marker — a flat slab the SAME footprint as a unit base (so
- *  graves, stones and pieces line up and can stack), with an etched cross. It
- *  pops in just after the fallen unit's collapse rather than appearing instantly. */
-function Gravestone({ cell }: { cell: Unit['cell'] }) {
+/** A solid coin-chip the size of a unit base: a short metal cylinder with the
+ *  background-keyed coin cut-out laid flat on top as a decal (no white, full
+ *  coin, centred). It rests on its square (gravity) and is lifted by
+ *  `stackIndex × height` so a gravestone + MageStone(s) stack. Gravestones pop in. */
+function TokenDisk({
+  cell,
+  kind,
+  texture,
+  stackIndex,
+  grow,
+}: {
+  cell: Unit['cell'];
+  kind: TokenKind;
+  texture: THREE.Texture;
+  stackIndex: number;
+  grow: boolean;
+}) {
   const grp = useRef<THREE.Group>(null);
   const start = useRef(0);
-  const pos = cellToWorld(cell, TILE_SURFACE);
-  const R = TARGET_BASE / 2; // match the unit base footprint
+  const base = cellToWorld(cell, TILE_SURFACE);
+  const y = base[1] + DISK_H / 2 + stackIndex * DISK_H;
   useFrame(() => {
-    const g = grp.current;
-    if (!g) return;
+    if (!grow || !grp.current) return;
     if (!start.current) start.current = performance.now();
     const t = (performance.now() - start.current - 480) / 340; // delay, then grow
-    const s = t <= 0 ? 0 : t >= 1 ? 1 : easeOutBack(t);
-    g.scale.setScalar(Math.max(0.0001, s));
+    grp.current.scale.setScalar(t <= 0 ? 0.0001 : t >= 1 ? 1 : Math.max(0.0001, easeOutBack(t)));
   });
   return (
-    <group ref={grp} position={pos} scale={0}>
+    <group ref={grp} position={[base[0], y, base[2]]} scale={grow ? 0 : 1}>
+      {/* solid metal chip body — low metalness + matching emissive so the edge
+          keeps its colour (gold/silver/iron) instead of mirroring the scene */}
       <mesh castShadow receiveShadow>
-        <cylinderGeometry args={[R, R, 0.12, 28]} />
-        <meshStandardMaterial color="#4c5158" roughness={0.95} metalness={0.05} />
+        <cylinderGeometry args={[DISK_R, DISK_R, DISK_H, 48]} />
+        <meshStandardMaterial
+          color={SIDE_COLOR[kind]}
+          roughness={0.55}
+          metalness={0.15}
+          emissive={SIDE_COLOR[kind]}
+          emissiveIntensity={0.2}
+        />
       </mesh>
-      {/* flat cross etched on top — keeps the slab stackable (no tall headstone) */}
-      <group position={[0, 0.061, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <mesh position={[0, -0.04, 0]}>
-          <planeGeometry args={[0.11, 0.5]} />
-          <meshStandardMaterial color="#6c7178" roughness={0.9} />
-        </mesh>
-        <mesh position={[0, 0.06, 0]}>
-          <planeGeometry args={[0.32, 0.11]} />
-          <meshStandardMaterial color="#6c7178" roughness={0.9} />
-        </mesh>
-      </group>
+      {/* coin cut-out laid flat on the top face (unlit so it reads like the photo) */}
+      <mesh position={[0, DISK_H / 2 + 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[DECAL, DECAL]} />
+        <meshBasicMaterial map={texture} transparent alphaTest={0.5} depthWrite={false} toneMapped={false} />
+      </mesh>
     </group>
   );
 }
 
-export function Gravestones() {
+/** All board tokens, grouped per square so a gravestone + MageStone(s) stack
+ *  (gravestone on the bottom, stones above). */
+export function BoardTokens() {
+  const stones = useGame((s) => s.game.stones);
   const graves = useGame((s) => s.game.gravestones);
-  return (
-    <group>
-      {graves.map((g) => (
-        <Gravestone key={g.id} cell={g.cell} />
-      ))}
-    </group>
-  );
+  const tokens = useTokens();
+  type Item = { id: string; kind: TokenKind; cell: Unit['cell']; grow: boolean };
+  const stacks = useMemo(() => {
+    const m = new Map<string, Item[]>();
+    const add = (cell: Unit['cell'], item: Item) => {
+      const k = cellKey(cell);
+      const a = m.get(k) ?? [];
+      a.push(item);
+      m.set(k, a);
+    };
+    for (const g of graves) add(g.cell, { id: g.id, kind: 'gravestone', cell: g.cell, grow: true });
+    for (const s of stones)
+      if (!s.collected)
+        add(s.cell, { id: s.id, kind: s.activated ? 'activated' : 'unactivated', cell: s.cell, grow: false });
+    return m;
+  }, [stones, graves]);
+
+  if (!tokens) return null;
+  const disks: ReactNode[] = [];
+  for (const items of stacks.values()) {
+    items.forEach((it, i) =>
+      disks.push(
+        <TokenDisk key={it.id} cell={it.cell} kind={it.kind} texture={tokens[it.kind]} stackIndex={i} grow={it.grow} />,
+      ),
+    );
+  }
+  return <group>{disks}</group>;
 }
 
 /** A defeated unit toppling to the ground then sinking away, played at the square
  *  where it fell (the engine has already removed the real unit). */
 function DyingUnit({ ev, onDone }: { ev: DeathEvent & { nonce: number }; onDone: (n: number) => void }) {
+  const seat = useGame((s) => s.game.seats[ev.owner]);
   const inner = useRef<THREE.Group>(null);
   const start = useRef(0);
   const done = useRef(false);
@@ -728,7 +749,7 @@ function DyingUnit({ ev, onDone }: { ev: DeathEvent & { nonce: number }; onDone:
     }
   });
   return (
-    <group position={pos} rotation={[0, FACING_YAW[ev.owner], 0]}>
+    <group position={pos} rotation={[0, seatYaw(seat), 0]}>
       <group ref={inner}>{MESH[ev.kind]({ color: COLORS[ev.owner], carried: 0, anim: deathAnim })}</group>
     </group>
   );

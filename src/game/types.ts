@@ -28,6 +28,9 @@ export interface MageStone {
   cell: Cell;
   /** True once a Mage has collected it (removed from the board). */
   collected: boolean;
+  /** True for a stone dropped by a slain Mage that was already activated — it
+   *  shows as a gold disk on the board (collecting it makes it carried again). */
+  activated?: boolean;
 }
 
 export interface Gravestone {
@@ -61,6 +64,7 @@ export interface CombatResult {
   attackDice: number[]; // individual attacker dice rolled
   attackFaces: number; // the die size used by the attacker (6/12/20) — for display
   defenseRoll: number;
+  defenseFaces: number; // the defender's die size (6, or a Mage's power die 12/20)
   outcome: 'win' | 'lose' | 'draw';
   defeatedId: string | null;
   /** The defender's cell at the moment of attack — lets attackers turn to face
@@ -91,6 +95,10 @@ export interface PendingFlee {
 
 export interface GameState {
   players: PlayerColor[];
+  /** Board seat (quarter-turns from the top: 0=top, 1=right, 2=bottom, 3=left)
+   *  each colour occupies. Decoupled from colour so any two colours can be
+   *  seated opposite each other in a 2-player game. */
+  seats: Record<PlayerColor, number>;
   current: PlayerColor;
   turnPhase: TurnPhase;
   dice: Die[];

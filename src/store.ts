@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { createGame } from './game/setup';
+import { createGame, orderPlayers, playerSet } from './game/setup';
 import {
   activate,
   attackTargets,
@@ -61,6 +61,11 @@ interface UIState {
   combatNonce: number;
 
   playerCount: number;
+  /** Team colours selected for the local game, in clockwise turn order. Each
+   *  colour also fixes that player's home edge (red=top, blue=right, …). */
+  playerColors: PlayerColor[];
+  /** Chosen MageStone layout id (or 'random' to reroll each game). */
+  stoneLayoutId: string;
   settings: Settings;
   modal: ModalId;
   /** False until the first game is started — the opening New Game modal is then
@@ -74,7 +79,7 @@ interface UIState {
   startOnline: (state: GameState, myColor: PlayerColor) => void;
   setLocalMode: () => void;
 
-  newGame: (playerCount?: number) => void;
+  newGame: (players?: number | PlayerColor[], stoneLayoutId?: string) => void;
   openModal: (modal: Exclude<ModalId, null>) => void;
   closeModal: () => void;
   setHealthBars: (mode: HealthBarMode) => void;
@@ -109,6 +114,8 @@ export const useGame = create<UIState>((set) => ({
   deathNonce: 0,
   combatNonce: 0,
   playerCount: 2,
+  playerColors: playerSet(2),
+  stoneLayoutId: 'diamond',
   settings: { healthBars: 'off', turnSeconds: 60 },
   // Open the New Game selector on first load so the player chooses players/timer
   // before the turn timer starts (the timer pauses while any modal is open).
@@ -136,18 +143,28 @@ export const useGame = create<UIState>((set) => ({
       myColor: null,
       started: false,
       modal: 'newGame',
-      game: createGame(s.playerCount),
+      game: createGame(s.playerColors, s.stoneLayoutId),
       selectedUnitId: null,
       selectedDieId: null,
       rolling: false,
     })),
 
-  newGame: (playerCount) =>
+  newGame: (players, stoneLayoutId) =>
     set((s) => {
-      const count = playerCount ?? s.playerCount;
+      // Accept an explicit colour list, a player count, or fall back to the
+      // last-used selection. createGame normalises into clockwise turn order.
+      const colors = Array.isArray(players)
+        ? orderPlayers(players)
+        : players === undefined
+          ? s.playerColors
+          : playerSet(players);
+      const layoutId = stoneLayoutId ?? s.stoneLayoutId;
+      const game = createGame(colors, layoutId);
       return {
-        game: createGame(count),
-        playerCount: count,
+        game,
+        playerColors: game.players,
+        playerCount: game.players.length,
+        stoneLayoutId: layoutId,
         selectedUnitId: null,
         selectedDieId: null,
         hoveredUnitId: null,

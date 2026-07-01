@@ -48,7 +48,10 @@ function Mage({ color, glow, flip }: { color: string; glow: string; flip?: boole
 // The cover art at app/public/cover-art.(webp|png|jpg) is the entry backdrop;
 // each source is tried in turn, and only if none load do we fall back to the SVG
 // art (so the SVG never flashes underneath while the real image is loading).
-const COVER_SRCS = ['/cover-art.webp', '/cover-art.png', '/cover-art.jpg'];
+// Bump COVER_VER whenever the cover image changes — the filename stays the same,
+// so the version query is what stops browsers serving a stale cached copy.
+const COVER_VER = 2;
+const COVER_SRCS = ['/cover-art.webp', '/cover-art.png', '/cover-art.jpg'].map((s) => `${s}?v=${COVER_VER}`);
 function EntryPhoto() {
   const [idx, setIdx] = useState(0);
   if (idx >= COVER_SRCS.length) return <EntryArt />;

@@ -1200,9 +1200,10 @@
 .entry-photo {
   width: 100%;
   height: 100%;
-  /* The hero is a full-bleed 16:9 landscape, so cover-fill the page (no blur,
-     no matte); it shows edge-to-edge and only crops slightly off-aspect. */
-  object-fit: cover;
+  /* Contain so the whole 16:9 hero — including its gold border on all four edges
+     — always fits, whatever the screen/full-screen aspect. Any leftover margin
+     is the emerald matte behind, matching the border (never a crop or blur). */
+  object-fit: contain;
   object-position: 50% 50%;
 }
 /* gentle scrim: keep the art bright, only darken the bottom for the controls */

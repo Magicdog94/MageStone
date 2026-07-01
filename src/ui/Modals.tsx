@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useGame } from '../store';
+import { useNet } from '../net/useNet';
 import type { PlayerColor } from '../game/types';
 import {
   RANDOM_LAYOUT,
@@ -194,6 +195,8 @@ function SettingsModal() {
   const setTurnSeconds = useGame((s) => s.setTurnSeconds);
   const openModal = useGame((s) => s.openModal);
   const closeModal = useGame((s) => s.closeModal);
+  const status = useNet((s) => s.status);
+  const online = status === 'online';
 
   return (
     <Modal
@@ -218,6 +221,13 @@ function SettingsModal() {
           onChange={(v) => setTurnSeconds(v === 0 ? null : v)}
           ariaLabel="Turn timer"
         />
+      </Field>
+      <div className="modal-section">Server</div>
+      <Field label="Status" hint="Online multiplayer connection">
+        <span className={`server-pill${online ? ' online' : ''}`}>
+          <span className="server-dot" />
+          {online ? 'Connected' : status === 'connecting' ? 'Connecting…' : 'Offline'}
+        </span>
       </Field>
     </Modal>
   );

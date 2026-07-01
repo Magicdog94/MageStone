@@ -431,6 +431,35 @@
   letter-spacing: 0.3px;
 }
 
+/* server status pill (Settings modal) */
+.server-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--control-md);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--gold-line);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.32);
+  color: var(--ink-dim);
+  font-size: var(--text-sm);
+}
+.server-pill.online {
+  color: var(--ink);
+}
+.server-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #8a5a3a;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+  flex: none;
+}
+.server-pill.online .server-dot {
+  background: #4fd08a;
+  box-shadow: 0 0 8px rgba(79, 208, 138, 0.7);
+}
+
 /* ---------------- top player-status strip ---------------- */
 .player-strip {
   position: absolute;

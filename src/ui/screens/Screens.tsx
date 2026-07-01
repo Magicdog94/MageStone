@@ -176,12 +176,10 @@ function EntryModals() {
 function Shell({ children, bare = false }: { children: React.ReactNode; bare?: boolean }) {
   const status = useNet((s) => s.status);
   const notice = useNet((s) => s.notice);
-  const meta = (
-    <>
-      {notice && <div className="entry-notice">{notice}</div>}
-      <div className="entry-status">server: {status === 'online' ? 'connected' : status}</div>
-    </>
-  );
+  const noticeEl = notice ? <div className="entry-notice">{notice}</div> : null;
+  // The server status now lives inside the Settings panel; the sign-in / lobby
+  // screens still show it inline, but the landing menu stays clean.
+  const statusEl = <div className="entry-status">server: {status === 'online' ? 'connected' : status}</div>;
   return (
     <div className={`entry${bare ? ' entry--cover' : ''}`}>
       <EntryPhoto />
@@ -193,7 +191,7 @@ function Shell({ children, bare = false }: { children: React.ReactNode; bare?: b
         <div className="entry-cover">
           <div className="entry-cover-controls">
             {children}
-            {meta}
+            {noticeEl}
           </div>
         </div>
       ) : (
@@ -201,7 +199,8 @@ function Shell({ children, bare = false }: { children: React.ReactNode; bare?: b
           <StarEmblem />
           <div className="entry-title">MageStone</div>
           {children}
-          {meta}
+          {noticeEl}
+          {statusEl}
         </div>
       )}
     </div>

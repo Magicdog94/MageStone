@@ -1211,10 +1211,10 @@
   inset: 0;
   overflow: hidden;
   pointer-events: none;
-  /* dark emerald matte behind the (portrait) cover — matches its frame so the
-     side margins read as an intentional mat, not a blur, and it's what shows for
-     the split-second before the image decodes (no old-art flash). */
-  background: radial-gradient(120% 100% at 50% 35%, #12281c, #060f0a 72%);
+  /* Emerald matte matching the colour the cover art is padded with, so it reads
+     as the green field continuing seamlessly beyond the gold border (and it's
+     what shows for the split-second before the image decodes). */
+  background: #212411;
 }
 .entry-photo {
   width: 100%;

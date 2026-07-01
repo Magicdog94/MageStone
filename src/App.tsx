@@ -3,6 +3,7 @@ import { Scene } from './three/Scene';
 import { HUD } from './ui/HUD';
 import { EntryScreens } from './ui/screens/Screens';
 import { MusicToggle } from './ui/MusicToggle';
+import { FullscreenToggle } from './ui/FullscreenToggle';
 import { useMusic } from './audio/music';
 import { useNet } from './net/useNet';
 import './App.css';
@@ -35,6 +36,7 @@ export default function App() {
         </div>
       )}
       <MusicToggle />
+      <FullscreenToggle />
     </>
   );
 }

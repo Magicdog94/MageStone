@@ -219,8 +219,8 @@ function Landing() {
         </svg>
         How to Play
       </button>
-      <button className="link-btn" onClick={playLocal}>
-        or play locally (hot-seat) →
+      <button className="primary lg" onClick={playLocal}>
+        Hotseat
       </button>
       {showTutorial && <Tutorial onClose={() => setShowTutorial(false)} />}
     </Shell>

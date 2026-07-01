@@ -1252,9 +1252,7 @@
      — always fits, whatever the screen/full-screen aspect. Any leftover margin
      is the emerald matte behind, matching the border (never a crop or blur). */
   object-fit: contain;
-  /* bias slightly up so the bottom banner sits a touch higher (where the screen
-     aspect leaves any vertical letterbox room) */
-  object-position: 50% 42%;
+  object-position: 50% 50%;
 }
 /* gentle scrim: keep the art bright, only darken the bottom for the controls */
 .entry-photo-wrap::after {

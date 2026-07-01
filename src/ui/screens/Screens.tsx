@@ -43,13 +43,13 @@ function Mage({ color, glow, flip }: { color: string; glow: string; flip?: boole
   );
 }
 
-// Drop real cover art at app/public/cover-art.(webp|png|jpg) and it becomes the
-// entry backdrop; each source is tried in turn, and if none exist the SVG art
-// below shows through instead.
+// The cover art at app/public/cover-art.(webp|png|jpg) is the entry backdrop;
+// each source is tried in turn, and only if none load do we fall back to the SVG
+// art (so the SVG never flashes underneath while the real image is loading).
 const COVER_SRCS = ['/cover-art.webp', '/cover-art.png', '/cover-art.jpg'];
 function EntryPhoto() {
   const [idx, setIdx] = useState(0);
-  if (idx >= COVER_SRCS.length) return null;
+  if (idx >= COVER_SRCS.length) return <EntryArt />;
   return (
     <div className="entry-photo-wrap" aria-hidden="true">
       <img className="entry-photo" src={COVER_SRCS[idx]} alt="" onError={() => setIdx((i) => i + 1)} />
@@ -175,7 +175,6 @@ function Shell({ children, bare = false }: { children: React.ReactNode; bare?: b
   );
   return (
     <div className={`entry${bare ? ' entry--cover' : ''}`}>
-      <EntryArt />
       <EntryPhoto />
       <div className="entry-bg" />
       {bare ? (
@@ -209,11 +208,11 @@ function Landing() {
         <button className="primary lg" onClick={() => goAuth('signin')}>
           Sign In
         </button>
-        <button className="ghost lg" onClick={() => goAuth('signup')}>
+        <button className="primary lg" onClick={() => goAuth('signup')}>
           Sign Up
         </button>
       </div>
-      <button className="ghost lg how-to-play" onClick={() => setShowTutorial(true)}>
+      <button className="primary lg how-to-play" onClick={() => setShowTutorial(true)}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M4 5a2 2 0 0 1 2-2h13v17H6a2 2 0 0 0-2 2z" />
           <path d="M9 7h7M9 11h7" />

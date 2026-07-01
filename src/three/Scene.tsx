@@ -123,7 +123,7 @@ export function Scene() {
     <Canvas
       shadows="percentage"
       dpr={[1, 2]}
-      camera={{ position: [0, 16, 17], fov: 38 }}
+      camera={{ position: [0, 20, 21], fov: 38 }}
       gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
       onPointerMissed={() => clearSelection(null)}
     >
@@ -167,7 +167,7 @@ export function Scene() {
         makeDefault
         enablePan={false}
         minDistance={10}
-        maxDistance={34}
+        maxDistance={42}
         maxPolarAngle={Math.PI / 2.15}
         target={[0, 0, 0]}
       />

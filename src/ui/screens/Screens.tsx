@@ -1,8 +1,10 @@
 // Pre-game entry flow: landing → sign in/up → lobby (create or join a game).
 import { useState, type FormEvent } from 'react';
 import { useNet } from '../../net/useNet';
+import { useGame } from '../../store';
 import { COLORS } from '../../three/coords';
 import { Tutorial } from '../Tutorial';
+import { Modals } from '../Modals';
 
 /** A hooded mage casting toward the centre. Rendered as a glowing silhouette so
  *  it reads at any size; `flip` mirrors it for the opposing (right-hand) side. */
@@ -164,6 +166,13 @@ function StarEmblem() {
   );
 }
 
+/** The shared game modals, but only the Settings one is allowed to show on the
+ *  entry screens (the default New Game modal is in-game only). */
+function EntryModals() {
+  const modal = useGame((s) => s.modal);
+  return modal === 'settings' ? <Modals /> : null;
+}
+
 function Shell({ children, bare = false }: { children: React.ReactNode; bare?: boolean }) {
   const status = useNet((s) => s.status);
   const notice = useNet((s) => s.notice);
@@ -177,6 +186,7 @@ function Shell({ children, bare = false }: { children: React.ReactNode; bare?: b
     <div className={`entry${bare ? ' entry--cover' : ''}`}>
       <EntryPhoto />
       <div className="entry-bg" />
+      <EntryModals />
       {bare ? (
         // Cover mode (landing): the box-front art *is* the page — the title and
         // emblem come from the artwork, so we only float the controls onto it.
@@ -201,27 +211,17 @@ function Shell({ children, bare = false }: { children: React.ReactNode; bare?: b
 function Landing() {
   const goAuth = useNet((s) => s.goAuth);
   const playLocal = useNet((s) => s.playLocal);
+  const openSettings = useGame((s) => s.openModal);
   const [showTutorial, setShowTutorial] = useState(false);
   return (
     <Shell bare>
-      <div className="entry-actions">
-        <button className="primary lg" onClick={() => goAuth('signin')}>
-          Sign In
-        </button>
-        <button className="primary lg" onClick={() => goAuth('signup')}>
-          Sign Up
-        </button>
-      </div>
-      <button className="primary lg how-to-play" onClick={() => setShowTutorial(true)}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M4 5a2 2 0 0 1 2-2h13v17H6a2 2 0 0 0-2 2z" />
-          <path d="M9 7h7M9 11h7" />
-        </svg>
-        How to Play
-      </button>
-      <button className="primary lg" onClick={playLocal}>
-        Hotseat
-      </button>
+      <nav className="entry-menu">
+        <button className="menu-item" onClick={() => goAuth('signin')}>Sign In</button>
+        <button className="menu-item" onClick={() => goAuth('signup')}>Sign Up</button>
+        <button className="menu-item" onClick={() => setShowTutorial(true)}>How to Play</button>
+        <button className="menu-item" onClick={playLocal}>Hotseat</button>
+        <button className="menu-item" onClick={() => openSettings('settings')}>Settings</button>
+      </nav>
       {showTutorial && <Tutorial onClose={() => setShowTutorial(false)} />}
     </Shell>
   );

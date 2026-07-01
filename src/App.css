@@ -1140,7 +1140,7 @@
   cursor: not-allowed;
 }
 
-/* cover mode (landing): controls floated low over the box-front artwork */
+/* cover mode (landing): a gilded text menu floated over the left of the artwork */
 .entry--cover {
   place-items: stretch;
 }
@@ -1149,33 +1149,52 @@
   z-index: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  padding-bottom: clamp(28px, 7vh, 70px);
+  align-items: flex-start; /* left */
+  justify-content: center; /* vertical centre */
+  padding-left: clamp(48px, 9vw, 170px);
 }
-/* No box — buttons sit directly on the artwork. */
 .entry-cover-controls {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--space-3);
+  align-items: flex-start;
+  gap: var(--space-2);
   padding: 0;
 }
-/* Lift the controls off the busy art with a drop-shadow instead of a panel. */
-.entry-cover-controls .primary,
-.entry-cover-controls .ghost,
-.entry-cover-controls .link-btn {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
+/* Menu buttons: no box — gold gilded letters in the MageStone title style. */
+.entry-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: clamp(6px, 1.2vh, 14px);
 }
-.entry-cover-controls .link-btn {
-  box-shadow: none;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+.menu-item {
+  border: none;
+  background: linear-gradient(180deg, #f6e4ab 0%, #d8b65f 42%, #9c7b2c 78%, #f0d999 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(22px, 2.7vw, 34px);
+  letter-spacing: 0.02em;
+  line-height: 1.12;
+  padding: 2px 2px;
+  cursor: pointer;
+  text-align: left;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.9));
+  transition: filter var(--ease), transform var(--ease);
+}
+.menu-item:hover {
+  filter: drop-shadow(0 0 12px rgba(240, 210, 122, 0.7)) drop-shadow(0 2px 5px rgba(0, 0, 0, 0.85));
+  transform: translateX(5px);
+}
+.menu-item:focus-visible {
+  outline: none;
+  filter: drop-shadow(0 0 12px rgba(240, 210, 122, 0.9));
 }
 .entry-cover .entry-status {
+  margin-top: var(--space-3);
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
-}
-.entry-cover .entry-status {
-  margin-top: var(--space-1);
 }
 
 /* dueling-mages backdrop (recreated box cover) */
@@ -1204,7 +1223,9 @@
      — always fits, whatever the screen/full-screen aspect. Any leftover margin
      is the emerald matte behind, matching the border (never a crop or blur). */
   object-fit: contain;
-  object-position: 50% 50%;
+  /* bias slightly up so the bottom banner sits a touch higher (where the screen
+     aspect leaves any vertical letterbox room) */
+  object-position: 50% 42%;
 }
 /* gentle scrim: keep the art bright, only darken the bottom for the controls */
 .entry-photo-wrap::after {

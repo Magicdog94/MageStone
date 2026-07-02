@@ -6,6 +6,7 @@ import { Board } from './Board';
 import { DiceLayer } from './Dice';
 import { BoardTokens, ClashEffect, DeathAnimations, Units } from './Pieces';
 import { arenaCircleTexture, groundBumpTexture, hazyFogTexture, stoneFloorTexture } from './textures';
+import { ArenaProps, Lanterns, TeamBanners } from './Decor';
 import { FLOOR_Y } from './coords';
 import { useGame } from '../store';
 
@@ -47,71 +48,7 @@ function StudioEnv() {
   );
 }
 
-/** Iron floor lanterns ringing the arena — small pools of warm, flickering
- *  light in the cold fog. The flame lights share one flicker clock. */
-function Lanterns() {
-  const lights = useRef<(THREE.PointLight | null)[]>([]);
-  const spots = useMemo(
-    () =>
-      Array.from({ length: 8 }, (_, i) => {
-        const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-        const r = 16.4 + (i % 2) * 1.4;
-        return { x: Math.cos(a) * r, z: Math.sin(a) * r, phase: i * 1.7 };
-      }),
-    [],
-  );
-  useFrame(({ clock }) => {
-    const t = clock.elapsedTime;
-    spots.forEach((s, i) => {
-      const l = lights.current[i];
-      if (l) l.intensity = 2.0 + 0.35 * Math.sin(t * 7 + s.phase) + 0.2 * Math.sin(t * 23 + s.phase * 2.3);
-    });
-  });
-  return (
-    <group>
-      {spots.map((s, i) => (
-        <group key={i} position={[s.x, FLOOR_Y, s.z]}>
-          {/* stone footing + iron base */}
-          <mesh position={[0, 0.05, 0]} castShadow receiveShadow>
-            <cylinderGeometry args={[0.3, 0.36, 0.1, 10]} />
-            <meshStandardMaterial color="#191d1a" roughness={0.9} />
-          </mesh>
-          {/* glass body with the flame inside */}
-          <mesh position={[0, 0.34, 0]}>
-            <cylinderGeometry args={[0.15, 0.18, 0.42, 10]} />
-            <meshStandardMaterial
-              color="#3a2a18"
-              emissive="#ffb066"
-              emissiveIntensity={1.7}
-              roughness={0.4}
-              transparent
-              opacity={0.92}
-            />
-          </mesh>
-          {/* iron cap + finial */}
-          <mesh position={[0, 0.62, 0]} castShadow>
-            <coneGeometry args={[0.24, 0.2, 10]} />
-            <meshStandardMaterial color="#14171a" roughness={0.7} metalness={0.4} />
-          </mesh>
-          <mesh position={[0, 0.75, 0]}>
-            <sphereGeometry args={[0.045, 8, 8]} />
-            <meshStandardMaterial color="#cba65a" metalness={0.8} roughness={0.4} />
-          </mesh>
-          <pointLight
-            ref={(el) => {
-              lights.current[i] = el;
-            }}
-            position={[0, 0.4, 0]}
-            color="#ff9e5a"
-            intensity={2}
-            distance={13}
-            decay={1.9}
-          />
-        </group>
-      ))}
-    </group>
-  );
-}
+// The lanterns, team banners and medieval props now live in ./Decor.
 
 /**
  * The arena the table stands in: a flagstone plaza with a grand gold summoning
@@ -133,17 +70,6 @@ function ArenaEnvironment() {
     return t;
   }, []);
   const circle = useMemo(() => arenaCircleTexture(), []);
-
-  // Obelisk ring (deterministic layout — no per-render randomness).
-  const obelisks = useMemo(
-    () =>
-      Array.from({ length: 6 }, (_, i) => {
-        const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
-        const r = 30 + (i % 2) * 5;
-        return { x: Math.cos(a) * r, z: Math.sin(a) * r, yaw: a };
-      }),
-    [],
-  );
 
   // Gold motes drifting around the table (seeded LCG — pure & stable per render).
   const motePositions = useMemo(() => {
@@ -188,28 +114,6 @@ function ArenaEnvironment() {
         <planeGeometry args={[30, 30]} />
         <meshBasicMaterial map={circle} transparent opacity={0.85} depthWrite={false} />
       </mesh>
-      {/* rune obelisks ringing the arena */}
-      {obelisks.map((o, i) => (
-        <group key={i} position={[o.x, FLOOR_Y, o.z]} rotation={[0, o.yaw, 0]}>
-          <mesh position={[0, 0.3, 0]} castShadow receiveShadow>
-            <cylinderGeometry args={[1.6, 1.9, 0.6, 4]} />
-            <meshStandardMaterial color="#131b14" roughness={0.92} />
-          </mesh>
-          <mesh position={[0, 3.9, 0]} castShadow>
-            <cylinderGeometry args={[0.75, 1.25, 7.2, 4]} />
-            <meshStandardMaterial color="#0f1a13" roughness={0.9} />
-          </mesh>
-          <mesh position={[0, 8.05, 0]}>
-            <coneGeometry args={[0.62, 1.1, 4]} />
-            <meshStandardMaterial
-              color="#151d16"
-              emissive="#caa85e"
-              emissiveIntensity={0.55}
-              roughness={0.6}
-            />
-          </mesh>
-        </group>
-      ))}
       {/* slow-drifting gold motes */}
       <points ref={motes}>
         <bufferGeometry>
@@ -311,20 +215,22 @@ export function Scene() {
       gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
       onPointerMissed={() => clearSelection(null)}
     >
-      {/* dense cold fog — the arena dissolves into the murk */}
-      <fog attach="fog" args={['#151c18', 26, 64]} />
+      {/* cold fog, pushed further out so the lantern-lit arena reads brighter */}
+      <fog attach="fog" args={['#1a231d', 30, 88]} />
 
       <FogBackdrop />
       <StudioEnv />
       <ArenaEnvironment />
       <Lanterns />
-      <hemisphereLight args={['#5d6f63', '#0a0f0b', 0.4]} />
-      <ambientLight intensity={0.1} color={'#b9c8bd'} />
-      {/* pale moonlight through the fog — cool and dimmer than before */}
+      <TeamBanners />
+      <ArenaProps />
+      <hemisphereLight args={['#77907f', '#0e1410', 0.55]} />
+      <ambientLight intensity={0.2} color={'#c4d2c6'} />
+      {/* pale moonlight through the fog */}
       <directionalLight
         position={[10, 18, 8]}
-        intensity={1.5}
-        color={'#dfe8ea'}
+        intensity={1.9}
+        color={'#e4ecee'}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0002}
@@ -333,8 +239,8 @@ export function Scene() {
         shadow-camera-top={16}
         shadow-camera-bottom={-16}
       />
-      {/* a soft cold pool over the table keeps the board readable in the gloom */}
-      <spotLight position={[0, 20, 0]} angle={0.62} penumbra={1} intensity={1.4} color={'#cfe0d4'} />
+      {/* a soft cold pool over the table keeps the board readable */}
+      <spotLight position={[0, 20, 0]} angle={0.62} penumbra={1} intensity={1.9} color={'#d8e6da'} />
       {/* the duelling mages' light, faint through the fog */}
       <directionalLight position={[-14, 7, -8]} intensity={0.3} color={'#6fb6e8'} />
       <directionalLight position={[14, 6, -8]} intensity={0.28} color={'#e8785a'} />

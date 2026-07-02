@@ -339,6 +339,194 @@ export function emeraldBoardTexture(): THREE.Texture {
   return finish(c, 'emeraldBoard');
 }
 
+// ---- Team banners -----------------------------------------------------------
+
+export type BannerSymbol = 'swords' | 'tower' | 'tree' | 'sun';
+
+function drawBannerSymbol(ctx: CanvasRenderingContext2D, symbol: BannerSymbol) {
+  // Drawn in a local space centred on (0,0), roughly 300 units across, in gold
+  // with a dark outline so it reads against any team colour.
+  const gold = goldGradient(ctx, -150, -150, 150, 150);
+  ctx.fillStyle = gold;
+  ctx.strokeStyle = '#4a3610';
+  ctx.lineWidth = 7;
+  ctx.lineJoin = 'round';
+
+  if (symbol === 'swords') {
+    // two crossed swords, points up
+    for (const s of [1, -1]) {
+      ctx.save();
+      ctx.rotate((s * 35 * Math.PI) / 180);
+      ctx.beginPath(); // blade
+      ctx.moveTo(0, -170);
+      ctx.lineTo(16, -140);
+      ctx.lineTo(16, 60);
+      ctx.lineTo(-16, 60);
+      ctx.lineTo(-16, -140);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillRect(-52, 60, 104, 22); // guard
+      ctx.strokeRect(-52, 60, 104, 22);
+      ctx.fillRect(-11, 82, 22, 62); // grip
+      ctx.strokeRect(-11, 82, 22, 62);
+      ctx.beginPath(); // pommel
+      ctx.arc(0, 162, 20, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+  } else if (symbol === 'tower') {
+    // castle keep with battlements, arched door and windows
+    ctx.beginPath();
+    ctx.moveTo(-95, 160);
+    ctx.lineTo(-95, -90);
+    for (let i = 0; i < 4; i++) {
+      const x = -95 + i * 47.5;
+      ctx.lineTo(x, -90);
+      ctx.lineTo(x, -130);
+      ctx.lineTo(x + 28, -130);
+      ctx.lineTo(x + 28, -90);
+    }
+    ctx.lineTo(95, -90);
+    ctx.lineTo(95, 160);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // door + windows knocked out in the cloth's dark outline colour
+    ctx.fillStyle = '#4a3610';
+    ctx.beginPath();
+    ctx.moveTo(-30, 160);
+    ctx.lineTo(-30, 80);
+    ctx.arc(0, 80, 30, Math.PI, 0);
+    ctx.lineTo(30, 160);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillRect(-14, -60, 28, 44);
+    ctx.fillRect(-58, 0, 24, 36);
+    ctx.fillRect(34, 0, 24, 36);
+  } else if (symbol === 'tree') {
+    // great oak: trunk, roots and a three-lobed canopy
+    ctx.beginPath();
+    ctx.moveTo(-18, 150);
+    ctx.lineTo(-12, 20);
+    ctx.lineTo(12, 20);
+    ctx.lineTo(18, 150);
+    ctx.lineTo(46, 162);
+    ctx.lineTo(-46, 162);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(-58, -20, 55, 0, Math.PI * 2);
+    ctx.arc(58, -20, 55, 0, Math.PI * 2);
+    ctx.arc(0, -88, 62, 0, Math.PI * 2);
+    ctx.arc(0, -18, 60, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(-58, -20, 55, Math.PI * 0.4, Math.PI * 1.5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(58, -20, 55, Math.PI * 1.5, Math.PI * 0.6);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, -88, 62, Math.PI * 1.1, Math.PI * 1.9);
+    ctx.stroke();
+  } else {
+    // radiant sun: disc + twelve rays
+    for (let i = 0; i < 12; i++) {
+      ctx.save();
+      ctx.rotate((i / 12) * Math.PI * 2);
+      ctx.beginPath();
+      ctx.moveTo(-16, -92);
+      ctx.lineTo(0, -168);
+      ctx.lineTo(16, -92);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.beginPath();
+    ctx.arc(0, 0, 78, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+/** A hanging war banner in the team's colour: swallow-tailed cloth with a gold
+ *  border and the team's heraldic symbol. Transparent outside the cloth. */
+export function bannerTexture(colorHex: string, symbol: BannerSymbol): THREE.Texture {
+  const key = `banner-${symbol}-${colorHex}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const W = 512;
+  const H = 768;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext('2d')!;
+
+  // swallow-tailed cloth silhouette
+  const cloth = () => {
+    ctx.beginPath();
+    ctx.moveTo(16, 12);
+    ctx.lineTo(496, 12);
+    ctx.lineTo(496, 730);
+    ctx.lineTo(256, 596);
+    ctx.lineTo(16, 730);
+    ctx.closePath();
+  };
+  // team-coloured cloth with vertical shading
+  const base = ctx.createLinearGradient(0, 0, 0, H);
+  const teamCol = colorHex;
+  base.addColorStop(0, teamCol);
+  base.addColorStop(1, '#0e0d0b');
+  cloth();
+  ctx.fillStyle = teamCol;
+  ctx.fill();
+  cloth();
+  ctx.save();
+  ctx.clip();
+  // darken toward the bottom + weave grain
+  const shade = ctx.createLinearGradient(0, 0, 0, H);
+  shade.addColorStop(0, 'rgba(255,255,255,0.14)');
+  shade.addColorStop(0.35, 'rgba(0,0,0,0)');
+  shade.addColorStop(1, 'rgba(0,0,0,0.5)');
+  ctx.fillStyle = shade;
+  ctx.fillRect(0, 0, W, H);
+  for (let i = 0; i < 2600; i++) {
+    ctx.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.035)';
+    ctx.fillRect(Math.random() * W, Math.random() * H, 2, 1);
+  }
+  // vertical fold shadows
+  for (const fx of [110, 250, 390]) {
+    const fold = ctx.createLinearGradient(fx - 34, 0, fx + 34, 0);
+    fold.addColorStop(0, 'rgba(0,0,0,0)');
+    fold.addColorStop(0.5, 'rgba(0,0,0,0.16)');
+    fold.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = fold;
+    ctx.fillRect(fx - 34, 0, 68, H);
+  }
+  ctx.restore();
+  // gold border
+  cloth();
+  ctx.strokeStyle = goldGradient(ctx, 0, 0, W, H);
+  ctx.lineWidth = 14;
+  ctx.stroke();
+  // hanging band at the top
+  ctx.fillStyle = goldGradient(ctx, 0, 0, W, 60);
+  ctx.fillRect(16, 12, 480, 34);
+  // the heraldic symbol
+  ctx.save();
+  ctx.translate(W / 2, 300);
+  ctx.shadowColor = 'rgba(0,0,0,0.55)';
+  ctx.shadowBlur = 14;
+  drawBannerSymbol(ctx, symbol);
+  ctx.restore();
+
+  return finish(c, key);
+}
+
 // ---- Hazy fog backdrop (equirectangular) -----------------------------------
 
 /**

@@ -394,17 +394,19 @@
 
 /* ---------------- MageStone layout picker (New Game) ---------------- */
 .layout-picker {
+  /* 5-up keeps the nine presets to two short rows, so the New Game modal fits
+     a 1536×960-class laptop viewport at 100% zoom without scrolling. */
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-1);
   width: 100%;
 }
 .layout-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-1);
+  gap: 2px;
+  padding: var(--space-1);
   border: 1px solid var(--gold-line);
   border-radius: var(--radius-sm);
   background: rgba(0, 0, 0, 0.32);
@@ -455,8 +457,12 @@
   color: var(--gold-bright);
 }
 .layout-name {
-  font-size: var(--text-xs);
-  letter-spacing: 0.3px;
+  font-size: 11px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 /* server status pill (Settings modal) */
@@ -1032,7 +1038,12 @@
   pointer-events: auto;
 }
 .modal {
-  width: min(560px, 94vw);
+  width: min(640px, 94vw);
+  /* Never taller than the viewport: the header and footer (with its buttons)
+     always stay on screen at 100% zoom; only the body scrolls if needed. */
+  max-height: min(92vh, 92dvh);
+  display: flex;
+  flex-direction: column;
   background: linear-gradient(180deg, var(--panel-1), var(--panel-2));
   border: 1px solid var(--gold-line);
   border-radius: var(--radius-md);
@@ -1078,7 +1089,12 @@
   box-shadow: var(--focus-ring);
 }
 .modal-body {
-  padding: var(--space-3) var(--space-5) var(--space-5);
+  padding: var(--space-3) var(--space-5) var(--space-4);
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold-dim) transparent;
 }
 .modal-section {
   font-family: var(--display);
@@ -1097,7 +1113,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-3) 0;
+  padding: var(--space-2) 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 .field:last-child {
@@ -1752,10 +1768,11 @@
 .entry-photo {
   width: 100%;
   height: 100%;
-  /* Contain so the whole 16:9 hero — including its gold border on all four edges
-     — always fits, whatever the screen/full-screen aspect. Any leftover margin
-     is the emerald matte behind, matching the border (never a crop or blur). */
-  object-fit: contain;
+  /* Cover so the hero fills the whole screen edge-to-edge on any aspect ratio
+     (e.g. 16:10 laptops at 125% scale — no letterbox bars). A sliver of the
+     art's outer frame may crop on non-16:9 screens; the centred title and
+     duel stay in frame. */
+  object-fit: cover;
   object-position: 50% 50%;
 }
 /* gentle scrim: keep the art bright, only darken the bottom for the controls */

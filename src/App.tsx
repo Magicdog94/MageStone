@@ -6,6 +6,7 @@ import { EntryScreens } from './ui/screens/Screens';
 import { MusicToggle } from './ui/MusicToggle';
 import { FullscreenToggle } from './ui/FullscreenToggle';
 import { useMusic } from './audio/music';
+import { initSfx } from './audio/sfx';
 import { useNet } from './net/useNet';
 import './App.css';
 
@@ -22,6 +23,9 @@ export default function App() {
     window.addEventListener('pointerdown', begin, { once: true });
     return () => window.removeEventListener('pointerdown', begin);
   }, []);
+
+  // Sound effects: UI clicks + game events (moves, clashes, dice, horns…).
+  useEffect(() => initSfx(), []);
 
   return (
     <>

@@ -6,7 +6,7 @@ import { Board } from './Board';
 import { DiceLayer } from './Dice';
 import { BoardTokens, ClashEffect, DeathAnimations, Units } from './Pieces';
 import { arenaCircleTexture, groundBumpTexture, hazyFogTexture, stoneFloorTexture } from './textures';
-import { ArenaProps, Lanterns, TeamBanners } from './Decor';
+import { SmithyRoom, TeamBanners } from './Decor';
 import { FLOOR_Y } from './coords';
 import { useGame } from '../store';
 
@@ -96,9 +96,9 @@ function ArenaEnvironment() {
 
   return (
     <group>
-      {/* flagstone plaza, fading into the fog */}
+      {/* flagstone floor — square so it runs wall-to-wall under the smithy */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y, 0]} receiveShadow>
-        <circleGeometry args={[85, 72]} />
+        <planeGeometry args={[200, 200]} />
         <meshStandardMaterial
           map={floorMap}
           bumpMap={floorBump}
@@ -215,22 +215,21 @@ export function Scene() {
       gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
       onPointerMissed={() => clearSelection(null)}
     >
-      {/* cold fog, pushed further out so the lantern-lit arena reads brighter */}
-      <fog attach="fog" args={['#1a231d', 30, 88]} />
+      {/* light interior haze — smoke off the forge, not outdoor fog */}
+      <fog attach="fog" args={['#171410', 70, 300]} />
 
       <FogBackdrop />
       <StudioEnv />
       <ArenaEnvironment />
-      <Lanterns />
+      <SmithyRoom />
       <TeamBanners />
-      <ArenaProps />
-      <hemisphereLight args={['#77907f', '#0e1410', 0.55]} />
-      <ambientLight intensity={0.2} color={'#c4d2c6'} />
-      {/* pale moonlight through the fog */}
+      <hemisphereLight args={['#8a7f6d', '#181310', 0.5]} />
+      <ambientLight intensity={0.18} color={'#d8cbb8'} />
+      {/* daylight slanting in through the north windows */}
       <directionalLight
-        position={[10, 18, 8]}
-        intensity={1.9}
-        color={'#e4ecee'}
+        position={[24, 60, -70]}
+        intensity={1.5}
+        color={'#dfe8f0'}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0002}
@@ -239,11 +238,8 @@ export function Scene() {
         shadow-camera-top={16}
         shadow-camera-bottom={-16}
       />
-      {/* a soft cold pool over the table keeps the board readable */}
-      <spotLight position={[0, 20, 0]} angle={0.62} penumbra={1} intensity={1.9} color={'#d8e6da'} />
-      {/* the duelling mages' light, faint through the fog */}
-      <directionalLight position={[-14, 7, -8]} intensity={0.3} color={'#6fb6e8'} />
-      <directionalLight position={[14, 6, -8]} intensity={0.28} color={'#e8785a'} />
+      {/* a soft pool over the table keeps the board readable */}
+      <spotLight position={[0, 34, 0]} angle={0.7} penumbra={1} intensity={2.2} color={'#e8e2d2'} />
 
       <Suspense fallback={null}>
         <Board />

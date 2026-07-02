@@ -339,6 +339,180 @@ export function emeraldBoardTexture(): THREE.Texture {
   return finish(c, 'emeraldBoard');
 }
 
+// ---- Smithy interior surfaces -----------------------------------------------
+
+/** Aged lime-plaster wall with water stains and patches of exposed stone —
+ *  the smithy's walls (tiles horizontally). */
+export function plasterTexture(): THREE.Texture {
+  const hit = cache.get('plaster');
+  if (hit) return hit;
+  const S = 1024;
+  const [c, ctx] = canvas(S);
+  // warm grey plaster base with a vertical grime gradient
+  const base = ctx.createLinearGradient(0, 0, 0, S);
+  base.addColorStop(0, '#8a8177');
+  base.addColorStop(0.6, '#7c746a');
+  base.addColorStop(1, '#5f584f');
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, S, S);
+  // broad tonal blotches (drawn with x-wrap copies so the wall tiles)
+  for (let i = 0; i < 130; i++) {
+    const x = Math.random() * S;
+    const y = Math.random() * S;
+    const r = 40 + Math.random() * 160;
+    const light = Math.random() < 0.5;
+    for (const ox of [0, -S, S]) {
+      const g = ctx.createRadialGradient(x + ox, y, 0, x + ox, y, r);
+      g.addColorStop(0, light ? 'rgba(160,150,135,0.1)' : 'rgba(50,44,38,0.12)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x + ox, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  // exposed stone patches near the bottom (plaster fallen away)
+  for (let i = 0; i < 26; i++) {
+    const x = Math.random() * S;
+    const y = S * 0.55 + Math.random() * S * 0.42;
+    const w = 30 + Math.random() * 70;
+    const h = 18 + Math.random() * 34;
+    for (const ox of [0, -S, S]) {
+      ctx.fillStyle = `rgba(${70 + (Math.random() * 25) | 0},${64 + (Math.random() * 20) | 0},${56 + (Math.random() * 16) | 0},0.9)`;
+      ctx.beginPath();
+      ctx.roundRect(x + ox, y, w, h, 8);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(30,26,22,0.55)';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    }
+  }
+  // water-stain streaks from the top
+  for (let i = 0; i < 24; i++) {
+    const x = Math.random() * S;
+    const w = 6 + Math.random() * 22;
+    const h = 80 + Math.random() * 260;
+    for (const ox of [0, -S, S]) {
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, 'rgba(52,46,38,0.16)');
+      g.addColorStop(1, 'rgba(52,46,38,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x + ox - w / 2, 0, w, h);
+    }
+  }
+  // fine grain
+  for (let i = 0; i < 12000; i++) {
+    const v = 90 + ((Math.random() * 80) | 0);
+    ctx.fillStyle = `rgba(${v},${v - 6},${v - 14},${Math.random() * 0.12})`;
+    ctx.fillRect(Math.random() * S, Math.random() * S, 1, 1);
+  }
+  const t = finish(c, 'plaster', true);
+  return t;
+}
+
+/** The inside of the forge — banked coals glowing under ash. Emissive map. */
+export function forgeEmbersTexture(): THREE.Texture {
+  const hit = cache.get('embers');
+  if (hit) return hit;
+  const S = 512;
+  const [c, ctx] = canvas(S);
+  ctx.fillStyle = '#0c0705';
+  ctx.fillRect(0, 0, S, S);
+  // heart of the fire
+  let g = ctx.createRadialGradient(S / 2, S * 0.68, 0, S / 2, S * 0.68, S * 0.52);
+  g.addColorStop(0, '#ffb454');
+  g.addColorStop(0.35, '#e2571d');
+  g.addColorStop(0.7, '#6e1d08');
+  g.addColorStop(1, 'rgba(20,8,4,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S, S);
+  // individual coals
+  for (let i = 0; i < 90; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const rr = Math.random() * S * 0.34;
+    const x = S / 2 + Math.cos(a) * rr;
+    const y = S * 0.68 + Math.sin(a) * rr * 0.55;
+    const r = 4 + Math.random() * 14;
+    g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    const hot = Math.random() < 0.4;
+    g.addColorStop(0, hot ? '#ffd98a' : '#f4712c');
+    g.addColorStop(1, 'rgba(60,16,6,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // ash crust flecks
+  for (let i = 0; i < 700; i++) {
+    ctx.fillStyle = `rgba(30,24,20,${0.2 + Math.random() * 0.4})`;
+    ctx.fillRect(Math.random() * S, S * 0.4 + Math.random() * S * 0.6, 2, 2);
+  }
+  return finish(c, 'embers');
+}
+
+/** A leaded arched window glowing with pale daylight (transparent outside the
+ *  arch — use with alphaTest). */
+export function windowTexture(): THREE.Texture {
+  const hit = cache.get('window');
+  if (hit) return hit;
+  const W = 256;
+  const H = 384;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext('2d')!;
+  const arch = () => {
+    ctx.beginPath();
+    ctx.moveTo(18, H - 10);
+    ctx.lineTo(18, 130);
+    ctx.arc(W / 2, 130, W / 2 - 18, Math.PI, 0);
+    ctx.lineTo(W - 18, H - 10);
+    ctx.closePath();
+  };
+  // pale foggy daylight
+  arch();
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#d8e4e6');
+  g.addColorStop(0.55, '#b9c9c6');
+  g.addColorStop(1, '#8fa39c');
+  ctx.fillStyle = g;
+  ctx.fill();
+  // soft hot spot (the smothered sun)
+  arch();
+  ctx.save();
+  ctx.clip();
+  const s = ctx.createRadialGradient(W * 0.42, H * 0.3, 0, W * 0.42, H * 0.3, W * 0.7);
+  s.addColorStop(0, 'rgba(255,252,238,0.85)');
+  s.addColorStop(1, 'rgba(255,252,238,0)');
+  ctx.fillStyle = s;
+  ctx.fillRect(0, 0, W, H);
+  // lead cames: diamond lattice + mullion
+  ctx.strokeStyle = 'rgba(38,36,32,0.85)';
+  ctx.lineWidth = 4;
+  for (let k = -6; k < 10; k++) {
+    ctx.beginPath();
+    ctx.moveTo(k * 48, 0);
+    ctx.lineTo(k * 48 + H, H);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(k * 48 + H, 0);
+    ctx.lineTo(k * 48, H);
+    ctx.stroke();
+  }
+  ctx.lineWidth = 9;
+  ctx.beginPath();
+  ctx.moveTo(W / 2, 40);
+  ctx.lineTo(W / 2, H);
+  ctx.stroke();
+  ctx.restore();
+  // stone reveal around the glass
+  arch();
+  ctx.strokeStyle = '#4c463e';
+  ctx.lineWidth = 14;
+  ctx.stroke();
+  return finish(c, 'window');
+}
+
 // ---- Team banners -----------------------------------------------------------
 
 export type BannerSymbol = 'swords' | 'tower' | 'tree' | 'sun';
@@ -497,6 +671,11 @@ export function bannerTexture(colorHex: string, symbol: BannerSymbol): THREE.Tex
   for (let i = 0; i < 2600; i++) {
     ctx.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.035)';
     ctx.fillRect(Math.random() * W, Math.random() * H, 2, 1);
+  }
+  // horizontal weave threads — reads as real cloth up close
+  for (let y = 0; y < H; y += 3) {
+    ctx.fillStyle = `rgba(0,0,0,${0.02 + (y % 9 === 0 ? 0.025 : 0)})`;
+    ctx.fillRect(0, y, W, 1);
   }
   // vertical fold shadows
   for (const fx of [110, 250, 390]) {

@@ -102,7 +102,12 @@ const lobbyMsg = (g) => ({
   host: g.host,
   playerCount: g.playerCount,
   started: g.started,
-  players: g.players.map((p) => ({ username: p.display, color: p.color, online: !!p.ws })),
+  players: g.players.map((p) => ({
+    username: p.display,
+    color: p.color,
+    online: !!p.ws || !!p.bot,
+    bot: p.bot || null,
+  })),
 });
 const broadcastLobby = (g) => g.players.forEach((p) => p.ws && send(p.ws, lobbyMsg(g)));
 const broadcast = (g, msg, exceptWs) =>
@@ -132,7 +137,7 @@ function joinRoom(ws, s, g) {
     send(ws, {
       t: 'started',
       state: g.state,
-      players: g.players.map((p) => ({ username: p.display, color: p.color })),
+      players: g.players.map((p) => ({ username: p.display, color: p.color, bot: p.bot || null })),
     });
   }
   broadcastLobby(g);
@@ -143,7 +148,8 @@ function leaveRoom(ws, s) {
   s.gameId = null;
   if (!g) return;
   g.players = g.players.filter((p) => p.ws !== ws);
-  if (g.players.length === 0) games.delete(g.id);
+  // A room of only bots has nobody left to play (or host) it — tear it down.
+  if (!g.players.some((p) => !p.bot)) games.delete(g.id);
   else broadcastLobby(g);
 }
 
@@ -201,6 +207,37 @@ async function handle(ws, s, m) {
       }
       return joinRoom(ws, s, g);
     }
+    case 'addBot': {
+      // Host fills an empty seat with an AI bot (it counts as a joined player,
+      // so the game can start; the host's client executes its turns).
+      const g = games.get(s.gameId);
+      if (!g || g.started) return;
+      if (g.host !== s.display) return send(ws, { t: 'error', message: 'Only the host can add bots.' });
+      if (g.players.length >= g.playerCount) return send(ws, { t: 'error', message: 'The game is already full.' });
+      const level = ['easy', 'medium', 'hard'].includes(m.level) ? m.level : 'medium';
+      const used = new Set(g.players.map((p) => p.color));
+      const color = colorsFor(g.playerCount).find((c) => !used.has(c));
+      const n = g.players.filter((p) => p.bot).length + 1;
+      g.players.push({
+        username: `bot:${color}`,
+        display: `Bot ${n} · ${level[0].toUpperCase()}${level.slice(1)}`,
+        color,
+        ws: null,
+        bot: level,
+      });
+      return broadcastLobby(g);
+    }
+    case 'removeBot': {
+      const g = games.get(s.gameId);
+      if (!g || g.started) return;
+      if (g.host !== s.display) return;
+      const i = g.players.findIndex((p) => p.bot && p.color === m.color);
+      if (i >= 0) {
+        g.players.splice(i, 1);
+        broadcastLobby(g);
+      }
+      return;
+    }
     case 'startGame': {
       const g = games.get(s.gameId);
       if (!g) return;
@@ -208,7 +245,7 @@ async function handle(ws, s, m) {
       if (g.players.length < g.playerCount) return send(ws, { t: 'error', message: 'Waiting for all players to join.' });
       g.started = true;
       g.state = m.state;
-      const players = g.players.map((p) => ({ username: p.display, color: p.color }));
+      const players = g.players.map((p) => ({ username: p.display, color: p.color, bot: p.bot || null }));
       g.players.forEach((p) => p.ws && send(p.ws, { t: 'started', state: m.state, players }));
       return;
     }

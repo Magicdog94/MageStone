@@ -1,23 +1,25 @@
-import { Suspense, useEffect, useRef } from 'react';
+import { Suspense, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { ContactShadows, Environment, Lightformer, OrbitControls } from '@react-three/drei';
 import { Board } from './Board';
 import { DiceLayer } from './Dice';
 import { BoardTokens, ClashEffect, DeathAnimations, Units } from './Pieces';
-import { castleHallTexture } from './textures';
+import { arenaCircleTexture, duelNightTexture, groundBumpTexture, stoneFloorTexture } from './textures';
+import { FLOOR_Y } from './coords';
 import { useGame } from '../store';
 
 /**
- * Castle-hall backdrop — a procedural torch-lit great hall painted onto an
- * equirectangular texture and set as the scene background (a skydome), so the
- * board reads as resting on a table inside a medieval castle. The studio
- * Environment still drives the gold reflections; this only paints the hall.
+ * Duel-night backdrop — the box-cover scene painted onto an equirectangular
+ * texture and set as the scene background (a skydome): emerald storm sky,
+ * arcane sigil, mountain + forest silhouettes, and the two rival castles
+ * (blue-lit and red-lit). The studio Environment still drives the gold
+ * reflections; this only paints the world.
  */
-function CastleBackdrop() {
+function DuelBackdrop() {
   const scene = useThree((s) => s.scene);
   useEffect(() => {
-    const tex = castleHallTexture();
+    const tex = duelNightTexture();
     tex.mapping = THREE.EquirectangularReflectionMapping;
     const prev = scene.background;
     // Three.js scene background is an imperative API; assigning it is the side
@@ -32,16 +34,134 @@ function CastleBackdrop() {
 }
 
 /** Procedural studio environment — drives metallic gold reflections, no HDRI.
- *  Warm torch-lit tones to match the castle hall. */
+ *  Warm gilt key with emerald sheen, plus faint blue/red formers echoing the
+ *  duelling mages of the cover. */
 function StudioEnv() {
   return (
     <Environment resolution={256} frames={1}>
-      <color attach="background" args={['#0a0805']} />
-      <Lightformer intensity={3} position={[0, 6, 2]} scale={[12, 12, 1]} color="#ffe6b8" />
-      <Lightformer intensity={1.8} position={[-6, 3, 4]} scale={[6, 8, 1]} color="#e8a04a" />
-      <Lightformer intensity={1.5} position={[6, 3, -4]} scale={[6, 8, 1]} color="#ffcf8a" />
-      <Lightformer intensity={0.7} position={[0, 2, -8]} scale={[14, 6, 1]} color="#5a3a1e" />
+      <color attach="background" args={['#07120c']} />
+      <Lightformer intensity={2.6} position={[0, 6, 2]} scale={[12, 12, 1]} color="#ffe6b8" />
+      <Lightformer intensity={1.3} position={[-6, 3, 4]} scale={[6, 8, 1]} color="#bfe8d0" />
+      <Lightformer intensity={1.2} position={[6, 3, -4]} scale={[6, 8, 1]} color="#ffcf8a" />
+      <Lightformer intensity={0.8} position={[-8, 2, -2]} scale={[5, 7, 1]} color="#4a86c8" />
+      <Lightformer intensity={0.7} position={[8, 2, 2]} scale={[5, 7, 1]} color="#c85a42" />
     </Environment>
+  );
+}
+
+/**
+ * The arena the table stands in: a flagstone plaza with a grand gold summoning
+ * circle inlaid around the stand, a ring of rune-capped obelisks fading into
+ * the mist, and slow-drifting gold motes — so the board reads as the centre-
+ * piece of a larger duelling ground rather than a floating tabletop.
+ */
+function ArenaEnvironment() {
+  const floorMap = useMemo(() => {
+    const t = stoneFloorTexture();
+    t.repeat.set(20, 20);
+    return t;
+  }, []);
+  const floorBump = useMemo(() => {
+    // Clone: the board tiles share this texture at repeat 1.
+    const t = groundBumpTexture().clone();
+    t.repeat.set(20, 20);
+    t.needsUpdate = true;
+    return t;
+  }, []);
+  const circle = useMemo(() => arenaCircleTexture(), []);
+
+  // Obelisk ring (deterministic layout — no per-render randomness).
+  const obelisks = useMemo(
+    () =>
+      Array.from({ length: 6 }, (_, i) => {
+        const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+        const r = 30 + (i % 2) * 5;
+        return { x: Math.cos(a) * r, z: Math.sin(a) * r, yaw: a };
+      }),
+    [],
+  );
+
+  // Gold motes drifting around the table (seeded LCG — pure & stable per render).
+  const motePositions = useMemo(() => {
+    let seed = 987654321;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 0xffffffff;
+    };
+    const n = 180;
+    const arr = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const a = rand() * Math.PI * 2;
+      const r = 6 + rand() * 22;
+      arr[i * 3] = Math.cos(a) * r;
+      arr[i * 3 + 1] = FLOOR_Y + 1.5 + rand() * 8;
+      arr[i * 3 + 2] = Math.sin(a) * r;
+    }
+    return arr;
+  }, []);
+  const motes = useRef<THREE.Points>(null);
+  useFrame((_, dt) => {
+    if (motes.current) motes.current.rotation.y += dt * 0.014;
+  });
+
+  return (
+    <group>
+      {/* flagstone plaza, fading into the fog */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y, 0]} receiveShadow>
+        <circleGeometry args={[85, 72]} />
+        <meshStandardMaterial
+          map={floorMap}
+          bumpMap={floorBump}
+          bumpScale={0.05}
+          color="#cfd8cf"
+          roughness={0.94}
+          metalness={0}
+          envMapIntensity={0.15}
+        />
+      </mesh>
+      {/* gold summoning circle inlaid around the stand */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y + 0.02, 0]}>
+        <planeGeometry args={[30, 30]} />
+        <meshBasicMaterial map={circle} transparent opacity={0.85} depthWrite={false} />
+      </mesh>
+      {/* rune obelisks ringing the arena */}
+      {obelisks.map((o, i) => (
+        <group key={i} position={[o.x, FLOOR_Y, o.z]} rotation={[0, o.yaw, 0]}>
+          <mesh position={[0, 0.3, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[1.6, 1.9, 0.6, 4]} />
+            <meshStandardMaterial color="#131b14" roughness={0.92} />
+          </mesh>
+          <mesh position={[0, 3.9, 0]} castShadow>
+            <cylinderGeometry args={[0.75, 1.25, 7.2, 4]} />
+            <meshStandardMaterial color="#0f1a13" roughness={0.9} />
+          </mesh>
+          <mesh position={[0, 8.05, 0]}>
+            <coneGeometry args={[0.62, 1.1, 4]} />
+            <meshStandardMaterial
+              color="#151d16"
+              emissive="#caa85e"
+              emissiveIntensity={0.55}
+              roughness={0.6}
+            />
+          </mesh>
+        </group>
+      ))}
+      {/* slow-drifting gold motes */}
+      <points ref={motes}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[motePositions, 3]} />
+        </bufferGeometry>
+        <pointsMaterial
+          color="#ffd98a"
+          size={0.09}
+          sizeAttenuation
+          transparent
+          opacity={0.5}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </points>
+    </group>
   );
 }
 
@@ -127,15 +247,16 @@ export function Scene() {
       gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
       onPointerMissed={() => clearSelection(null)}
     >
-      <fog attach="fog" args={['#0e0a07', 32, 74]} />
+      <fog attach="fog" args={['#04100a', 34, 90]} />
 
-      <CastleBackdrop />
+      <DuelBackdrop />
       <StudioEnv />
-      <hemisphereLight args={['#c2a472', '#171009', 0.4]} />
-      <ambientLight intensity={0.14} color={'#d8b98a'} />
+      <ArenaEnvironment />
+      <hemisphereLight args={['#8fb8a0', '#0a1410', 0.5]} />
+      <ambientLight intensity={0.12} color={'#cfe0d0'} />
       <directionalLight
         position={[10, 18, 8]}
-        intensity={2.4}
+        intensity={2.3}
         color={'#fff1d8'}
         castShadow
         shadow-mapSize={[2048, 2048]}
@@ -145,8 +266,9 @@ export function Scene() {
         shadow-camera-top={16}
         shadow-camera-bottom={-16}
       />
-      {/* warm torch fill from the side */}
-      <directionalLight position={[-12, 9, -6]} intensity={0.6} color={'#e0883a'} />
+      {/* the duelling mages' light: blue rim from the left, red from the right */}
+      <directionalLight position={[-14, 7, -8]} intensity={0.5} color={'#6fb6e8'} />
+      <directionalLight position={[14, 6, -8]} intensity={0.45} color={'#e8785a'} />
 
       <Suspense fallback={null}>
         <Board />

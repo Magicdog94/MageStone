@@ -2,6 +2,7 @@
 // server. Handles auth, the lobby/room, and bridges live GameState to `useGame`.
 import { create } from 'zustand';
 import type { GameState, PlayerColor } from '../game/types';
+import type { BotLevel } from '../game/bot';
 import { createGame } from '../game/setup';
 import { useGame } from '../store';
 
@@ -11,6 +12,8 @@ export interface RoomPlayer {
   username: string;
   color: PlayerColor;
   online: boolean;
+  /** Difficulty when this slot is an AI bot, else null. */
+  bot: BotLevel | null;
 }
 export interface Room {
   gameId: string;
@@ -41,6 +44,8 @@ interface NetState {
   signout: () => void;
   createGame: (playerCount: number, password: string) => void;
   joinGame: (gameId: string, password: string) => void;
+  addBot: (level: BotLevel) => void;
+  removeBot: (color: PlayerColor) => void;
   startGame: () => void;
   leaveRoom: () => void;
 }
@@ -133,11 +138,16 @@ export const useNet = create<NetState>((set, get) => {
         set({ joinError: m.message as string });
         break;
       case 'started': {
-        const players = m.players as { username: string; color: PlayerColor }[];
+        const players = m.players as { username: string; color: PlayerColor; bot?: BotLevel | null }[];
         const me = players.find((p) => p.username === get().username);
         const myColor = me?.color ?? get().myColor ?? 'red';
+        // Bot seats + controller: the HOST's client executes bot turns (the
+        // engine is client-side; someone must think for them).
+        const bots: Partial<Record<PlayerColor, BotLevel>> = {};
+        for (const p of players) if (p.bot) bots[p.color] = p.bot;
+        const isHost = get().room?.host === get().username;
         applyingRemote = true;
-        useGame.getState().startOnline(m.state as GameState, myColor);
+        useGame.getState().startOnline(m.state as GameState, myColor, bots, isHost);
         applyingRemote = false;
         set({ myColor, screen: 'game' });
         break;
@@ -200,6 +210,8 @@ export const useNet = create<NetState>((set, get) => {
       set({ joinError: null });
       ensureSocket(() => sendWs({ t: 'joinGame', gameId, password }));
     },
+    addBot: (level) => sendWs({ t: 'addBot', level }),
+    removeBot: (color) => sendWs({ t: 'removeBot', color }),
     startGame: () => {
       const room = get().room;
       if (!room) return;

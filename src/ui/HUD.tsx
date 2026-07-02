@@ -2,13 +2,21 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { unitActions, useGame } from '../store';
 import { useNet } from '../net/useNet';
 import { COLORS } from '../three/coords';
-import { discardsLeft, hasPlayLeft, magePowerDie, unitById } from '../game/rules';
+import {
+  discardsLeft,
+  gravestoneBank,
+  gravestoneCapacity,
+  hasPlayLeft,
+  magePowerDie,
+  unitById,
+} from '../game/rules';
 import { PipDie } from './Die';
 import { CombatRoll } from './CombatRoll';
 import { PlayerStrip } from './PlayerStrip';
+import { SiegeBanner } from './SiegeBanner';
 import { TurnTimer } from './TurnTimer';
 import { Modals } from './Modals';
-import { CogIcon } from './Icons';
+import { CogIcon, GraveIcon } from './Icons';
 
 const KIND_LABEL = { warrior: 'Warrior', mage: 'Mage', priest: 'Priest' } as const;
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -31,7 +39,9 @@ export function HUD() {
   const combatNonce = useGame((s) => s.combatNonce);
   const online = useGame((s) => s.online);
   const myColor = useGame((s) => s.myColor);
-  const myTurn = !online || game.current === myColor;
+  const bots = useGame((s) => s.bots);
+  // A bot's turn is never "my turn" — the BotDriver plays it; humans watch.
+  const myTurn = !bots[game.current] && (!online || game.current === myColor);
   const exitToLobby = () => {
     useNet.getState().leaveRoom();
     useNet.setState({ screen: 'lobby' });
@@ -76,6 +86,9 @@ export function HUD() {
   const dleft = phase === 'discard' ? discardsLeft(game) : 0;
   const discardLabel = `Discard ${dleft} ${dleft === 1 ? 'die' : 'dice'}`;
 
+  const graveBank = gravestoneBank(game);
+  const graveCap = gravestoneCapacity(game);
+
   const phaseHint = rolling
     ? 'Rolling the dice…'
     : phase === 'roll'
@@ -112,6 +125,7 @@ export function HUD() {
           {myTurn ? 'Your turn' : `${cap(game.current)}'s turn`}
         </div>
       )}
+      <SiegeBanner />
       <button className="gear" onClick={() => openModal('settings')} aria-label="Settings">
         <CogIcon size={20} />
       </button>
@@ -187,6 +201,14 @@ export function HUD() {
 
         <div className="spacer" />
 
+        <span
+          className="grave-bank tip"
+          data-tip={`Gravestone bank: ${graveBank} left to place · up to ${graveCap} on the board (4 per active player).`}
+        >
+          <GraveIcon size={18} />
+          {graveBank}
+        </span>
+
         {game.ritual && (
           <span className="ritual-flag" title="A ritual is in progress">
             Ritual · {game.ritual.player}
@@ -199,7 +221,10 @@ export function HUD() {
 
         <div className="actions">
           {!myTurn ? (
-            <span className="muted">{cap(game.current)} is playing…</span>
+            <span className="muted">
+              {cap(game.current)}
+              {bots[game.current] ? ' (bot)' : ''} is playing…
+            </span>
           ) : (
             <>
               {phase === 'roll' && (

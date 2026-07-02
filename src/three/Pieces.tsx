@@ -168,25 +168,181 @@ function measureModel(root: THREE.Object3D, url: string): ModelMetrics {
   return metrics;
 }
 
+// ---- Procedural miniature paint job ---------------------------------------
+// The sculpts are single untextured meshes (no parts, no UVs on the priest), so
+// the painted-miniature look is baked into vertex colours from the geometry
+// itself: a team-coloured base coat under zenithal light, darkened folds in the
+// crevices, gold edge-highlights along raised trim (the classic tabletop paint
+// recipe from the box-art miniatures), and a leather band at a robed sculpt's
+// feet. Every team gets the same recipe with its own colour swapped in.
+
+interface SculptAnalysis {
+  conv: Float32Array; // per-vertex convexity: + on ridges, − in cavities
+  height: Float32Array; // per-vertex normalised height 0..1
+}
+// Analysis is intrinsic to the sculpt (keyed by source-geometry uuid — clones
+// share geometry); painted geometries are cached per sculpt + team colour.
+const analysisCache = new Map<string, SculptAnalysis>();
+const paintedCache = new Map<string, THREE.BufferGeometry>();
+
+function smoothstep(a: number, b: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
+
+/** Measure per-vertex convexity + height. Duplicated (seam) vertices are welded
+ *  by position so curvature sees the true surface neighbourhood; the dot of each
+ *  outgoing edge with the vertex normal is scale-free, so one threshold set
+ *  works for every sculpt. Runs once per sculpt for the app's lifetime. */
+function analyseSculpt(geo: THREE.BufferGeometry): SculptAnalysis {
+  const hit = analysisCache.get(geo.uuid);
+  if (hit) return hit;
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  const nor = geo.attributes.normal as THREE.BufferAttribute;
+  const n = pos.count;
+  const rep = new Int32Array(n);
+  const seen = new Map<string, number>();
+  for (let i = 0; i < n; i++) {
+    const k = `${Math.round(pos.getX(i) * 1e4)},${Math.round(pos.getY(i) * 1e4)},${Math.round(pos.getZ(i) * 1e4)}`;
+    const r = seen.get(k);
+    if (r === undefined) {
+      seen.set(k, i);
+      rep[i] = i;
+    } else rep[i] = r;
+  }
+  const sum = new Float32Array(n);
+  const cnt = new Float32Array(n);
+  const edge = (a: number, b: number) => {
+    const ra = rep[a];
+    const rb = rep[b];
+    if (ra === rb) return;
+    const dx = pos.getX(rb) - pos.getX(ra);
+    const dy = pos.getY(rb) - pos.getY(ra);
+    const dz = pos.getZ(rb) - pos.getZ(ra);
+    const len = Math.hypot(dx, dy, dz);
+    if (len < 1e-9) return;
+    sum[ra] += (dx * nor.getX(ra) + dy * nor.getY(ra) + dz * nor.getZ(ra)) / len;
+    cnt[ra]++;
+  };
+  const idx = geo.index;
+  const total = idx ? idx.count : n;
+  for (let t = 0; t + 2 < total; t += 3) {
+    const a = idx ? idx.getX(t) : t;
+    const b = idx ? idx.getX(t + 1) : t + 1;
+    const c = idx ? idx.getX(t + 2) : t + 2;
+    edge(a, b);
+    edge(b, a);
+    edge(b, c);
+    edge(c, b);
+    edge(a, c);
+    edge(c, a);
+  }
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox!;
+  const h = Math.max(1e-6, bb.max.y - bb.min.y);
+  const conv = new Float32Array(n);
+  const height = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const r = rep[i];
+    conv[i] = cnt[r] > 0 ? -sum[r] / cnt[r] : 0;
+    height[i] = (pos.getY(i) - bb.min.y) / h;
+  }
+  const out = { conv, height };
+  analysisCache.set(geo.uuid, out);
+  return out;
+}
+
+const PAINT_GOLD = new THREE.Color('#d8b46a');
+const PAINT_LEATHER = new THREE.Color('#3f2d1c');
+
+/** Bake the team paint job into a clone of the sculpt's geometry. */
+function paintedGeometry(src: THREE.BufferGeometry, kind: UnitKind, colorHex: string): THREE.BufferGeometry {
+  const key = `${src.uuid}|${colorHex}`;
+  const hit = paintedCache.get(key);
+  if (hit) return hit;
+  const { conv, height } = analyseSculpt(src);
+  const geo = src.clone();
+  const n = (geo.attributes.position as THREE.BufferAttribute).count;
+  const team = new THREE.Color(colorHex);
+  // Every sculpt wears the same team-liveried steel — dark armour tones pulled
+  // toward the team colour — so warriors, priests and mages read as one
+  // consistently painted set (per the box minis).
+  const base = new THREE.Color('#3e434b').lerp(team, 0.3);
+  const dark = new THREE.Color('#211d1a'); // the mini's plain dark base disc
+  let seed = 123456789;
+  const rand = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 0xffffffff;
+  };
+  const arr = new Float32Array(n * 3);
+  const col = new THREE.Color();
+  for (let i = 0; i < n; i++) {
+    col.copy(base);
+    col.multiplyScalar(0.6 + 0.4 * Math.pow(height[i], 0.9)); // zenithal light
+    if (kind !== 'warrior' && height[i] < 0.14) {
+      col.lerp(PAINT_LEATHER, 0.6 * (1 - height[i] / 0.14)); // leather boots band
+    }
+    const cv = conv[i];
+    if (cv > 0) {
+      col.lerp(PAINT_GOLD, 0.9 * smoothstep(0.12, 0.4, cv)); // gold edge trim
+    } else {
+      col.multiplyScalar(1 - 0.6 * smoothstep(0.08, 0.35, -cv)); // shaded folds
+    }
+    // The sculpt's own base (a taller rocky mound on the warrior, a thin disc on
+    // the robed sculpts) is painted plain dark, like the box minis' round bases.
+    const baseBand = kind === 'warrior' ? 0.12 : 0.055;
+    if (height[i] < baseBand) col.lerp(dark, 0.85);
+    const nz = (rand() - 0.5) * 0.05; // paint mottle
+    arr[i * 3] = Math.min(1, Math.max(0, col.r + nz));
+    arr[i * 3 + 1] = Math.min(1, Math.max(0, col.g + nz));
+    arr[i * 3 + 2] = Math.min(1, Math.max(0, col.b + nz));
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  paintedCache.set(key, geo);
+  return geo;
+}
+
+/** The painted-miniature material: the baked vertex paint under a clearcoat
+ *  glaze. One finish for every sculpt (the warrior's armoured look), so the
+ *  whole team reads as one consistently painted set. */
+function miniatureMaterial(colorHex: string): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({
+    color: '#ffffff',
+    vertexColors: true,
+    roughness: 0.4,
+    metalness: 0.45,
+    clearcoat: 0.5,
+    clearcoatRoughness: 0.35,
+    sheen: 0.15,
+    sheenColor: new THREE.Color('#d8c08a'),
+    sheenRoughness: 0.6,
+    envMapIntensity: 0.8,
+    emissive: new THREE.Color(colorHex),
+    emissiveIntensity: 0.05,
+  });
+}
+
+const urlKind = (url: string): UnitKind =>
+  (Object.keys(MODEL_URL) as UnitKind[]).find((k) => MODEL_URL[k] === url) ?? 'warrior';
+
 /**
- * Static (un-rigged) sculpt path: clones per instance, tints every mesh a single
- * flat team colour, and normalises every unit into one uniform box (TARGET_BASE Ø,
- * TARGET_HEIGHT), centred by footprint. Used when the GLB has no skeletal clips.
+ * Static (un-rigged) sculpt path: clones per instance, swaps in the team-painted
+ * geometry + painted-miniature material, and normalises every unit into one
+ * uniform box (TARGET_BASE Ø, TARGET_HEIGHT), centred by footprint. Used when
+ * the GLB has no skeletal clips.
  */
 function StaticGLB({ url, color }: { url: string; color: string }) {
   const { scene } = useGLTF(url);
   const object = useMemo(() => {
+    const kind = urlKind(url);
     const root = scene.clone(true);
     root.updateMatrixWorld(true);
     root.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
       mesh.castShadow = true;
-      mesh.material = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(color),
-        roughness: 0.6,
-        metalness: 0.15,
-      });
+      mesh.geometry = paintedGeometry(mesh.geometry as THREE.BufferGeometry, kind, color);
+      mesh.material = miniatureMaterial(color);
     });
     // Uniform-box normalise. Horizontal scale equalises the base; vertical scale
     // equalises the height. Because the clone sits at the origin, its scale-1
@@ -427,8 +583,11 @@ function UnitPiece({ unit }: { unit: Unit }) {
   const myColor = useGame((s) => s.myColor);
 
   const selected = selectedUnitId === unit.id;
-  // Online: only your own colour's pieces are interactive (and only on your turn).
-  const isCurrent = game.current === unit.owner && (!online || unit.owner === myColor);
+  const bots = useGame((s) => s.bots);
+  // Online: only your own colour's pieces are interactive (and only on your
+  // turn). Bot-owned pieces are never human-clickable — the BotDriver moves them.
+  const isCurrent =
+    game.current === unit.owner && !bots[unit.owner] && (!online || unit.owner === myColor);
   const isTarget = useMemo(
     () => attackTargetIds(game, selectedUnitId).has(unit.id),
     [game, selectedUnitId, unit.id],
@@ -588,7 +747,24 @@ function UnitPiece({ unit }: { unit: Unit }) {
           document.body.style.cursor = 'auto';
         }}
       >
-        {MESH[unit.kind]({ color: COLORS[unit.owner], carried: unit.carried, anim })}
+        {/* gilt miniature pedestal — emerald marble puck with a gold rim */}
+        <mesh castShadow receiveShadow position={[0, 0.035, 0]}>
+          <cylinderGeometry args={[0.345, 0.385, 0.07, 28]} />
+          <meshStandardMaterial color="#122018" roughness={0.45} metalness={0.2} />
+        </mesh>
+        <mesh position={[0, 0.073, 0]}>
+          <cylinderGeometry args={[0.36, 0.36, 0.018, 28]} />
+          <meshStandardMaterial
+            color="#caa85e"
+            metalness={0.85}
+            roughness={0.3}
+            emissive="#5a3f12"
+            emissiveIntensity={0.2}
+          />
+        </mesh>
+        <group position={[0, 0.082, 0]}>
+          {MESH[unit.kind]({ color: COLORS[unit.owner], carried: unit.carried, anim })}
+        </group>
       </group>
       {selected && (
         <mesh geometry={SELECT_FRAME} position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { useGame } from '../store';
 import { useNet } from '../net/useNet';
 import type { PlayerColor } from '../game/types';
+import type { BotLevel } from '../game/bot';
 import {
   RANDOM_LAYOUT,
   STONE_LAYOUTS,
@@ -29,6 +30,49 @@ const TEAM_OPTIONS: { value: PlayerColor; label: string }[] = [
   { value: 'yellow', label: 'Yellow' },
 ];
 const ALL_COLORS: PlayerColor[] = TEAM_OPTIONS.map((t) => t.value);
+
+type SeatKind = 'human' | BotLevel;
+const SEAT_OPTIONS: { value: SeatKind; label: string }[] = [
+  { value: 'human', label: 'Human' },
+  { value: 'easy', label: 'Easy' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'hard', label: 'Hard' },
+];
+
+/** Per-team seat picker: each playing colour is a human or a bot (with level). */
+function BotPicker({
+  teams,
+  value,
+  onChange,
+}: {
+  teams: PlayerColor[];
+  value: Partial<Record<PlayerColor, BotLevel>>;
+  onChange: (next: Partial<Record<PlayerColor, BotLevel>>) => void;
+}) {
+  return (
+    <div className="bot-picker" role="group" aria-label="Bots">
+      {teams.map((color) => (
+        <div key={color} className="bot-row" style={{ ['--team' as string]: COLORS[color] }}>
+          <span className="bot-row-team">
+            <span className="team-dot" />
+            {color}
+          </span>
+          <Segmented<SeatKind>
+            options={SEAT_OPTIONS}
+            value={value[color] ?? 'human'}
+            onChange={(v) => {
+              const next = { ...value };
+              if (v === 'human') delete next[color];
+              else next[color] = v;
+              onChange(next);
+            }}
+            ariaLabel={`${color} seat`}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /** Team-colour picker. With `locked` every colour shows selected (4-player);
  *  otherwise the player picks exactly `max`, the oldest swapping out when full. */
@@ -126,6 +170,7 @@ function LayoutPicker({ value, onChange }: { value: string; onChange: (id: strin
 function NewGameModal() {
   const playerColors = useGame((s) => s.playerColors);
   const storedLayout = useGame((s) => s.stoneLayoutId);
+  const storedBots = useGame((s) => s.bots);
   const settings = useGame((s) => s.settings);
   const newGame = useGame((s) => s.newGame);
   const setTurnSeconds = useGame((s) => s.setTurnSeconds);
@@ -139,6 +184,7 @@ function NewGameModal() {
   );
   const [layout, setLayout] = useState(storedLayout);
   const [timer, setTimer] = useState(settings.turnSeconds ?? 0);
+  const [botSel, setBotSel] = useState<Partial<Record<PlayerColor, BotLevel>>>(storedBots);
 
   const teams = mode === 4 ? ALL_COLORS : duo;
   const canStart = mode === 4 || duo.length === 2;
@@ -146,7 +192,10 @@ function NewGameModal() {
   const start = () => {
     if (!canStart) return;
     setTurnSeconds(timer === 0 ? null : timer);
-    newGame(teams, layout);
+    // Only the colours actually playing keep their bot setting.
+    const bots: Partial<Record<PlayerColor, BotLevel>> = {};
+    for (const c of teams) if (botSel[c]) bots[c] = botSel[c];
+    newGame(teams, layout, bots);
   };
 
   // The opening modal (before any game starts) is mandatory: the player must
@@ -176,6 +225,9 @@ function NewGameModal() {
         hint={mode === 4 ? 'All four colours play' : 'Pick two colours'}
       >
         <TeamPicker value={teams} onChange={setDuo} max={2} locked={mode === 4} />
+      </Field>
+      <Field label="Bots" hint="Let the AI play any seat — pick a difficulty">
+        <BotPicker teams={teams} value={botSel} onChange={setBotSel} />
       </Field>
       <Field
         label="MageStones"

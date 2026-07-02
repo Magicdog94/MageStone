@@ -22,6 +22,7 @@ import {
   unitById,
 } from './game/rules';
 import type { Cell, GameState, PlayerColor, UnitKind } from './game/types';
+import type { BotLevel } from './game/bot';
 
 export type HealthBarMode = 'off' | 'always' | 'hover';
 export type ModalId = 'newGame' | 'settings' | null;
@@ -76,10 +77,24 @@ interface UIState {
    *  client controls (null = local hot-seat, where every colour is controllable). */
   online: boolean;
   myColor: PlayerColor | null;
-  startOnline: (state: GameState, myColor: PlayerColor) => void;
+  /** Colours played by AI bots (and their difficulty). */
+  bots: Partial<Record<PlayerColor, BotLevel>>;
+  /** True when THIS client executes bot turns: always in hot-seat; online, only
+   *  the host (otherwise every client would move the bots at once). */
+  botController: boolean;
+  startOnline: (
+    state: GameState,
+    myColor: PlayerColor,
+    bots?: Partial<Record<PlayerColor, BotLevel>>,
+    isHost?: boolean,
+  ) => void;
   setLocalMode: () => void;
 
-  newGame: (players?: number | PlayerColor[], stoneLayoutId?: string) => void;
+  newGame: (
+    players?: number | PlayerColor[],
+    stoneLayoutId?: string,
+    bots?: Partial<Record<PlayerColor, BotLevel>>,
+  ) => void;
   openModal: (modal: Exclude<ModalId, null>) => void;
   closeModal: () => void;
   setHealthBars: (mode: HealthBarMode) => void;
@@ -100,8 +115,10 @@ interface UIState {
   doRitual: () => void;
 }
 
-/** In an online match a client may only act on its own colour's turn. */
-const outOfTurn = (s: UIState) => s.online && s.game.current !== s.myColor;
+/** In an online match a client may only act on its own colour's turn — except
+ *  the bot controller (the host), which also acts for the bot colours. */
+const outOfTurn = (s: UIState) =>
+  s.online && s.game.current !== s.myColor && !(s.botController && s.bots[s.game.current]);
 
 export const useGame = create<UIState>((set) => ({
   game: createGame(2),
@@ -123,12 +140,16 @@ export const useGame = create<UIState>((set) => ({
   started: false,
   online: false,
   myColor: null,
+  bots: {},
+  botController: true,
 
-  startOnline: (state, myColor) =>
+  startOnline: (state, myColor, bots = {}, isHost = false) =>
     set({
       game: state,
       online: true,
       myColor,
+      bots,
+      botController: isHost,
       started: true,
       modal: null,
       selectedUnitId: null,
@@ -141,6 +162,8 @@ export const useGame = create<UIState>((set) => ({
     set((s) => ({
       online: false,
       myColor: null,
+      bots: {},
+      botController: true,
       started: false,
       modal: 'newGame',
       game: createGame(s.playerColors, s.stoneLayoutId),
@@ -149,7 +172,7 @@ export const useGame = create<UIState>((set) => ({
       rolling: false,
     })),
 
-  newGame: (players, stoneLayoutId) =>
+  newGame: (players, stoneLayoutId, bots) =>
     set((s) => {
       // Accept an explicit colour list, a player count, or fall back to the
       // last-used selection. createGame normalises into clockwise turn order.
@@ -165,6 +188,8 @@ export const useGame = create<UIState>((set) => ({
         playerColors: game.players,
         playerCount: game.players.length,
         stoneLayoutId: layoutId,
+        bots: bots ?? {},
+        botController: true,
         selectedUnitId: null,
         selectedDieId: null,
         hoveredUnitId: null,

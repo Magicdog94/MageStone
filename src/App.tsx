@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Scene } from './three/Scene';
+import { BotDriver } from './ui/BotDriver';
 import { HUD } from './ui/HUD';
 import { EntryScreens } from './ui/screens/Screens';
 import { MusicToggle } from './ui/MusicToggle';
@@ -30,6 +31,7 @@ export default function App() {
         <div className="app">
           <Scene />
           <HUD />
+          <BotDriver />
           <div className="brand">
             Mage<span>Stone</span> <em>prototype</em>
           </div>

@@ -20,6 +20,130 @@ function finish(c: HTMLCanvasElement, key: string, repeat = false): THREE.Textur
   return tex;
 }
 
+// ---- Shared gold-inlay helpers (cover-art motifs) -------------------------
+
+const INLAY_LIGHT = '#f6e4ab';
+const INLAY_MID = '#cfa64e';
+const INLAY_DARK = '#8a6a22';
+
+/** The standard three-stop gilt gradient used by every inlay motif. */
+function goldGradient(
+  ctx: CanvasRenderingContext2D,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+): CanvasGradient {
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  g.addColorStop(0, INLAY_LIGHT);
+  g.addColorStop(0.5, INLAY_MID);
+  g.addColorStop(1, INLAY_DARK);
+  return g;
+}
+
+/** A short angular rune glyph centred on (x,y): a vertical spine crossed by a
+ *  few random strokes — reads as arcane script at a distance. */
+function runeGlyph(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, rot: number) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  ctx.beginPath();
+  const n = 2 + ((Math.random() * 3) | 0);
+  for (let k = 0; k < n; k++) {
+    ctx.moveTo((Math.random() - 0.5) * s, (Math.random() - 0.5) * s);
+    ctx.lineTo((Math.random() - 0.5) * s, (Math.random() - 0.5) * s);
+  }
+  ctx.moveTo(0, -s / 2);
+  ctx.lineTo(0, s / 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * The MageStone flower emblem from the box cover: two elongated vertical shards,
+ * six vein-detailed leaf petals offset 30° from vertical, and a ringed compass
+ * star at the heart. Drawn in a local −50..50 space scaled to radius `r`.
+ */
+function drawEmblem(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, alpha = 1) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(r / 50, r / 50);
+  ctx.globalAlpha = alpha;
+  ctx.lineJoin = 'round';
+  const gold = goldGradient(ctx, -50, -50, 50, 50);
+
+  // elongated vertical shards (behind the petals)
+  for (const s of [1, -1]) {
+    ctx.save();
+    ctx.scale(1, s);
+    ctx.beginPath();
+    ctx.moveTo(0, -60);
+    ctx.quadraticCurveTo(3.4, -34, 2.6, -24);
+    ctx.lineTo(0, -8);
+    ctx.lineTo(-2.6, -24);
+    ctx.quadraticCurveTo(-3.4, -34, 0, -60);
+    ctx.closePath();
+    ctx.fillStyle = gold;
+    ctx.fill();
+    ctx.strokeStyle = '#6e521a';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+  }
+  // six leaf petals, offset 30° from vertical (the shards take the poles)
+  for (let i = 0; i < 6; i++) {
+    ctx.save();
+    ctx.rotate(((30 + i * 60) * Math.PI) / 180);
+    ctx.beginPath();
+    ctx.moveTo(0, -46);
+    ctx.bezierCurveTo(9, -34, 10, -18, 0, -9);
+    ctx.bezierCurveTo(-10, -18, -9, -34, 0, -46);
+    ctx.closePath();
+    ctx.fillStyle = gold;
+    ctx.fill();
+    ctx.strokeStyle = '#6e521a';
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+    // leaf veins
+    ctx.strokeStyle = 'rgba(110,82,26,0.75)';
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(0, -43);
+    ctx.lineTo(0, -11);
+    for (let v = 0; v < 3; v++) {
+      const vy = -36 + v * 8;
+      ctx.moveTo(0, vy);
+      ctx.lineTo(4.2, vy + 4.5);
+      ctx.moveTo(0, vy);
+      ctx.lineTo(-4.2, vy + 4.5);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+  // central ring + compass star
+  ctx.beginPath();
+  ctx.arc(0, 0, 13, 0, Math.PI * 2);
+  ctx.strokeStyle = gold;
+  ctx.lineWidth = 2.8;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0, -12);
+  ctx.lineTo(2.6, -2.6);
+  ctx.lineTo(12, 0);
+  ctx.lineTo(2.6, 2.6);
+  ctx.lineTo(0, 12);
+  ctx.lineTo(-2.6, 2.6);
+  ctx.lineTo(-12, 0);
+  ctx.lineTo(-2.6, -2.6);
+  ctx.closePath();
+  ctx.fillStyle = gold;
+  ctx.fill();
+  ctx.strokeStyle = '#6e521a';
+  ctx.lineWidth = 0.9;
+  ctx.stroke();
+  ctx.restore();
+}
+
 // ---- Bump maps (grayscale relief, NOT colour) ----------------------------
 
 /** Fine speckled relief for the ground/floor — subtle grain + soft undulations. */
@@ -154,6 +278,58 @@ export function emeraldBoardTexture(): THREE.Texture {
     ctx.fillStyle = `rgba(${v},${v + 18},${v + 6},${Math.random() * 0.3})`;
     ctx.fillRect(Math.random() * S, Math.random() * S, 1, 1);
   }
+  // —— arcane gold inlay (cover-art motif) ——————————————————————————
+  // A rune circle rings the central 8×8 MageStone zone (rows/cols 4–11 → the
+  // middle half of the texture), and the flower emblem sits dead-centre,
+  // spanning the 2×2 Nexus. Low alpha = aged inlay worked into the stone.
+  const cx = S / 2;
+  const cy = S / 2;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(216,180,100,0.16)';
+  ctx.lineWidth = S * 0.004;
+  ctx.beginPath();
+  ctx.arc(cx, cy, S * 0.235, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = S * 0.0016;
+  ctx.beginPath();
+  ctx.arc(cx, cy, S * 0.246, 0, Math.PI * 2);
+  ctx.stroke();
+  // tick marks between the two rings
+  ctx.lineWidth = S * 0.0022;
+  ctx.strokeStyle = 'rgba(216,180,100,0.13)';
+  for (let i = 0; i < 72; i++) {
+    const a = (i / 72) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * S * 0.237, cy + Math.sin(a) * S * 0.237);
+    ctx.lineTo(cx + Math.cos(a) * S * 0.244, cy + Math.sin(a) * S * 0.244);
+    ctx.stroke();
+  }
+  // arcane script around the inside of the ring
+  ctx.strokeStyle = 'rgba(216,180,100,0.14)';
+  ctx.lineWidth = S * 0.0015;
+  for (let i = 0; i < 36; i++) {
+    const a = (i / 36) * Math.PI * 2;
+    runeGlyph(ctx, cx + Math.cos(a) * S * 0.222, cy + Math.sin(a) * S * 0.222, S * 0.012, a + Math.PI / 2);
+  }
+  // inner orbit around the Nexus + diagonal node dots
+  ctx.strokeStyle = 'rgba(216,180,100,0.13)';
+  ctx.lineWidth = S * 0.002;
+  ctx.beginPath();
+  ctx.arc(cx, cy, S * 0.088, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(216,180,100,0.2)';
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + (i * Math.PI) / 2;
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(a) * S * 0.088, cy + Math.sin(a) * S * 0.088, S * 0.0045, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // the flower emblem, glowing softly in the heart of the Nexus
+  ctx.shadowColor = 'rgba(240,205,120,0.9)';
+  ctx.shadowBlur = S * 0.012;
+  drawEmblem(ctx, cx, cy, S * 0.052, 0.95);
+  ctx.restore();
+
   // soft edge vignette so the board reads as recessed under the gold frame
   const vg = ctx.createRadialGradient(S / 2, S / 2, S * 0.25, S / 2, S / 2, S * 0.72);
   vg.addColorStop(0, 'rgba(0,0,0,0)');
@@ -163,128 +339,272 @@ export function emeraldBoardTexture(): THREE.Texture {
   return finish(c, 'emeraldBoard');
 }
 
-// ---- Castle-hall backdrop (equirectangular) ------------------------------
+// ---- Duel-night backdrop (equirectangular, box-cover theme) ---------------
+
+/** One tower of a castle silhouette: keep body, battlements and a spire. */
+function tower(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  baseY: number,
+  w: number,
+  h: number,
+  fill: string,
+) {
+  ctx.fillStyle = fill;
+  ctx.fillRect(x - w / 2, baseY - h, w, h);
+  // battlement teeth
+  const teeth = Math.max(2, Math.round(w / 12));
+  const tw = w / (teeth * 2 - 1);
+  for (let i = 0; i < teeth; i++) {
+    ctx.fillRect(x - w / 2 + i * tw * 2, baseY - h - tw * 1.4, tw, tw * 1.4);
+  }
+  // spire
+  ctx.beginPath();
+  ctx.moveTo(x - w * 0.34, baseY - h - tw * 1.2);
+  ctx.lineTo(x, baseY - h - tw * 1.2 - h * 0.55);
+  ctx.lineTo(x + w * 0.34, baseY - h - tw * 1.2);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/** A gothic castle silhouette on a crag, rim-lit and haloed in `glowRGB`. */
+function castle(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  horizon: number,
+  scale: number,
+  glowRGB: string,
+  rim: string,
+) {
+  // halo behind the keep
+  const g = ctx.createRadialGradient(x, horizon - scale * 0.5, 0, x, horizon - scale * 0.5, scale * 1.9);
+  g.addColorStop(0, `rgba(${glowRGB},0.34)`);
+  g.addColorStop(0.55, `rgba(${glowRGB},0.12)`);
+  g.addColorStop(1, `rgba(${glowRGB},0)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(x - scale * 2, horizon - scale * 2.4, scale * 4, scale * 2.6);
+
+  // crag the castle stands on
+  const dark = '#04100b';
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  ctx.moveTo(x - scale * 1.5, horizon + 4);
+  ctx.lineTo(x - scale * 0.8, horizon - scale * 0.34);
+  ctx.lineTo(x - scale * 0.2, horizon - scale * 0.2);
+  ctx.lineTo(x + scale * 0.5, horizon - scale * 0.4);
+  ctx.lineTo(x + scale * 1.4, horizon + 4);
+  ctx.closePath();
+  ctx.fill();
+
+  // towers (central keep flanked by smaller ones)
+  tower(ctx, x, horizon - scale * 0.3, scale * 0.34, scale * 0.9, dark);
+  tower(ctx, x - scale * 0.42, horizon - scale * 0.26, scale * 0.24, scale * 0.55, dark);
+  tower(ctx, x + scale * 0.4, horizon - scale * 0.3, scale * 0.22, scale * 0.62, dark);
+  tower(ctx, x - scale * 0.75, horizon - scale * 0.1, scale * 0.18, scale * 0.34, dark);
+  tower(ctx, x + scale * 0.78, horizon - scale * 0.12, scale * 0.16, scale * 0.4, dark);
+
+  // rim light on the glow side + a few lit windows
+  ctx.strokeStyle = rim;
+  ctx.lineWidth = 2.4;
+  ctx.globalAlpha = 0.5;
+  for (const [tx, tw2, th] of [
+    [x, scale * 0.34, scale * 0.9],
+    [x + scale * 0.4, scale * 0.22, scale * 0.62],
+  ] as const) {
+    ctx.beginPath();
+    ctx.moveTo(tx - tw2 / 2, horizon - scale * 0.3);
+    ctx.lineTo(tx - tw2 / 2, horizon - scale * 0.3 - th);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = rim;
+  for (let i = 0; i < 10; i++) {
+    const wx = x + (Math.random() - 0.5) * scale * 1.1;
+    const wy = horizon - scale * (0.25 + Math.random() * 0.75);
+    ctx.globalAlpha = 0.25 + Math.random() * 0.4;
+    ctx.fillRect(wx, wy, 3, 5);
+  }
+  ctx.globalAlpha = 1;
+}
 
 /**
- * Torch-lit medieval great-hall painted onto an equirectangular canvas, used as
- * the scene background (a skydome) so the board reads as sitting on a table in a
- * castle. Stone-block walls wrap 360°, with tall arched windows glowing at dusk,
- * hanging banners, and warm torch sconces between the bays. Not cached/disposed —
- * it lives for the app's lifetime.
+ * The scene background: the box-cover duel at night painted onto an
+ * equirectangular skydome. An emerald storm sky with a green-gold radiance and
+ * a faint arcane sigil over the board, stars, layered mountain + forest
+ * silhouettes wrapping 360°, and two rival castles — one rim-lit blue, one red —
+ * flanking the default view. Not cached/disposed — lives for the app's lifetime.
  */
-export function castleHallTexture(): THREE.Texture {
+export function duelNightTexture(): THREE.Texture {
   const W = 4096;
   const H = 2048;
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
   const ctx = c.getContext('2d')!;
+  const HORIZON = H * 0.5;
+  const FX = W * 0.25; // the default camera looks toward u=0.25
 
-  // vertical wash: dark vaulted ceiling → lit wall → dark floor
+  // emerald night sky → dark ground haze below the horizon
   const sky = ctx.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, '#0a0907');
-  sky.addColorStop(0.32, '#221c14');
-  sky.addColorStop(0.5, '#3a2f22');
-  sky.addColorStop(0.72, '#1c160f');
-  sky.addColorStop(1, '#070504');
+  sky.addColorStop(0, '#050f0a');
+  sky.addColorStop(0.18, '#0b2417');
+  sky.addColorStop(0.38, '#123727');
+  sky.addColorStop(0.47, '#1d5434');
+  sky.addColorStop(0.5, '#0a1f14');
+  sky.addColorStop(0.56, '#04100a');
+  sky.addColorStop(1, '#020705');
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, W, H);
 
-  // stone-block courses across the wall band (v ~0.28–0.72)
-  const wallTop = H * 0.28;
-  const wallBot = H * 0.74;
-  const course = 64;
-  for (let y = wallTop; y < wallBot; y += course) {
-    const off = ((y - wallTop) / course) % 2 < 1 ? 0 : 96;
-    for (let x = -96; x < W; x += 192) {
-      const bx = x + off;
-      const shade = 38 + ((Math.random() * 18) | 0);
-      ctx.fillStyle = `rgb(${shade + 16},${shade + 8},${shade - 4})`;
-      ctx.fillRect(bx + 3, y + 3, 192 - 6, course - 6);
+  // green-gold radiance behind the front of the scene (the cover's title glow)
+  let g = ctx.createRadialGradient(FX, H * 0.4, 0, FX, H * 0.4, H * 0.56);
+  g.addColorStop(0, 'rgba(120,190,120,0.38)');
+  g.addColorStop(0.5, 'rgba(80,140,90,0.16)');
+  g.addColorStop(1, 'rgba(80,140,90,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(FX - H * 0.6, 0, H * 1.2, H * 0.55);
+  g = ctx.createRadialGradient(FX, H * 0.42, 0, FX, H * 0.42, H * 0.2);
+  g.addColorStop(0, 'rgba(225,235,170,0.25)');
+  g.addColorStop(1, 'rgba(225,235,170,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(FX - H * 0.25, H * 0.2, H * 0.5, H * 0.45);
+
+  // storm clouds — dark emerald blobs swirling around the sky band (each drawn
+  // at x and x±W so the equirect seam stays invisible)
+  const cloudGreens = ['#08160e', '#0d2517', '#123122', '#1a4229'];
+  for (let i = 0; i < 240; i++) {
+    const x = Math.random() * W;
+    const y = (0.04 + Math.random() * 0.4) * H;
+    const rx = 120 + Math.random() * 420;
+    const ry = rx * (0.22 + Math.random() * 0.2);
+    const col = cloudGreens[(Math.random() * cloudGreens.length) | 0];
+    const a = 0.2 + Math.random() * 0.3;
+    for (const ox of [0, -W, W]) {
+      const cg = ctx.createRadialGradient(x + ox, y, 0, x + ox, y, rx);
+      cg.addColorStop(0, col + Math.round(a * 255).toString(16).padStart(2, '0'));
+      cg.addColorStop(1, col + '00');
+      ctx.fillStyle = cg;
+      ctx.save();
+      ctx.translate(x + ox, y);
+      ctx.scale(1, ry / rx);
+      ctx.beginPath();
+      ctx.arc(0, 0, rx, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
   }
-  // mortar darkening overlay
-  ctx.fillStyle = 'rgba(10,8,5,0.28)';
-  ctx.fillRect(0, wallTop, W, wallBot - wallTop);
-
-  // bays: arches with dusk glow, torches + banners between them
-  const BAYS = 8;
-  const bw = W / BAYS;
-  for (let i = 0; i < BAYS; i++) {
-    const cx = i * bw + bw / 2;
-    // tall arched opening
-    const aw = bw * 0.42;
-    const aTop = H * 0.33;
-    const aBot = H * 0.66;
-    const glow = ctx.createLinearGradient(0, aTop, 0, aBot);
-    glow.addColorStop(0, '#3b2a14');
-    glow.addColorStop(0.5, '#9c5f24');
-    glow.addColorStop(1, '#d59a44');
-    ctx.fillStyle = glow;
+  // gold-lit cloud rims near the radiance
+  for (let i = 0; i < 46; i++) {
+    const x = FX + (Math.random() - 0.5) * W * 0.24;
+    const y = (0.16 + Math.random() * 0.26) * H;
+    const rx = 90 + Math.random() * 260;
+    const cg = ctx.createRadialGradient(x, y, 0, x, y, rx);
+    cg.addColorStop(0, 'rgba(200,180,100,0.12)');
+    cg.addColorStop(1, 'rgba(200,180,100,0)');
+    ctx.fillStyle = cg;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(1, 0.32);
     ctx.beginPath();
-    ctx.moveTo(cx - aw / 2, aBot);
-    ctx.lineTo(cx - aw / 2, aTop + aw / 2);
-    ctx.arc(cx, aTop + aw / 2, aw / 2, Math.PI, 0);
-    ctx.lineTo(cx + aw / 2, aBot);
+    ctx.arc(0, 0, rx, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // stars
+  for (let i = 0; i < 420; i++) {
+    const y = Math.random() * H * 0.42;
+    const v = 190 + ((Math.random() * 60) | 0);
+    ctx.fillStyle = `rgba(${v},${v + 8},${v - 20},${0.12 + Math.random() * 0.45})`;
+    ctx.fillRect(Math.random() * W, y, Math.random() < 0.2 ? 2 : 1, 1);
+  }
+
+  // faint arcane sigil hanging in the sky over the board — the cover's rune
+  // circle. Drawn as an ellipse widened by 1/cos(elevation) so it reads as a
+  // circle on the skydome.
+  {
+    const sy = H * 0.33;
+    const elev = (1 - sy / H - 0.5) * Math.PI;
+    const stretch = 1 / Math.cos(elev);
+    const r = H * 0.15;
+    ctx.save();
+    ctx.translate(FX, sy);
+    ctx.scale(stretch, 1);
+    ctx.strokeStyle = 'rgba(214,178,94,0.13)';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.94, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(214,178,94,0.1)';
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * Math.PI * 2;
+      runeGlyph(ctx, Math.cos(a) * r * 0.88, Math.sin(a) * r * 0.88, r * 0.06, a + Math.PI / 2);
+    }
+    ctx.shadowColor = 'rgba(240,205,120,0.5)';
+    ctx.shadowBlur = 26;
+    drawEmblem(ctx, 0, 0, r * 0.5, 0.1);
+    ctx.restore();
+  }
+
+  // layered mountain silhouettes along the whole horizon
+  for (const [amp, col] of [
+    [H * 0.062, '#0b1d14'],
+    [H * 0.088, '#071510'],
+  ] as const) {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(0, HORIZON + 6);
+    let y = HORIZON - amp * (0.3 + Math.random() * 0.5);
+    for (let x = 0; x <= W; x += 64) {
+      y += (Math.random() - 0.5) * amp * 0.55;
+      y = Math.min(HORIZON - amp * 0.08, Math.max(HORIZON - amp * 1.35, y));
+      // pull the ends together so the strip tiles at the seam
+      const blend = Math.min(1, Math.min(x, W - x) / (W * 0.06));
+      ctx.lineTo(x, HORIZON - (HORIZON - y) * (0.55 + 0.45 * blend));
+    }
+    ctx.lineTo(W, HORIZON + 6);
     ctx.closePath();
     ctx.fill();
-    // arch stone frame
-    ctx.lineWidth = 16;
-    ctx.strokeStyle = '#2a241b';
-    ctx.stroke();
-    // mullion
-    ctx.fillStyle = '#241d14';
-    ctx.fillRect(cx - 4, aTop + aw / 4, 8, aBot - aTop - aw / 4);
-
-    // torch sconces on the piers between bays
-    for (const tx of [cx - bw / 2, cx + bw / 2]) {
-      const ty = H * 0.46;
-      const tg = ctx.createRadialGradient(tx, ty, 0, tx, ty, 150);
-      tg.addColorStop(0, 'rgba(255,196,96,0.85)');
-      tg.addColorStop(0.4, 'rgba(214,120,40,0.4)');
-      tg.addColorStop(1, 'rgba(214,120,40,0)');
-      ctx.fillStyle = tg;
-      ctx.fillRect(tx - 150, ty - 150, 300, 300);
-      ctx.fillStyle = '#ffd27a';
-      ctx.beginPath();
-      ctx.ellipse(tx, ty - 6, 9, 18, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // hanging banner over alternating piers
-    if (i % 2 === 0) {
-      const bx2 = cx - bw / 2;
-      ctx.fillStyle = i % 4 === 0 ? '#1f5138' : '#6f2723';
-      ctx.beginPath();
-      ctx.moveTo(bx2 - 26, H * 0.3);
-      ctx.lineTo(bx2 + 26, H * 0.3);
-      ctx.lineTo(bx2 + 26, H * 0.52);
-      ctx.lineTo(bx2, H * 0.56);
-      ctx.lineTo(bx2 - 26, H * 0.52);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = 'rgba(201,162,74,0.85)';
-      ctx.beginPath();
-      ctx.arc(bx2, H * 0.4, 9, 0, Math.PI * 2);
-      ctx.fill();
-    }
   }
 
-  // floor flagstones (lower band), faint
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-  ctx.lineWidth = 3;
-  for (let y = wallBot; y < H * 0.92; y += 40) {
+  // the rival keeps — blue to the left of the default view, red to the right —
+  // plus two distant neutral towers for the far side of the orbit
+  castle(ctx, W * 0.155, HORIZON, H * 0.155, '74,140,220', 'rgba(124,192,255,0.8)');
+  castle(ctx, W * 0.345, HORIZON, H * 0.155, '220,80,58', 'rgba(255,138,114,0.8)');
+  castle(ctx, W * 0.62, HORIZON, H * 0.085, '120,160,130', 'rgba(170,210,180,0.5)');
+  castle(ctx, W * 0.86, HORIZON, H * 0.1, '120,160,130', 'rgba(170,210,180,0.5)');
+
+  // forest silhouette line at the foot of the mountains
+  ctx.fillStyle = '#04110b';
+  for (let x = -20; x < W + 20; x += 14) {
+    const h2 = 18 + Math.random() * 58;
+    const w2 = 10 + Math.random() * 16;
     ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(W, y);
-    ctx.stroke();
+    ctx.moveTo(x - w2 / 2, HORIZON + 6);
+    ctx.lineTo(x, HORIZON - h2);
+    ctx.lineTo(x + w2 / 2, HORIZON + 6);
+    ctx.closePath();
+    ctx.fill();
   }
 
-  // overall warm vignette top & bottom (toward the equirect poles)
+  // mist band hugging the horizon
+  g = ctx.createLinearGradient(0, HORIZON - H * 0.025, 0, HORIZON + H * 0.02);
+  g.addColorStop(0, 'rgba(140,210,160,0)');
+  g.addColorStop(0.5, 'rgba(140,210,160,0.09)');
+  g.addColorStop(1, 'rgba(140,210,160,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, HORIZON - H * 0.03, W, H * 0.06);
+
+  // pole vignettes
   const vg = ctx.createLinearGradient(0, 0, 0, H);
-  vg.addColorStop(0, 'rgba(0,0,0,0.55)');
+  vg.addColorStop(0, 'rgba(0,0,0,0.5)');
   vg.addColorStop(0.5, 'rgba(0,0,0,0)');
-  vg.addColorStop(1, 'rgba(0,0,0,0.7)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.75)');
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, W, H);
 
@@ -292,6 +612,121 @@ export function castleHallTexture(): THREE.Texture {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   return tex;
+}
+
+// ---- Stone plaza floor (tiling) -------------------------------------------
+
+/** Dark flagstone paving with moss and a rare gilt fleck — the arena floor the
+ *  table stands on. Tiles seamlessly (stones wrap across the x edge; rows fit
+ *  the y edge exactly). */
+export function stoneFloorTexture(): THREE.Texture {
+  const hit = cache.get('stoneFloor');
+  if (hit) return hit;
+  const S = 1024;
+  const [c, ctx] = canvas(S);
+  ctx.fillStyle = '#0a130d';
+  ctx.fillRect(0, 0, S, S);
+  const shades = ['#0d1912', '#0f1c14', '#0b150f', '#101f16', '#0e1a11'];
+  const rows = 6;
+  const rh = S / rows;
+  for (let r = 0; r < rows; r++) {
+    let x = -Math.random() * 80;
+    while (x < S) {
+      const w = 120 + Math.random() * 150;
+      const shade = shades[(Math.random() * shades.length) | 0];
+      for (const ox of [0, S]) {
+        // draw at x and x+S so stones crossing the left edge wrap to the right
+        const sg = ctx.createLinearGradient(x + ox, r * rh, x + ox + w, r * rh + rh);
+        sg.addColorStop(0, shade);
+        sg.addColorStop(1, '#0a140e');
+        ctx.fillStyle = sg;
+        ctx.beginPath();
+        ctx.roundRect(x + ox + 3, r * rh + 3, w - 6, rh - 6, 10);
+        ctx.fill();
+      }
+      x += w;
+    }
+  }
+  // moss patches (drawn with wrap copies so the tile edge stays seamless)
+  for (let i = 0; i < 70; i++) {
+    const x = Math.random() * S;
+    const y = Math.random() * S;
+    const r = 20 + Math.random() * 70;
+    for (const ox of [0, -S, S]) {
+      for (const oy of [0, -S, S]) {
+        const mg = ctx.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
+        mg.addColorStop(0, `rgba(38,84,54,${0.05 + Math.random() * 0.09})`);
+        mg.addColorStop(1, 'rgba(38,84,54,0)');
+        ctx.fillStyle = mg;
+        ctx.beginPath();
+        ctx.arc(x + ox, y + oy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  // grain + the odd gilt fleck
+  for (let i = 0; i < 5000; i++) {
+    const v = 6 + ((Math.random() * 26) | 0);
+    ctx.fillStyle = `rgba(${v},${v + 10},${v + 4},${Math.random() * 0.3})`;
+    ctx.fillRect(Math.random() * S, Math.random() * S, 1, 1);
+  }
+  for (let i = 0; i < 160; i++) {
+    ctx.fillStyle = `rgba(190,160,90,${0.04 + Math.random() * 0.08})`;
+    ctx.fillRect(Math.random() * S, Math.random() * S, 1, 1);
+  }
+  return finish(c, 'stoneFloor', true);
+}
+
+// ---- Arena summoning circle (floor decal) ----------------------------------
+
+/** A grand gold summoning circle inlaid in the plaza around the table's stand:
+ *  concentric rings, tick marks, arcane script and four flower emblems. Drawn on
+ *  transparency — laid flat as a decal. */
+export function arenaCircleTexture(): THREE.Texture {
+  const hit = cache.get('arenaCircle');
+  if (hit) return hit;
+  const S = 2048;
+  const [c, ctx] = canvas(S);
+  const cx = S / 2;
+  const cy = S / 2;
+  ctx.shadowColor = 'rgba(230,190,100,0.7)';
+  ctx.shadowBlur = 20;
+
+  const ring = (r: number, w: number, a: number) => {
+    ctx.strokeStyle = `rgba(214,178,94,${a})`;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  };
+  ring(S * 0.478, S * 0.005, 0.5);
+  ring(S * 0.455, S * 0.0016, 0.45);
+  ring(S * 0.39, S * 0.0012, 0.32);
+  ring(S * 0.275, S * 0.003, 0.45);
+
+  // tick marks between the outer rings
+  ctx.strokeStyle = 'rgba(214,178,94,0.4)';
+  ctx.lineWidth = S * 0.002;
+  for (let i = 0; i < 96; i++) {
+    const a = (i / 96) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * S * 0.457, cy + Math.sin(a) * S * 0.457);
+    ctx.lineTo(cx + Math.cos(a) * S * 0.476, cy + Math.sin(a) * S * 0.476);
+    ctx.stroke();
+  }
+  // arcane script ring
+  ctx.strokeStyle = 'rgba(214,178,94,0.42)';
+  ctx.lineWidth = S * 0.0016;
+  for (let i = 0; i < 48; i++) {
+    const a = (i / 48) * Math.PI * 2;
+    runeGlyph(ctx, cx + Math.cos(a) * S * 0.425, cy + Math.sin(a) * S * 0.425, S * 0.02, a + Math.PI / 2);
+  }
+  // four flower emblems at the diagonals
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + (i * Math.PI) / 2;
+    drawEmblem(ctx, cx + Math.cos(a) * S * 0.335, cy + Math.sin(a) * S * 0.335, S * 0.042, 0.5);
+  }
+  return finish(c, 'arenaCircle');
 }
 
 // ---- Dice faces ----------------------------------------------------------

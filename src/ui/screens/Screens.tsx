@@ -2,6 +2,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNet } from '../../net/useNet';
 import { useGame } from '../../store';
+import { BOT_LABEL, BOT_LEVELS } from '../../game/bot';
 import { COLORS } from '../../three/coords';
 import { Tutorial } from '../Tutorial';
 import { Modals } from '../Modals';
@@ -373,6 +374,8 @@ function Room() {
   const username = useNet((s) => s.username);
   const startGame = useNet((s) => s.startGame);
   const leaveRoom = useNet((s) => s.leaveRoom);
+  const addBot = useNet((s) => s.addBot);
+  const removeBot = useNet((s) => s.removeBot);
   const isHost = room.host === username;
   const full = room.players.length >= room.playerCount;
 
@@ -393,8 +396,24 @@ function Room() {
                 {p ? (
                   <span className="room-name">
                     {p.username}
+                    {p.bot && <span className="room-bot-tag">AI</span>}
                     {p.username === username ? ' (you)' : ''}
                     {p.username === room.host ? ' · host' : ''}
+                    {p.bot && isHost && (
+                      <button className="link-btn room-bot-remove" onClick={() => removeBot(p.color)}>
+                        remove
+                      </button>
+                    )}
+                  </span>
+                ) : isHost ? (
+                  // Short a player? The host can seat an AI bot instead.
+                  <span className="room-addbot">
+                    <span className="room-addbot-label">Add bot</span>
+                    {BOT_LEVELS.map((l) => (
+                      <button key={l} className="room-bot-btn" onClick={() => addBot(l)}>
+                        {BOT_LABEL[l]}
+                      </button>
+                    ))}
                   </span>
                 ) : (
                   <span className="room-empty">waiting for a player…</span>

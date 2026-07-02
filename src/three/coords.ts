@@ -20,12 +20,16 @@ export const COLORS: Record<PlayerColor, string> = {
 // the raised gold trim so tiles read as recessed pockets.
 export const TILE_SURFACE = 0.18;
 
+// The stone plaza the table's stand rises from (world Y). Shared by the table
+// stand (Board.tsx) and the arena environment (Scene.tsx) so they always meet.
+export const FLOOR_Y = -4.8;
+
 export const BOARD = {
-  // Themed emerald-marble surface (no pictorial art) spanned across all tiles,
-  // framed by the raised gold inlay lattice and the gilded 2x2 nexus.
+  // Themed emerald-marble surface with the gold arcane inlay + Nexus emblem,
+  // framed by the raised gold lattice.
   highlight: '#56e0a8', // legal-move tile tint
   target: '#ff5a4d', // attack-target ring
   gold: '#cba65a', // gold lattice + nexus tiles
   stone: '#dfeae2', // neutral tile multiplier — lets the emerald marble show
-  nexus: '#caa85e', // gilded multiplier for the central 2×2 Nexus tiles
+  nexus: '#e2cb9c', // light gilded multiplier — lets the drawn Nexus emblem read
 };

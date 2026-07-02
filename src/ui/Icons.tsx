@@ -55,6 +55,27 @@ export function SwordIcon({ size = 16, className }: P) {
   );
 }
 
+/** Gravestone — a rounded-top headstone with a cross. */
+export function GraveIcon({ size = 16, className }: P) {
+  return (
+    <svg {...stroke(size)} className={className} aria-hidden="true">
+      <path d="M6 21V10a6 6 0 0 1 12 0v11z" />
+      <path d="M12 8.5v5M9.5 11h5" />
+      <path d="M4.5 21h15" />
+    </svg>
+  );
+}
+
+/** Siege — crossed swords (a base under attack). */
+export function SiegeIcon({ size = 16, className }: P) {
+  return (
+    <svg {...stroke(size)} className={className} aria-hidden="true">
+      <path d="M4 4l9.5 9.5M13.5 13.5l3 3-1.5 1.5-3-3" />
+      <path d="M20 4l-9.5 9.5M10.5 13.5l-3 3 1.5 1.5 3-3" />
+    </svg>
+  );
+}
+
 /** Mage die mark — a filled 4-point star (✦). */
 export function DieStar({ size = 12, className }: P) {
   return (

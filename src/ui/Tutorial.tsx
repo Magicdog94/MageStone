@@ -1,437 +1,591 @@
-// Visual how-to-play, opened from the landing screen. Each step pairs a short
-// explanation with an on-theme SVG diagram of the real game (board, pip dice,
-// pieces) annotated with arrows + labels. No photographic assets — the diagrams
-// are drawn to match the live game so they never go stale.
-import { useEffect, useState } from 'react';
+// "How to Play MageStone" — the full rules guide opened from the landing menu.
+// It renders as a scrollable, page-like overlay: a gilded hero, an intro card,
+// and one collapsible card per rules section (Objective, Setup, Turn Structure,
+// Units, Combat, MageStones, Gravestones & Resurrection, The Nexus, Quick Play
+// Summary). Sections are accordions — all open on desktop, collapsed-but-first
+// on mobile — matched to the emerald + gold box-cover theme (no photo assets).
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  BoardOverview,
+  SetupDiagram,
+  MoveDiagram,
+  CombatDiagram,
+  StoneDiagram,
+  NexusDiagram,
+} from './HowToDiagrams';
 
-// Colours matched to the game (dice + teams).
-const MAGE = '#3f7fd0';
-const PRIEST = '#3aa55f';
-const WARRIOR = '#cf4a3f';
-const RED = '#c0392b';
-const STONE = '#1d3b2c';
-const NEXUS = '#caa85e';
-const GOLD = '#eccb78';
+// ---- gold iconography -----------------------------------------------------
 
-// ---- shared SVG primitives ----------------------------------------------
-
-const PIPS: Record<number, [number, number][]> = {
-  1: [[1, 1]],
-  2: [[0, 0], [2, 2]],
-  3: [[0, 0], [1, 1], [2, 2]],
-  4: [[0, 0], [2, 0], [0, 2], [2, 2]],
-  5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]],
-  6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]],
-};
-
-function PipDie({ x, y, s = 34, value, color }: { x: number; y: number; s?: number; value: number; color: string }) {
-  const pad = s * 0.24;
-  const stepv = (s - 2 * pad) / 2;
+/** A 24×24 gold line-icon frame (colour comes from `currentColor`). */
+function Glyph({ children }: { children: ReactNode }) {
   return (
-    <g>
-      <rect x={x} y={y} width={s} height={s} rx={s * 0.16} fill={color} stroke="rgba(0,0,0,0.45)" strokeWidth="1" />
-      {PIPS[value].map(([cx, cy], i) => (
-        <circle key={i} cx={x + pad + cx * stepv} cy={y + pad + cy * stepv} r={s * 0.08} fill="#fff" />
-      ))}
-    </g>
-  );
-}
-
-function Arrow({ from, to, color = GOLD, width = 2.4 }: { from: [number, number]; to: [number, number]; color?: string; width?: number }) {
-  const [x1, y1] = from;
-  const [x2, y2] = to;
-  const ang = Math.atan2(y2 - y1, x2 - x1);
-  const h = 8;
-  const a1 = ang + Math.PI * 0.84;
-  const a2 = ang - Math.PI * 0.84;
-  return (
-    <g stroke={color} fill={color}>
-      <line x1={x1} y1={y1} x2={x2} y2={y2} strokeWidth={width} strokeLinecap="round" />
-      <polygon
-        points={`${x2},${y2} ${x2 + h * Math.cos(a1)},${y2 + h * Math.sin(a1)} ${x2 + h * Math.cos(a2)},${y2 + h * Math.sin(a2)}`}
-        stroke="none"
-      />
-    </g>
-  );
-}
-
-function Label({ x, y, anchor = 'start', children }: { x: number; y: number; anchor?: 'start' | 'middle' | 'end'; children: string }) {
-  return (
-    <text x={x} y={y} textAnchor={anchor} className="tut-svg-label">
+    <svg
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       {children}
-    </text>
+    </svg>
   );
 }
 
-/** A simple board piece (robed pawn). */
-function Pawn({ cx, cy, color, k = 1 }: { cx: number; cy: number; color: string; k?: number }) {
-  return (
-    <g>
-      <ellipse cx={cx} cy={cy + 6 * k} rx={6 * k} ry={2.6 * k} fill="rgba(0,0,0,0.35)" />
-      <path
-        d={`M${cx - 5 * k},${cy + 6 * k} C${cx - 5 * k},${cy - 2 * k} ${cx - 3 * k},${cy - 6 * k} ${cx},${cy - 6 * k} C${cx + 3 * k},${cy - 6 * k} ${cx + 5 * k},${cy - 2 * k} ${cx + 5 * k},${cy + 6 * k} Z`}
-        fill={color}
-        stroke="rgba(0,0,0,0.5)"
-        strokeWidth="0.6"
-      />
-      <circle cx={cx} cy={cy - 7 * k} r={3.1 * k} fill={color} stroke="rgba(0,0,0,0.5)" strokeWidth="0.6" />
-    </g>
-  );
-}
-
-/** A MageStone gem. */
-function Gem({ cx, cy, r = 4 }: { cx: number; cy: number; r?: number }) {
-  return (
-    <polygon
-      points={`${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`}
-      fill="#7ef0c0"
-      stroke="#1c6b4c"
-      strokeWidth="0.8"
-    />
-  );
-}
-
-/** An 8×8 board excerpt with the gold lattice, optional team base row and the
- *  central 2×2 Nexus. `children` overlays pieces/stones/arrows. */
-function MiniGrid({
-  ox,
-  oy,
-  cell = 20,
-  baseColor,
-  children,
-}: {
-  ox: number;
-  oy: number;
-  cell?: number;
-  baseColor?: string;
-  children?: React.ReactNode;
-}) {
-  const tiles = [];
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      const nexus = r >= 3 && r <= 4 && c >= 3 && c <= 4;
-      tiles.push(
-        <rect
-          key={`${r}-${c}`}
-          x={ox + c * cell + 1}
-          y={oy + r * cell + 1}
-          width={cell - 2}
-          height={cell - 2}
-          rx={2}
-          fill={nexus ? NEXUS : baseColor && r === 0 ? baseColor : STONE}
-          stroke="rgba(203,166,90,0.5)"
-          strokeWidth="1"
-        />,
+function Icon({ name }: { name: string }) {
+  switch (name) {
+    case 'crown':
+      return (
+        <Glyph>
+          <path d="M3 7l4 4 4.5-6 4.5 6 4-4-1.8 12H4.8L3 7z" />
+          <path d="M4.8 20h14.4" />
+        </Glyph>
       );
-    }
+    case 'formation':
+      return (
+        <Glyph>
+          <path d="M2 5h20" />
+          <rect x="3.5" y="9" width="4" height="10" rx="1" />
+          <rect x="10" y="9" width="4" height="10" rx="1" />
+          <rect x="16.5" y="9" width="4" height="10" rx="1" />
+        </Glyph>
+      );
+    case 'dice':
+      return (
+        <Glyph>
+          <rect x="4" y="4" width="16" height="16" rx="3.5" />
+          <circle cx="9" cy="9" r="1.15" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="12" r="1.15" fill="currentColor" stroke="none" />
+          <circle cx="15" cy="15" r="1.15" fill="currentColor" stroke="none" />
+        </Glyph>
+      );
+    case 'units':
+      return (
+        <Glyph>
+          <circle cx="8" cy="8" r="2.4" />
+          <path d="M3.5 19c0-3 2-4.8 4.5-4.8S12.5 16 12.5 19" />
+          <circle cx="16.5" cy="9" r="2" />
+          <path d="M13.5 19c0-2.4 1.5-4 3-4s3 1.6 3 4" />
+        </Glyph>
+      );
+    case 'swords':
+      return (
+        <Glyph>
+          <path d="M4 4l8.5 8.5" />
+          <path d="M14 14l3 3-1.5 1.5-3-3" />
+          <path d="M20 4l-8.5 8.5" />
+          <path d="M10 14l-3 3 1.5 1.5 3-3" />
+        </Glyph>
+      );
+    case 'gem':
+      return (
+        <Glyph>
+          <path d="M6 4h12l3 5-9 11L3 9z" />
+          <path d="M3 9h18" />
+          <path d="M9 4l3 16 3-16" />
+        </Glyph>
+      );
+    case 'grave':
+      return (
+        <Glyph>
+          <path d="M6.5 21V10.5a5.5 5.5 0 0111 0V21z" />
+          <path d="M12 8.5v5" />
+          <path d="M9.5 11h5" />
+          <path d="M4.5 21h15" />
+        </Glyph>
+      );
+    case 'nexus':
+      return (
+        <Glyph>
+          <path d="M12 2.5l2.4 7.1 7.1 2.4-7.1 2.4L12 21.5l-2.4-7.1L2.5 12l7.1-2.4z" />
+          <circle cx="12" cy="12" r="2" />
+        </Glyph>
+      );
+    case 'scroll':
+      return (
+        <Glyph>
+          <path d="M7 4h9a2 2 0 012 2v10a3 3 0 01-3 3H8a3 3 0 01-3-3V6" />
+          <path d="M8.5 8.5h6M8.5 12h6M8.5 15.5h3.5" />
+        </Glyph>
+      );
+    default:
+      return null;
   }
+}
+
+/** Chevron that flips when its section is open. */
+function Chevron({ open }: { open: boolean }) {
   return (
-    <g>
-      {tiles}
-      {children}
-    </g>
+    <svg
+      className={`htp-chev${open ? ' open' : ''}`}
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
   );
 }
-const center = (ox: number, oy: number, r: number, c: number, cell = 20): [number, number] => [
-  ox + c * cell + cell / 2,
-  oy + r * cell + cell / 2,
+
+/** A gilt fantasy divider — a rule with a centred diamond. */
+function Divider() {
+  return (
+    <div className="htp-divider" aria-hidden="true">
+      <span className="htp-divider-line" />
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z" />
+      </svg>
+      <span className="htp-divider-line" />
+    </div>
+  );
+}
+
+// Win chances taken straight from the engine's `combatOdds` (rules.ts): draws are
+// re-rolled, so each is the decisive-outcome chance P(win | not draw), then
+// Math.round(win × 100) — identical to the % badge shown in-game (Pieces.tsx).
+// Rows = the attacker's roll; columns = the defender's die (d6, or a defending
+// Mage's power die). Regenerate with scratchpad/odds.mjs if the combat maths change.
+const ODDS: { roll: string; vs: [number, number, number] }[] = [
+  { roll: 'd6', vs: [50, 23, 13] },
+  { roll: '2d6', vs: [90, 55, 32] },
+  { roll: '3d6', vs: [99, 81, 50] },
+  { roll: 'd12', vs: [77, 50, 29] },
+  { roll: 'd20', vs: [87, 71, 50] },
 ];
+const oddsBand = (v: number) => (v >= 67 ? 'hi' : v >= 34 ? 'mid' : 'lo');
 
-// ---- step artwork --------------------------------------------------------
-
-const OX = 24;
-const OY = 18;
-
-function ArtOverview() {
-  const c = (r: number, col: number) => center(OX, OY, r, col);
+function OddsTable() {
   return (
-    <svg className="tut-art" viewBox="0 0 360 210" role="img" aria-label="Board overview">
-      <MiniGrid ox={OX} oy={OY} baseColor={RED}>
-        {/* a few units on the red base */}
-        <Pawn cx={c(0, 2)[0]} cy={c(0, 2)[1]} color={WARRIOR} k={0.8} />
-        <Pawn cx={c(0, 3)[0]} cy={c(0, 3)[1]} color={PRIEST} k={0.8} />
-        <Pawn cx={c(0, 4)[0]} cy={c(0, 4)[1]} color={MAGE} k={0.8} />
-        <Pawn cx={c(0, 5)[0]} cy={c(0, 5)[1]} color={WARRIOR} k={0.8} />
-        {/* scattered MageStones */}
-        <Gem cx={c(2, 2)[0]} cy={c(2, 2)[1]} />
-        <Gem cx={c(2, 5)[0]} cy={c(2, 5)[1]} />
-        <Gem cx={c(5, 2)[0]} cy={c(5, 2)[1]} />
-        <Gem cx={c(5, 5)[0]} cy={c(5, 5)[1]} />
-      </MiniGrid>
-      <Arrow from={[300, 40]} to={[c(0, 5)[0] + 8, c(0, 5)[1]]} />
-      <Label x={304} y={38}>Your base</Label>
-      <Arrow from={[300, 110]} to={[c(4, 4)[0] + 10, c(4, 4)[1]]} />
-      <Label x={304} y={108}>Nexus</Label>
-      <Arrow from={[300, 165]} to={[c(5, 5)[0] + 8, c(5, 5)[1]]} />
-      <Label x={304} y={163}>MageStones</Label>
-    </svg>
+    <div className="htp-table-wrap">
+      <table className="htp-table">
+        <thead>
+          <tr>
+            <td className="htp-th-corner" rowSpan={2}>
+              Attacker ↓
+            </td>
+            <th colSpan={3} scope="colgroup">
+              Defender rolls →
+            </th>
+          </tr>
+          <tr>
+            <th scope="col">d6</th>
+            <th scope="col">d12</th>
+            <th scope="col">d20</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ODDS.map(({ roll, vs }) => (
+            <tr key={roll}>
+              <th scope="row">{roll}</th>
+              {vs.map((v, i) => (
+                <td key={i} className={`htp-odds htp-odds--${oddsBand(v)}`}>
+                  {v}%
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
-function ArtArmy() {
-  const cell = 30;
-  const ox = 24;
-  const oy = 70;
-  const form: [string, string][] = [
-    [WARRIOR, 'W'], [WARRIOR, 'W'], [WARRIOR, 'W'], [PRIEST, 'P'], [MAGE, 'M'], [WARRIOR, 'W'], [WARRIOR, 'W'], [WARRIOR, 'W'],
-  ];
-  return (
-    <svg className="tut-art" viewBox="0 0 360 210" role="img" aria-label="Starting formation">
-      {form.map(([color], i) => (
-        <g key={i}>
-          <rect x={ox + i * cell + 1} y={oy + 1} width={cell - 2} height={cell - 2} rx={3} fill={RED} stroke="rgba(203,166,90,0.55)" />
-          <Pawn cx={ox + i * cell + cell / 2} cy={oy + cell / 2 + 2} color={color} k={1} />
-        </g>
-      ))}
-      <Arrow from={[ox + 3.5 * cell, oy - 16]} to={[ox + 3.5 * cell, oy - 2]} />
-      <Label x={ox + 3.5 * cell} y={oy - 22} anchor="middle">Priest</Label>
-      <Arrow from={[ox + 4.5 * cell, oy + cell + 22]} to={[ox + 4.5 * cell, oy + cell + 6]} />
-      <Label x={ox + 4.5 * cell} y={oy + cell + 36} anchor="middle">Mage</Label>
-      <Label x={ox} y={oy + cell + 60} anchor="start">6 Warriors · 1 Priest · 1 Mage — on your home edge</Label>
-    </svg>
-  );
-}
+// ---- rules content --------------------------------------------------------
 
-function ArtRoll() {
-  const dice: [number, string, string][] = [
-    [4, MAGE, 'Mage'],
-    [3, PRIEST, 'Priest'],
-    [5, WARRIOR, 'Warrior'],
-    [2, WARRIOR, 'Warrior'],
-    [6, WARRIOR, 'Warrior'],
-  ];
-  return (
-    <svg className="tut-art" viewBox="0 0 360 210" role="img" aria-label="Rolling dice">
-      {dice.map(([v, col], i) => (
-        <PipDie key={i} x={26 + i * 46} y={70} s={38} value={v} color={col} />
-      ))}
-      <Label x={26} y={60}>1 Mage</Label>
-      <Label x={118} y={60}>1 Priest</Label>
-      <Label x={210} y={60}>3 Warrior dice</Label>
-      <rect x={232} y={140} width={96} height={30} rx={6} fill="url(#tutGold)" />
-      <text x={280} y={160} textAnchor="middle" className="tut-svg-btn">ROLL DICE</text>
-      <Arrow from={[200, 155]} to={[228, 155]} />
-      <Label x={26} y={158}>A die only commands its matching unit.</Label>
-    </svg>
-  );
-}
-
-function ArtDiscard() {
-  const dice: [number, string, boolean][] = [
-    [4, MAGE, false],
-    [3, PRIEST, true],
-    [5, WARRIOR, false],
-    [2, WARRIOR, true],
-    [6, WARRIOR, false],
-  ];
-  return (
-    <svg className="tut-art" viewBox="0 0 360 210" role="img" aria-label="Discarding dice">
-      {dice.map(([v, col, drop], i) => (
-        <g key={i} opacity={drop ? 0.5 : 1}>
-          <PipDie x={26 + i * 46} y={78} s={38} value={v} color={col} />
-          {drop && (
-            <g stroke="#ff5a4d" strokeWidth="3" strokeLinecap="round">
-              <line x1={28 + i * 46} y1={80} x2={62 + i * 46} y2={114} />
-              <line x1={62 + i * 46} y1={80} x2={28 + i * 46} y2={114} />
-            </g>
-          )}
-        </g>
-      ))}
-      <Label x={64} y={70}>discard 2</Label>
-      <Label x={26} y={150}>Keep the 3 powers you want for this turn.</Label>
-    </svg>
-  );
-}
-
-function ArtMove() {
-  const c = (r: number, col: number) => center(OX, OY, r, col);
-  return (
-    <svg className="tut-art" viewBox="0 0 360 210" role="img" aria-label="Moving a unit">
-      <MiniGrid ox={OX} oy={OY}>
-        <Pawn cx={c(6, 1)[0]} cy={c(6, 1)[1]} color={WARRIOR} k={0.85} />
-        {/* highlighted path tiles */}
-        {[[6, 2], [6, 3], [5, 3], [4, 3]].map(([r, col], i) => (
-          <rect key={i} x={OX + col * 20 + 3} y={OY + r * 20 + 3} width={14} height={14} rx={2} fill="#56e0a8" opacity="0.5" />
-        ))}
-        <Arrow from={c(6, 1)} to={c(4, 3)} color="#7ef0c0" width={2.6} />
-      </MiniGrid>
-      <PipDie x={300} y={70} s={34} value={4} color={WARRIOR} />
-      <Arrow from={[300, 110]} to={[c(4, 3)[0] + 8, c(4, 3)[1]]} />
-      <Label x={26} y={196}>Orthogonal path (it may bend), up to the die value. Up to 3 units/turn.</Label>
-    </svg>
-  );
-}
-
-function ArtAttack() {
-  const c = (r: number, col: number) => center(OX, OY, r, col);
-  return (
-    <svg className="tut-art" viewBox="0 0 360 210" role="img" aria-label="Attacking">
-      <MiniGrid ox={OX} oy={OY}>
-        <Pawn cx={c(3, 2)[0]} cy={c(3, 2)[1]} color={WARRIOR} k={0.85} />
-        <Pawn cx={c(3, 3)[0]} cy={c(3, 3)[1]} color={MAGE} k={0.85} />
-        <Arrow from={[c(3, 2)[0] + 6, c(3, 2)[1] - 8]} to={[c(3, 3)[0] - 6, c(3, 3)[1] - 8]} color="#ff5a4d" />
-      </MiniGrid>
-      <PipDie x={250} y={40} s={30} value={5} color={WARRIOR} />
-      <PipDie x={292} y={40} s={30} value={2} color={MAGE} />
-      <Label x={250} y={36}>attacker</Label>
-      <Label x={292} y={36}>defender d6</Label>
-      <rect x={262} y={96} width={64} height={26} rx={13} fill="rgba(8,12,10,0.9)" stroke="#7fe6a0" />
-      <text x={294} y={113} textAnchor="middle" className="tut-svg-btn" fill="#7fe6a0">72%</text>
-      <Label x={250} y={140}>Win odds shown</Label>
-      <Label x={250} y={158}>before you commit.</Label>
-      <Label x={26} y={196}>Higher total wins; the loser is removed. Ties are rerolled.</Label>
-    </svg>
-  );
-}
-
-function ArtStones() {
-  const c = (r: number, col: number) => center(OX, OY, r, col, 18);
-  return (
-    <svg className="tut-art" viewBox="0 0 360 210" role="img" aria-label="MageStones">
-      <MiniGrid ox={OX} oy={36} cell={18} baseColor={RED}>
-        <Gem cx={c(3, 4)[0]} cy={36 - OY + c(3, 4)[1]} />
-      </MiniGrid>
-      {/* the line above mis-offsets; draw the mage explicitly on a stone + on base */}
-      <Pawn cx={OX + 4 * 18 + 9} cy={36 + 3 * 18 + 9} color={MAGE} k={0.8} />
-      <Pawn cx={OX + 4 * 18 + 9} cy={36 + 9} color={MAGE} k={0.8} />
-      <Arrow from={[OX + 4 * 18 + 9, 36 + 3 * 18 + 2]} to={[OX + 4 * 18 + 9, 36 + 18 + 4]} color={GOLD} />
-      <Label x={OX + 4 * 18 + 22} y={36 + 2 * 18}>collect →</Label>
-      <Label x={OX + 4 * 18 + 22} y={36 + 12}>activate on base</Label>
-      {/* power die progression */}
-      <PipDie x={236} y={64} s={26} value={6} color={MAGE} />
-      <text x={272} y={82} className="tut-svg-label">→ d12 → d20</text>
-      <Label x={236} y={56}>Mage attack die</Label>
-      <Label x={236} y={120}>0–1 stones → d6</Label>
-      <Label x={236} y={138}>2–3 → d12</Label>
-      <Label x={236} y={156}>4–5 → d20</Label>
-      <Label x={24} y={200}>Land on a stone to collect; activate on your base to power up.</Label>
-    </svg>
-  );
-}
-
-function ArtNexus() {
-  const c = (r: number, col: number) => center(OX, OY, r, col);
-  return (
-    <svg className="tut-art" viewBox="0 0 360 210" role="img" aria-label="The Nexus">
-      <MiniGrid ox={OX} oy={OY}>
-        <circle cx={c(3, 3)[0] + 10} cy={c(3, 3)[1] + 10} r={26} fill="none" stroke={GOLD} strokeWidth="2" opacity="0.7" />
-        <Pawn cx={c(3, 3)[0]} cy={c(3, 3)[1]} color={PRIEST} k={0.85} />
-      </MiniGrid>
-      <Arrow from={[300, 60]} to={[c(3, 4)[0] + 14, c(3, 4)[1]]} />
-      <Label x={300} y={50}>Priest holds</Label>
-      <Label x={300} y={66}>the Nexus…</Label>
-      <Label x={300} y={104}>survive a full</Label>
-      <Label x={300} y={120}>round = ritual</Label>
-      <Label x={300} y={136}>victory!</Label>
-      <Label x={26} y={196}>Priests can also resurrect a fallen Warrior from a gravestone.</Label>
-    </svg>
-  );
-}
-
-function ArtVictory() {
-  return (
-    <svg className="tut-art" viewBox="0 0 360 210" role="img" aria-label="Win conditions">
-      {/* MageStone */}
-      <g>
-        <Gem cx={70} cy={70} r={16} />
-        <text x={70} y={120} textAnchor="middle" className="tut-svg-label">Power 6 stones</text>
-        <text x={70} y={138} textAnchor="middle" className="tut-svg-label">(Mage on base)</text>
-      </g>
-      {/* Ritual */}
-      <g>
-        <rect x={154} y={54} width={32} height={32} rx={4} fill={NEXUS} />
-        <Pawn cx={170} cy={70} color={PRIEST} k={0.8} />
-        <text x={170} y={120} textAnchor="middle" className="tut-svg-label">Nexus ritual</text>
-      </g>
-      {/* Conquest */}
-      <g>
-        <Pawn cx={285} cy={70} color={WARRIOR} k={1.1} />
-        <text x={285} y={120} textAnchor="middle" className="tut-svg-label">Last team</text>
-        <text x={285} y={138} textAnchor="middle" className="tut-svg-label">standing</text>
-      </g>
-      <text x={180} y={186} textAnchor="middle" className="tut-svg-label">Any one of these wins the game.</text>
-    </svg>
-  );
-}
-
-interface Step {
+interface Section {
+  id: string;
   title: string;
-  text: string;
-  art: () => React.ReactElement;
+  icon: string;
+  body: ReactNode;
 }
-const STEPS: Step[] = [
-  { title: 'Welcome to MageStone', text: 'Magical chess with dice for 2–4 players. Command a Mage, a Priest and six Warriors across an octagon board. Seize the MageStones, hold the Nexus, and outwit your rivals.', art: ArtOverview },
-  { title: 'Your army', text: 'Each team lines up on its home edge: three Warriors, a Priest, a Mage, then three more Warriors. Your base tiles glow in your team colour.', art: ArtArmy },
-  { title: 'Roll the dice', text: 'Begin your turn by rolling five dice — one Mage (blue), one Priest (green) and three Warrior (red). A die can only command a unit of its matching type.', art: ArtRoll },
-  { title: 'Discard two', text: 'Discard two dice, keeping three for the turn. Pick the powers that suit your plan — speed, an attack, or a ritual.', art: ArtDiscard },
-  { title: 'Move your units', text: 'Spend a die to move its matching unit along an orthogonal route that may bend, up to the die’s value, through empty squares. You may move up to three units a turn.', art: ArtMove },
-  { title: 'Attack', text: 'End a move next to an enemy to strike. Warriors can gang up (2–3 dice summed); a Mage rolls its power die. The defender rolls 1d6 — higher total wins and the loser is removed. Ties are rerolled, and your odds are shown before you commit.', art: ArtAttack },
-  { title: 'MageStones', text: 'Move your Mage onto a MageStone to collect it, then return to your base to activate them. Each tier upgrades the Mage’s attack die: d6 → d12 → d20.', art: ArtStones },
-  { title: 'The Nexus & the Priest', text: 'The gilded 2×2 Nexus at the centre is sacred. A Priest who holds a clear Nexus until play returns to you wins by ritual. Priests can also raise a fallen Warrior from a gravestone.', art: ArtNexus },
-  { title: 'How to win', text: 'Three roads to victory: activate six MageStones with your Mage on its base, complete a Nexus ritual, or be the last team with units on the board.', art: ArtVictory },
+
+const SECTIONS: Section[] = [
+  {
+    id: 'objective',
+    title: 'Objective',
+    icon: 'crown',
+    body: (
+      <>
+        <p className="htp-p">There are three ways to win MageStone:</p>
+        <ol className="htp-win">
+          <li>
+            <span className="htp-win-title">Mage Victory</span>
+            Return your Mage to your base while carrying 6 Activated MageStones.
+          </li>
+          <li>
+            <span className="htp-win-title">Priest Ritual Victory</span>
+            Move your Priest onto the central Nexus and declare a ritual. If your Priest survives and still holds
+            the Nexus for a full round, you win.
+          </li>
+          <li>
+            <span className="htp-win-title">Conquest Victory</span>
+            Be the last player with any units on the board. Lay siege to enemy bases — a besieged base can’t
+            respawn its Mage or Priest — then wipe out whoever remains.
+          </li>
+        </ol>
+        <BoardOverview />
+      </>
+    ),
+  },
+  {
+    id: 'setup',
+    title: 'Setup',
+    icon: 'formation',
+    body: (
+      <>
+        <p className="htp-p">Each player starts with:</p>
+        <ul className="htp-list">
+          <li>6 Warriors</li>
+          <li>1 Priest</li>
+          <li>1 Mage</li>
+          <li>4 MageStones</li>
+          <li>4 Gravestones (added to the shared bank)</li>
+        </ul>
+        <p className="htp-p">Each player sets up their units on their own base row in this order:</p>
+        <div className="htp-formation">
+          <span className="htp-tag htp-tag--w">Warrior</span>
+          <span className="htp-tag htp-tag--w">Warrior</span>
+          <span className="htp-tag htp-tag--w">Warrior</span>
+          <span className="htp-tag htp-tag--p">Priest</span>
+          <span className="htp-tag htp-tag--m">Mage</span>
+          <span className="htp-tag htp-tag--w">Warrior</span>
+          <span className="htp-tag htp-tag--w">Warrior</span>
+          <span className="htp-tag htp-tag--w">Warrior</span>
+        </div>
+        <p className="htp-p">
+          The central area of the board contains the MageStone zone and the Nexus. MageStones are placed into the
+          MageStone zone according to the player count.
+        </p>
+        <SetupDiagram />
+      </>
+    ),
+  },
+  {
+    id: 'turn',
+    title: 'Turn Structure',
+    icon: 'dice',
+    body: (
+      <>
+        <p className="htp-p">On your turn:</p>
+        <ol className="htp-ol">
+          <li>
+            Roll 5 dice:
+            <ul className="htp-list htp-list--sub htp-list--dice">
+              <li>
+                <span className="htp-die htp-die--w" />3 Warrior dice (Red)
+              </li>
+              <li>
+                <span className="htp-die htp-die--m" />1 Mage die (Blue)
+              </li>
+              <li>
+                <span className="htp-die htp-die--p" />1 Priest die (Green)
+              </li>
+            </ul>
+          </li>
+          <li>Discard exactly 2 dice.</li>
+          <li>
+            Move up to 3 units using the remaining dice.
+            <ul className="htp-list htp-list--sub">
+              <li>Each die can move one unit.</li>
+              <li>Movement is orthogonal only.</li>
+              <li>Units move up, down, left, or right.</li>
+              <li>Units cannot move diagonally.</li>
+            </ul>
+          </li>
+          <li>Complete all movement first.</li>
+          <li>
+            Then resolve actions:
+            <ul className="htp-list htp-list--sub">
+              <li>Attack (Warrior: Single, Double, Triple; Mage)</li>
+              <li>Collect a MageStone (Mage)</li>
+              <li>Activate a MageStone (Mage)</li>
+              <li>Resurrect a Warrior (Priest)</li>
+              <li>Start a Nexus Ritual (Priest)</li>
+            </ul>
+          </li>
+        </ol>
+        <div className="htp-note">
+          <strong>Important:</strong> If you discard the Mage die, your Mage cannot move that turn.
+        </div>
+        <MoveDiagram />
+      </>
+    ),
+  },
+  {
+    id: 'units',
+    title: 'Units',
+    icon: 'units',
+    body: (
+      <>
+        <h4 className="htp-sub htp-sub--w">Warrior</h4>
+        <p className="htp-p">Warriors are your main fighting units.</p>
+        <ul className="htp-list">
+          <li>Warriors attack using 1d6.</li>
+          <li>Warriors can attack enemy units.</li>
+          <li>Warriors can make coordinated attacks with other Warriors.</li>
+          <li>If a Warrior is defeated, it becomes a Gravestone.</li>
+          <li>You can never have more than 6 live Warriors.</li>
+        </ul>
+
+        <h4 className="htp-sub htp-sub--m">Mage</h4>
+        <p className="htp-p">
+          The Mage is your most important unit. It becomes stronger as it carries MageStones:
+        </p>
+        <ul className="htp-list">
+          <li>0–1 MageStones: rolls 1d6</li>
+          <li>2–3 MageStones: rolls 1d12</li>
+          <li>4–5 MageStones: rolls 1d20</li>
+        </ul>
+        <p className="htp-p">If the Mage is defeated:</p>
+        <ul className="htp-list">
+          <li>It respawns at your base if possible.</li>
+          <li>It drops all Unactivated MageStones.</li>
+          <li>It also drops 1 Activated MageStone on the death square.</li>
+          <li>If the enemy has locked your base, your Mage may be unable to respawn.</li>
+        </ul>
+
+        <h4 className="htp-sub htp-sub--p">Priest</h4>
+        <p className="htp-p">The Priest is a defensive and ritual unit.</p>
+        <ul className="htp-list">
+          <li>The Priest cannot attack.</li>
+          <li>When attacked, the Priest rolls defence only.</li>
+          <li>If the Priest wins the defence roll, the attack is repelled — but the attacker is not defeated.</li>
+          <li>If the Priest is defeated, it respawns instead of becoming a Gravestone.</li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    id: 'combat',
+    title: 'Combat',
+    icon: 'swords',
+    body: (
+      <>
+        <p className="htp-p">Combat is resolved by opposed dice rolls.</p>
+        <ul className="htp-list">
+          <li>The attacker rolls their attack die.</li>
+          <li>The defender rolls their defence die.</li>
+          <li>Highest roll wins.</li>
+          <li>Ties are re-rolled until the result is decisive — combat never ends in a draw.</li>
+        </ul>
+        <p className="htp-p">
+          <span className="htp-em">If the attacker wins:</span> the defender is defeated.
+        </p>
+        <p className="htp-p">
+          <span className="htp-em">If the defender wins:</span> the attacker is defeated — unless the defender is a
+          Priest. A Priest never kills the attacker; the attack is simply repelled and both units stay put.
+        </p>
+
+        <h4 className="htp-sub">Coordinated Warrior Attacks</h4>
+        <p className="htp-p">Two or three Warriors can combine their attack against one target.</p>
+        <ul className="htp-list">
+          <li>2 Warriors attack together by rolling 2d6.</li>
+          <li>3 Warriors attack together by rolling 3d6.</li>
+          <li>Add the dice together.</li>
+          <li>Compare the total against the defender’s roll.</li>
+        </ul>
+        <p className="htp-p">If a coordinated attack fails, only one attacking Warrior is defeated.</p>
+
+        <h4 className="htp-sub">Win Chance</h4>
+        <p className="htp-p">
+          Your chance to win an attack — your roll (row) against the defender’s die (column). The defender rolls d6,
+          unless it’s a Mage defending with its power die. Ties are re-rolled, so these are exactly the odds shown
+          in-game.
+        </p>
+        <OddsTable />
+        <ul className="htp-list htp-legend">
+          <li>
+            <strong>d6</strong> — one Warrior, or a Mage carrying 0–1 activated stones
+          </li>
+          <li>
+            <strong>2d6 / 3d6</strong> — two / three coordinated Warriors
+          </li>
+          <li>
+            <strong>d12 / d20</strong> — a Mage with 2–3 / 4–5 activated stones
+          </li>
+        </ul>
+        <CombatDiagram />
+      </>
+    ),
+  },
+  {
+    id: 'magestones',
+    title: 'MageStones',
+    icon: 'gem',
+    body: (
+      <>
+        <p className="htp-p">MageStones are collected from the MageStone zone. There are two MageStone states:</p>
+        <ol className="htp-win">
+          <li>
+            <span className="htp-win-title">Unactivated MageStones</span>
+            Carried, but not yet ready for victory.
+          </li>
+          <li>
+            <span className="htp-win-title">Activated MageStones</span>
+            These count toward Mage Victory.
+          </li>
+        </ol>
+        <p className="htp-p">
+          To win by Mage Victory, your Mage must return to your base with 6 Activated MageStones.
+        </p>
+        <StoneDiagram />
+      </>
+    ),
+  },
+  {
+    id: 'graves',
+    title: 'Gravestones & Resurrection',
+    icon: 'grave',
+    body: (
+      <>
+        <p className="htp-p">
+          When a Warrior is defeated it leaves a Gravestone on its square. Gravestones are drawn from a shared
+          bank, and a Priest can resurrect Warriors from them.
+        </p>
+        <h4 className="htp-sub">The Gravestone bank</h4>
+        <ul className="htp-list">
+          <li>The bank holds 4 Gravestones per player — 8 in a 2-player game, 16 in a 4-player game.</li>
+          <li>Placing a Gravestone draws one from the bank; resurrecting a Warrior returns one to it.</li>
+          <li>When the bank is empty, a defeated Warrior leaves no Gravestone — the bank caps how many can sit on the board at once.</li>
+          <li>In a 4-player game the bank shrinks by 4 for each player eliminated (down to 4 per remaining player).</li>
+        </ul>
+        <h4 className="htp-sub">Placement &amp; resurrection</h4>
+        <ul className="htp-list">
+          <li>Only one Gravestone can be resurrected per turn.</li>
+          <li>You can never have more than 6 live Warriors.</li>
+          <li>Gravestones can’t stack — one per square — and none can be placed on the Nexus.</li>
+          <li>A Gravestone and a MageStone may share a square.</li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    id: 'nexus',
+    title: 'The Nexus',
+    icon: 'nexus',
+    body: (
+      <>
+        <p className="htp-p">
+          The Nexus is the central power point of the board. A Priest can move onto the Nexus and declare a ritual.
+        </p>
+        <h4 className="htp-sub">To win by Priest Ritual Victory</h4>
+        <ul className="htp-list">
+          <li>Your Priest must stand on the Nexus.</li>
+          <li>You declare the ritual.</li>
+          <li>Your Priest must remain there for a full round.</li>
+          <li>If the Priest survives and still controls the Nexus, you win.</li>
+        </ul>
+        <NexusDiagram />
+      </>
+    ),
+  },
+  {
+    id: 'summary',
+    title: 'Quick Play Summary',
+    icon: 'scroll',
+    body: (
+      <ol className="htp-ol">
+        <li>Roll 5 dice — 3 Warrior (red), 1 Mage (blue), 1 Priest (green).</li>
+        <li>Discard exactly 2 dice.</li>
+        <li>Move up to 3 units using the remaining dice.</li>
+        <li>Resolve actions after movement.</li>
+        <li>Fight, collect stones, activate stones, resurrect Warriors, or attempt the Nexus Ritual.</li>
+        <li>Win by Mage Victory, Priest Ritual Victory, or Conquest Victory.</li>
+      </ol>
+    ),
+  },
 ];
+
+// ---- page -----------------------------------------------------------------
+
+const isMobile = () =>
+  typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches;
 
 export function Tutorial({ onClose }: { onClose: () => void }) {
-  const [i, setI] = useState(0);
-  const last = STEPS.length - 1;
-  const next = () => setI((v) => Math.min(last, v + 1));
-  const prev = () => setI((v) => Math.max(0, v - 1));
+  // All sections open on desktop; only the first open on mobile so the guide
+  // doesn't start as one long scroll.
+  const [open, setOpen] = useState<Record<string, boolean>>(() => {
+    const mobile = isMobile();
+    return Object.fromEntries(SECTIONS.map((s, i) => [s.id, mobile ? i === 0 : true]));
+  });
+  const toggle = (id: string) => setOpen((o) => ({ ...o, [id]: !o[id] }));
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
-      else if (e.key === 'ArrowRight') setI((v) => Math.min(STEPS.length - 1, v + 1));
-      else if (e.key === 'ArrowLeft') setI((v) => Math.max(0, v - 1));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const step = STEPS[i];
-  const Art = step.art;
   return (
-    <div className="tut-overlay" onClick={onClose}>
-      <div className="tut-panel" role="dialog" aria-modal="true" aria-label="How to play" onClick={(e) => e.stopPropagation()}>
-        <svg width="0" height="0" aria-hidden="true">
-          <defs>
-            <linearGradient id="tutGold" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#eccb78" />
-              <stop offset="1" stopColor="#a9842f" />
-            </linearGradient>
-          </defs>
-        </svg>
-        <header className="tut-head">
-          <span className="tut-step">{i + 1} / {STEPS.length}</span>
-          <h2 className="tut-title">{step.title}</h2>
-          <button className="tut-close" onClick={onClose} aria-label="Close">✕</button>
+    <div className="htp-overlay" onClick={onClose}>
+      <div
+        className="htp-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label="How to Play MageStone"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button className="htp-close" onClick={onClose} aria-label="Close">
+          ✕
+        </button>
+
+        <header className="htp-hero">
+          <div className="htp-eyebrow">Fantasy Strategy · 2–4 Players</div>
+          <h1 className="htp-hero-title">How to Play MageStone</h1>
+          <Divider />
         </header>
-        <div className="tut-stage">
-          <Art />
+
+        <div className="htp-intro">
+          <p className="htp-lead">
+            Command Warriors, protect your Mage, control the Nexus, and claim the MageStones.
+          </p>
+          <p className="htp-p">
+            MageStone is a fantasy strategy board game for 2–4 players. Each player controls a small force of
+            Warriors, one Mage, and one Priest. Your aim is to gather MageStones, control the Nexus, defeat enemy
+            units, and win through one of three victory paths.
+          </p>
         </div>
-        <p className="tut-text">{step.text}</p>
-        <div className="tut-dots">
-          {STEPS.map((_, d) => (
-            <button
-              key={d}
-              className={`tut-dot${d === i ? ' on' : ''}`}
-              aria-label={`Step ${d + 1}`}
-              onClick={() => setI(d)}
-            />
-          ))}
+
+        <div className="htp-sections">
+          {SECTIONS.map((s) => {
+            const isOpen = !!open[s.id];
+            return (
+              <section className={`htp-section${isOpen ? ' open' : ''}`} key={s.id}>
+                <button
+                  className="htp-section-head"
+                  aria-expanded={isOpen}
+                  aria-controls={`htp-body-${s.id}`}
+                  onClick={() => toggle(s.id)}
+                >
+                  <span className="htp-section-icon">
+                    <Icon name={s.icon} />
+                  </span>
+                  <span className="htp-section-title">{s.title}</span>
+                  <Chevron open={isOpen} />
+                </button>
+                <div className="htp-section-body" id={`htp-body-${s.id}`} hidden={!isOpen}>
+                  {s.body}
+                </div>
+              </section>
+            );
+          })}
         </div>
-        <footer className="tut-foot">
-          <button className="ghost" onClick={prev} disabled={i === 0}>
-            ← Back
+
+        <footer className="htp-foot">
+          <button className="primary lg" onClick={onClose}>
+            Got it!
           </button>
-          {i < last ? (
-            <button className="primary" onClick={next}>
-              Next →
-            </button>
-          ) : (
-            <button className="primary" onClick={onClose}>
-              Got it!
-            </button>
-          )}
         </footer>
       </div>
     </div>

@@ -152,7 +152,6 @@ export function createGame(players: number | PlayerColor[] = 2, layoutId = DEFAU
 }
 
 function buildGame(players: PlayerColor[], layout: StoneLayout): GameState {
-  const poolSize = 3 * players.length; // max 3 gravestones per player
   const seats = assignSeats(players);
   return {
     players,
@@ -163,13 +162,11 @@ function buildGame(players: PlayerColor[], layout: StoneLayout): GameState {
     units: makeUnits(players, seats),
     stones: makeStones(layout, players.length),
     gravestones: [],
-    gravestonePool: poolSize,
     unitsMovedThisTurn: [],
     unitsActedThisTurn: [],
     ritual: null,
     lastCombat: null,
     pendingRespawns: [],
-    pendingFlee: null,
     kills: { red: 0, blue: 0, green: 0, yellow: 0 },
     winner: null,
     log: [`${players[0]} to start. Roll the dice.`],

@@ -93,6 +93,30 @@ function enemyInBase(state: GameState, player: PlayerColor): boolean {
   );
 }
 
+/**
+ * Players whose base an enemy unit is currently standing on — i.e. under siege.
+ * A besieged base can't respawn that player's felled Mage/Priest (they queue in
+ * `pendingRespawns` until it clears — see `respawnOrQueue`). Derived purely from
+ * live positions, so it appears/clears the instant a unit enters or leaves a base.
+ */
+export function siegedPlayers(state: GameState): PlayerColor[] {
+  return state.players.filter((p) => enemyInBase(state, p));
+}
+
+/**
+ * Colours of the enemy units standing on `player`'s base, dominant first — the
+ * besieged base glows in the besieger's colour (ties broken by unit count).
+ */
+export function besiegersOf(state: GameState, player: PlayerColor): PlayerColor[] {
+  const cells = baseCellsOf(state, player);
+  const counts = new Map<PlayerColor, number>();
+  for (const u of state.units) {
+    if (u.owner === player) continue;
+    if (cells.some((bc) => sameCell(bc, u.cell))) counts.set(u.owner, (counts.get(u.owner) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([p]) => p);
+}
+
 /** First free base cell (preferring the unit's home slot), or null. */
 function freeBaseCell(state: GameState, player: PlayerColor, preferred: Cell): Cell | null {
   if (!unitAt(state, preferred)) return preferred;
@@ -156,6 +180,34 @@ export function resolveRespawns(state: GameState): GameState {
 
 export function warriorCount(state: GameState, owner: PlayerColor): number {
   return state.units.filter((u) => u.owner === owner && u.kind === 'warrior').length;
+}
+
+// ---- Gravestone bank -----------------------------------------------------
+
+/** Gravestone markers each player contributes to the shared bank. */
+export const GRAVES_PER_PLAYER = 4;
+
+/** Players still in the game — holding a unit or with one queued to respawn.
+ *  (Same test conquest victory uses, so the two always agree.) */
+export function activePlayers(state: GameState): PlayerColor[] {
+  return state.players.filter(
+    (p) =>
+      state.units.some((u) => u.owner === p) ||
+      state.pendingRespawns.some((pr) => pr.owner === p),
+  );
+}
+
+/** Maximum gravestones allowed on the board at once: `GRAVES_PER_PLAYER` per
+ *  still-active player (8 for 2p, 16 for 4p), so the cap drops by 4 each time a
+ *  player is eliminated. */
+export function gravestoneCapacity(state: GameState): number {
+  return GRAVES_PER_PLAYER * activePlayers(state).length;
+}
+
+/** Markers left in the shared gravestone bank — capacity minus those already on
+ *  the board. Placing a gravestone spends one; resurrecting returns one. */
+export function gravestoneBank(state: GameState): number {
+  return Math.max(0, gravestoneCapacity(state) - state.gravestones.length);
 }
 
 // ---- Phase 1-2: roll & discard ------------------------------------------
@@ -461,16 +513,11 @@ export function resolveAttack(
     defeatedId = target.id;
     next = bumpKill(defeatUnit(next, target.id), state.current);
   } else {
-    // attackRoll < defenseRoll (equality was rerolled away above).
+    // attackRoll < defenseRoll (equality was rerolled away above). A Priest never
+    // kills its attacker — winning its defence simply repels the attack and both
+    // units stay put. Any other defender defeats exactly one attacker.
     outcome = 'lose';
-    if (target.kind === 'priest') {
-      // A Priest that wins its defence is not a killer — the attacker survives.
-      // Instead the Priest may flee (out of turn) up to the rolled distance.
-      next = {
-        ...next,
-        pendingFlee: { priestId: target.id, owner: target.owner, steps: defenseRoll },
-      };
-    } else {
+    if (target.kind !== 'priest') {
       defeatedId = attackers[0].id; // coordinated: only one attacker falls
       next = bumpKill(defeatUnit(next, attackers[0].id), target.owner);
     }
@@ -518,18 +565,18 @@ export function defeatUnit(state: GameState, unitId: string): GameState {
   const log = [...state.log];
 
   if (unit.kind === 'warrior') {
-    // One gravestone per square, and only while the shared pool has markers.
-    const blocked = !!graveAt(state, unit.cell);
+    // A Warrior leaves one Gravestone where it fell — but only if the shared bank
+    // still has a marker, the square has no gravestone already (no stacking), and
+    // it isn't a Nexus square.
+    const blocked = !!graveAt(state, unit.cell) || inNexus(unit.cell.r, unit.cell.c);
     let gravestones = state.gravestones;
-    let pool = state.gravestonePool;
-    if (pool > 0 && !blocked) {
+    if (gravestoneBank(state) > 0 && !blocked) {
       gravestones = [...gravestones, { id: `grave-${graveCounter++}`, cell: unit.cell }];
-      pool -= 1;
       log.push(`${unit.owner}'s Warrior falls — a Gravestone marks the square.`);
     } else {
       log.push(`${unit.owner}'s Warrior falls (no Gravestone placed).`);
     }
-    return { ...state, units, gravestones, gravestonePool: pool, log };
+    return { ...state, units, gravestones, log };
   }
 
   if (unit.kind === 'priest') {
@@ -680,7 +727,6 @@ export function resurrect(state: GameState, unitId: string): GameState {
     ...state,
     dice,
     gravestones: state.gravestones.filter((g) => g.id !== grave.id),
-    gravestonePool: state.gravestonePool + 1,
     units: [
       ...state.units.map((u) => (u.id === unitId ? { ...u, cell: back } : u)),
       newWarrior,
@@ -688,69 +734,6 @@ export function resurrect(state: GameState, unitId: string): GameState {
     unitsActedThisTurn: markActed(state, unitId),
     log: [...state.log, `${priest.owner}'s Priest resurrects a Warrior.`],
   };
-}
-
-// ---- Priest flee (out-of-turn, after winning a defence) ------------------
-
-/** Legal flee destinations for the priest that just won a defence. */
-export function fleeDestinations(state: GameState): Cell[] {
-  const pf = state.pendingFlee;
-  if (!pf) return [];
-  const priest = unitById(state, pf.priestId);
-  if (!priest) return [];
-  return legalMoves(state, priest, pf.steps);
-}
-
-/**
- * Move the fleeing Priest. If it lands on a Gravestone it resurrects it
- * immediately (the one out-of-turn board change a player may make).
- */
-export function fleePriest(state: GameState, dest: Cell): GameState {
-  const pf = state.pendingFlee;
-  if (!pf) return state;
-  const priest = unitById(state, pf.priestId);
-  if (!priest) return { ...state, pendingFlee: null };
-  if (!legalMoves(state, priest, pf.steps).some((c) => sameCell(c, dest))) return state;
-
-  const from = priest.cell;
-  let s: GameState = {
-    ...state,
-    pendingFlee: null,
-    units: state.units.map((u) => (u.id === priest.id ? { ...u, prevCell: from, cell: dest } : u)),
-    log: [...state.log, `${priest.owner}'s Priest flees ${pf.steps}.`],
-  };
-
-  const grave = graveAt(s, dest);
-  if (grave && warriorCount(s, priest.owner) < MAX_WARRIORS) {
-    const moved = unitById(s, priest.id)!;
-    const back = stepBackCell(s, moved);
-    if (back) {
-      s = {
-        ...s,
-        gravestones: s.gravestones.filter((g) => g.id !== grave.id),
-        gravestonePool: s.gravestonePool + 1,
-        units: [
-          ...s.units.map((u) => (u.id === priest.id ? { ...u, cell: back, prevCell: dest } : u)),
-          {
-            id: `${priest.owner}-w-flee${graveCounter++}`,
-            kind: 'warrior' as const,
-            owner: priest.owner,
-            cell: dest,
-            carried: 0,
-            activated: 0,
-          },
-        ],
-        log: [...s.log, `${priest.owner}'s Priest resurrects a Warrior mid-flight!`],
-      };
-    }
-  }
-  return s;
-}
-
-/** Decline the optional flee. */
-export function declineFlee(state: GameState): GameState {
-  if (!state.pendingFlee) return state;
-  return { ...state, pendingFlee: null };
 }
 
 function nexusClearOfEnemies(state: GameState, owner: PlayerColor): boolean {
@@ -796,11 +779,7 @@ export function checkVictory(state: GameState): GameState {
   }
 
   // Conquest: only one player still has any units (a queued respawn counts).
-  const alive = state.players.filter(
-    (p) =>
-      state.units.some((u) => u.owner === p) ||
-      state.pendingRespawns.some((pr) => pr.owner === p),
-  );
+  const alive = activePlayers(state);
   if (alive.length === 1 && state.players.length > 1) {
     return { ...state, winner: alive[0], log: [...state.log, `${alive[0]} wins by conquest!`] };
   }
@@ -822,7 +801,6 @@ export function endTurn(state: GameState): GameState {
     unitsMovedThisTurn: [],
     unitsActedThisTurn: [],
     lastCombat: null,
-    pendingFlee: null,
     log: [...state.log, `— ${next}'s turn. Roll the dice.`],
   });
 

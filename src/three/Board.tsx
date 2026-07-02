@@ -1,9 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { useFrame } from '@react-three/fiber';
 import { useTexture } from '@react-three/drei';
 import { allCells, cellKey, CUT, edgeRotation, inNexus, N } from '../game/board';
 import type { Cell } from '../game/types';
-import { BOARD, CELL, COLORS, TILE_SURFACE, cellToWorld } from './coords';
+import { besiegersOf, siegedPlayers } from '../game/rules';
+import { BOARD, CELL, COLORS, FLOOR_Y, TILE_SURFACE, cellToWorld } from './coords';
 import { emeraldBoardTexture, groundBumpTexture, woodBumpTexture } from './textures';
 import { attackTargetIds, moveDestinations, useGame } from '../store';
 
@@ -128,6 +130,65 @@ function Tabletop() {
 }
 
 /**
+ * The stand the table rises from — a gilt collar under the slab, a carved
+ * octagonal column, and a two-step stone plinth standing on the plaza floor
+ * (FLOOR_Y), so the table is grounded in the arena instead of floating.
+ */
+function TableStand() {
+  const bump = useMemo(() => {
+    const t = woodBumpTexture().clone();
+    t.repeat.set(3, 1);
+    t.needsUpdate = true;
+    return t;
+  }, []);
+  const tableBottom = TABLE_TOP_Y - TABLE_H - 0.12; // slab underside incl. bevel
+  const plinthTop = FLOOR_Y + 1.0;
+  const colH = tableBottom - plinthTop;
+  const colMid = plinthTop + colH / 2;
+  const rot: [number, number, number] = [0, Math.PI / 8, 0]; // flats face the board edges
+  return (
+    <group>
+      {/* gold collar joining the slab to the column */}
+      <mesh position={[0, tableBottom - 0.11, 0]} rotation={rot} castShadow>
+        <cylinderGeometry args={[6.1, 6.1, 0.26, 8]} />
+        <meshStandardMaterial
+          color={BOARD.gold}
+          metalness={0.85}
+          roughness={0.35}
+          emissive="#5a3f12"
+          emissiveIntensity={0.15}
+        />
+      </mesh>
+      {/* carved octagonal wooden column */}
+      <mesh position={[0, colMid, 0]} rotation={rot} castShadow receiveShadow>
+        <cylinderGeometry args={[5.2, 5.9, colH, 8]} />
+        <meshStandardMaterial color="#372718" bumpMap={bump} bumpScale={0.06} roughness={0.82} metalness={0} />
+      </mesh>
+      {/* gold band around the column's waist */}
+      <mesh position={[0, colMid, 0]} rotation={rot}>
+        <cylinderGeometry args={[5.72, 5.72, 0.2, 8]} />
+        <meshStandardMaterial
+          color={BOARD.gold}
+          metalness={0.85}
+          roughness={0.4}
+          emissive="#5a3f12"
+          emissiveIntensity={0.12}
+        />
+      </mesh>
+      {/* two-step stone plinth on the plaza */}
+      <mesh position={[0, FLOOR_Y + 0.75, 0]} rotation={rot} castShadow receiveShadow>
+        <cylinderGeometry args={[6.5, 7.1, 0.5, 8]} />
+        <meshStandardMaterial color="#1a231c" roughness={0.92} metalness={0} />
+      </mesh>
+      <mesh position={[0, FLOOR_Y + 0.25, 0]} rotation={rot} castShadow receiveShadow>
+        <cylinderGeometry args={[7.6, 8.2, 0.5, 8]} />
+        <meshStandardMaterial color="#161e18" roughness={0.94} metalness={0} />
+      </mesh>
+    </group>
+  );
+}
+
+/**
  * One tile box whose UVs sample the slice of the shared board map that lies
  * under this cell — so the single texture spans the whole board continuously
  * (the gold trim grid sits on top of the thin inset seams). Column c → u
@@ -168,12 +229,30 @@ function useGoldMaterial(emissive = 0.12) {
   );
 }
 
+/** A pulsing wash over a base tile whose owner is under siege (an enemy is
+ *  standing on the base, so its Mage/Priest can't respawn). Coloured in the
+ *  besieging team's colour and sitting just above the owner's team wash, so the
+ *  base reads as claimed by the attacker. */
+function SiegeGlow({ color }: { color: string }) {
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
+  useFrame(({ clock }) => {
+    if (mat.current) mat.current.opacity = 0.34 + 0.26 * (0.5 + 0.5 * Math.sin(clock.elapsedTime * 3.2));
+  });
+  return (
+    <mesh position={[0, TILE_TOP + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <planeGeometry args={[CELL * TILE_INSET, CELL * TILE_INSET]} />
+      <meshBasicMaterial ref={mat} color={color} transparent opacity={0.4} depthWrite={false} />
+    </mesh>
+  );
+}
+
 function Tile({
   cell,
   legal,
   target,
   baseColor,
   nexus,
+  siege,
   map,
   bump,
 }: {
@@ -184,6 +263,8 @@ function Tile({
   baseColor: string | null;
   /** True for the central 2×2 Nexus tiles (gilded). */
   nexus: boolean;
+  /** Besieging team's colour when this base tile's owner is under siege, else null. */
+  siege: string | null;
   map: THREE.Texture;
   bump: THREE.Texture;
 }) {
@@ -224,8 +305,10 @@ function Tile({
           envMapIntensity={0.5}
           roughness={0.82}
           metalness={nexus ? 0.25 : 0.05}
-          emissive={legal ? BOARD.highlight : baseColor ? baseColor : nexus ? BOARD.nexus : '#000000'}
-          emissiveIntensity={legal ? 0.4 : baseColor ? 0.32 : nexus ? 0.16 : 0}
+          emissive={
+            legal ? BOARD.highlight : siege ? siege : baseColor ? baseColor : nexus ? BOARD.nexus : '#000000'
+          }
+          emissiveIntensity={legal ? 0.4 : siege ? 0.55 : baseColor ? 0.32 : nexus ? 0.16 : 0}
         />
       </mesh>
 
@@ -237,6 +320,8 @@ function Tile({
           <meshBasicMaterial color={baseColor} transparent opacity={0.42} />
         </mesh>
       )}
+
+      {siege && !legal && <SiegeGlow color={siege} />}
 
       {legal && (
         <mesh position={[0, TILE_TOP + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -329,9 +414,21 @@ export function Board() {
     return byRotation;
   }, [game.players, game.seats]);
 
+  // Seats whose base is under siege → the dominant besieger's colour, so the
+  // base glows in the colour of the team claiming it.
+  const siegeGlowBySeat = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const p of siegedPlayers(game)) {
+      const attacker = besiegersOf(game, p)[0];
+      if (attacker) m.set(game.seats[p], COLORS[attacker]);
+    }
+    return m;
+  }, [game]);
+
   return (
     <group>
       <Tabletop />
+      <TableStand />
       <GoldInlay />
       {cells.map((cell) => {
         const k = cellKey(cell);
@@ -347,6 +444,7 @@ export function Board() {
             target={targetKeys.has(k)}
             baseColor={baseColor}
             nexus={inNexus(cell.r, cell.c)}
+            siege={rot !== null ? siegeGlowBySeat.get(rot) ?? null : null}
           />
         );
       })}

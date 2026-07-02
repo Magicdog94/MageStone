@@ -86,13 +86,6 @@ export interface PendingRespawn {
   activated?: number;
 }
 
-/** A Priest that won a defence and may flee (out-of-turn) up to `steps`. */
-export interface PendingFlee {
-  priestId: string;
-  owner: PlayerColor;
-  steps: number;
-}
-
 export interface GameState {
   players: PlayerColor[];
   /** Board seat (quarter-turns from the top: 0=top, 1=right, 2=bottom, 3=left)
@@ -105,13 +98,11 @@ export interface GameState {
   units: Unit[];
   stones: MageStone[];
   gravestones: Gravestone[];
-  gravestonePool: number; // remaining unused gravestone markers
   unitsMovedThisTurn: string[];
   unitsActedThisTurn: string[];
   ritual: Ritual | null;
   lastCombat: CombatResult | null;
   pendingRespawns: PendingRespawn[];
-  pendingFlee: PendingFlee | null;
   /** Enemy units each player has defeated (kill counter). */
   kills: Record<PlayerColor, number>;
   winner: PlayerColor | null;

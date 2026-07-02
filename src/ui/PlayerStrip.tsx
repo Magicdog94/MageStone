@@ -7,6 +7,7 @@ import { StoneIcon, SwordIcon } from './Icons';
 /** Top status strip — per player: unactivated + activated MageStones and kills. */
 export function PlayerStrip() {
   const game = useGame((s) => s.game);
+  const bots = useGame((s) => s.bots);
   const silverUrl = useTokenUrl('unactivated');
   const goldUrl = useTokenUrl('activated');
 
@@ -27,6 +28,11 @@ export function PlayerStrip() {
             style={{ '--pc': COLORS[p] } as CSSProperties}
           >
             <span className="pstat-name">{p}</span>
+            {bots[p] && (
+              <span className="pstat-badge tip" data-tip={`AI bot — ${bots[p]}`}>
+                BOT
+              </span>
+            )}
             <span className="pstat-metric tip" data-tip="Unactivated MageStones (carried)">
               {silverUrl ? (
                 <img className="pstat-token" src={silverUrl} alt="" width={20} height={20} />

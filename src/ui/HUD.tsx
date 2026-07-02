@@ -203,9 +203,13 @@ export function HUD() {
 
         <div className="spacer" />
 
+        <span className="turn-chip tip" data-tip="Round — advances when play returns to the first player">
+          Turn {game.turn ?? 1}
+        </span>
+
         <span
           className="grave-bank tip"
-          data-tip={`Gravestone bank: ${graveBank} left to place · up to ${graveCap} on the board (4 per active player).`}
+          data-tip={`Gravestone bank: ${graveBank} left to place · up to ${graveCap} on the board (3 per active player).`}
         >
           <GraveIcon size={18} />
           {graveBank}

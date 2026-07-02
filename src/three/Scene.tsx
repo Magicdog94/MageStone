@@ -6,7 +6,7 @@ import { Board } from './Board';
 import { DiceLayer } from './Dice';
 import { BoardTokens, ClashEffect, DeathAnimations, Units } from './Pieces';
 import { arenaCircleTexture, groundBumpTexture, hazyFogTexture, stoneFloorTexture } from './textures';
-import { SmithyRoom, TeamBanners } from './Decor';
+import { SmithyRoom, TableChairs, TeamBanners } from './Decor';
 import { FLOOR_Y } from './coords';
 import { useGame } from '../store';
 
@@ -84,7 +84,7 @@ function ArenaEnvironment() {
       const a = rand() * Math.PI * 2;
       const r = 6 + rand() * 22;
       arr[i * 3] = Math.cos(a) * r;
-      arr[i * 3 + 1] = FLOOR_Y + 1.5 + rand() * 8;
+      arr[i * 3 + 1] = FLOOR_Y + 8 + rand() * 72; // dust throughout the room's height
       arr[i * 3 + 2] = Math.sin(a) * r;
     }
     return arr;
@@ -221,8 +221,11 @@ export function Scene() {
       <FogBackdrop />
       <StudioEnv />
       <ArenaEnvironment />
-      <SmithyRoom />
-      <TeamBanners />
+      <Suspense fallback={null}>
+        <SmithyRoom />
+        <TeamBanners />
+        <TableChairs />
+      </Suspense>
       <hemisphereLight args={['#8a7f6d', '#181310', 0.5]} />
       <ambientLight intensity={0.18} color={'#d8cbb8'} />
       {/* daylight slanting in through the north windows */}
@@ -260,7 +263,8 @@ export function Scene() {
         makeDefault
         enablePan={false}
         minDistance={10}
-        maxDistance={42}
+        maxDistance={32}
+        minPolarAngle={0.35}
         maxPolarAngle={Math.PI / 2.15}
         target={[0, 0, 0]}
       />

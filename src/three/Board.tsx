@@ -159,14 +159,14 @@ function TableStand() {
           emissiveIntensity={0.15}
         />
       </mesh>
-      {/* carved octagonal wooden column */}
+      {/* carved octagonal pedestal column (the tabletop stands 1.5 m proud) */}
       <mesh position={[0, colMid, 0]} rotation={rot} castShadow receiveShadow>
-        <cylinderGeometry args={[5.2, 5.9, colH, 8]} />
+        <cylinderGeometry args={[5.0, 7.4, colH, 8]} />
         <meshStandardMaterial color="#372718" bumpMap={bump} bumpScale={0.06} roughness={0.82} metalness={0} />
       </mesh>
       {/* gold band around the column's waist */}
       <mesh position={[0, colMid, 0]} rotation={rot}>
-        <cylinderGeometry args={[5.72, 5.72, 0.2, 8]} />
+        <cylinderGeometry args={[6.6, 6.6, 0.9, 8]} />
         <meshStandardMaterial
           color={BOARD.gold}
           metalness={0.85}
@@ -175,13 +175,13 @@ function TableStand() {
           emissiveIntensity={0.12}
         />
       </mesh>
-      {/* two-step stone plinth on the plaza */}
+      {/* two-step stone plinth on the floor */}
       <mesh position={[0, FLOOR_Y + 0.75, 0]} rotation={rot} castShadow receiveShadow>
-        <cylinderGeometry args={[6.5, 7.1, 0.5, 8]} />
+        <cylinderGeometry args={[8.6, 9.4, 0.5, 8]} />
         <meshStandardMaterial color="#1a231c" roughness={0.92} metalness={0} />
       </mesh>
       <mesh position={[0, FLOOR_Y + 0.25, 0]} rotation={rot} castShadow receiveShadow>
-        <cylinderGeometry args={[7.6, 8.2, 0.5, 8]} />
+        <cylinderGeometry args={[10.2, 11, 0.5, 8]} />
         <meshStandardMaterial color="#161e18" roughness={0.94} metalness={0} />
       </mesh>
     </group>

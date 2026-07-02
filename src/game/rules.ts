@@ -821,9 +821,13 @@ export function endTurn(state: GameState): GameState {
     }
   }
 
+  // A new round begins when play wraps back to an earlier (or the same) player
+  // in the clockwise order — robust to eliminated players being skipped.
+  const wrapped = state.players.indexOf(next) <= idx;
   let s: GameState = resolveRespawns({
     ...state,
     current: next,
+    turn: state.turn + (wrapped ? 1 : 0),
     turnPhase: 'roll',
     dice: [],
     unitsMovedThisTurn: [],

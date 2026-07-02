@@ -12,6 +12,8 @@ let master: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
 
 function ac(): AudioContext | null {
+  // Respect the Settings toggle — one gate silences every effect.
+  if (useGame.getState().settings.sfxMuted) return null;
   try {
     if (!ctx) {
       ctx = new AudioContext();

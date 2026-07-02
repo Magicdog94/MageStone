@@ -7,6 +7,7 @@
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
+import { useTexture } from '@react-three/drei';
 import type { PlayerColor } from '../game/types';
 import { COLORS, FLOOR_Y } from './coords';
 import {
@@ -30,21 +31,62 @@ const STEEL = { color: '#5f666e', roughness: 0.38, metalness: 0.85 } as const;
 const OAK = { color: '#4a3421', roughness: 0.85, metalness: 0 } as const;
 const DARKOAK = { color: '#2f241a', roughness: 0.9, metalness: 0 } as const;
 const STONE = { color: '#4c463e', roughness: 0.95, metalness: 0 } as const;
-const CLAY = { color: '#96603e', roughness: 0.8, metalness: 0 } as const;
 const GOLDTRIM = { color: '#cba65a', metalness: 0.85, roughness: 0.35 } as const;
+
+/** The real wood-grain photo (shared with the tabletop), cloned per use so each
+ *  surface gets its own repeat — this is what stops the furniture reading as
+ *  flat cartoon colour. `tint` multiplies the photo (darker/warmer variants). */
+function useWoodMap(rx: number, ry: number): THREE.Texture {
+  const base = useTexture('/wood-texture.png') as THREE.Texture;
+  return useMemo(() => {
+    const t = base.clone();
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.repeat.set(rx, ry);
+    t.needsUpdate = true;
+    return t;
+  }, [base, rx, ry]);
+}
+
+/** Grained wood material (photo map + relief bump + tint). */
+function WoodMat({ tint = '#a58860', rx = 0.6, ry = 0.6, rough = 0.8 }: { tint?: string; rx?: number; ry?: number; rough?: number }) {
+  const map = useWoodMap(rx, ry);
+  const bump = useMemo(() => {
+    const t = woodBumpTexture().clone();
+    t.repeat.set(rx * 4, ry * 4);
+    t.needsUpdate = true;
+    return t;
+  }, [rx, ry]);
+  return <meshStandardMaterial map={map} bumpMap={bump} bumpScale={0.05} color={tint} roughness={rough} metalness={0} />;
+}
 
 // ---- small parts ---------------------------------------------------------------
 
-function Pot({ x, z, y, r = 3, h = 6 }: { x: number; z: number; y: number; r?: number; h?: number }) {
+function Pot({
+  x,
+  z,
+  y,
+  r = 3,
+  h = 6,
+  glaze = '#96603e',
+}: {
+  x: number;
+  z: number;
+  y: number;
+  r?: number;
+  h?: number;
+  /** Fired-clay glaze colour — varied per pot so the shelf reads hand-made. */
+  glaze?: string;
+}) {
   return (
     <group position={[x, y, z]}>
       <mesh castShadow>
-        <cylinderGeometry args={[r * 0.75, r, h, 10]} />
-        <meshStandardMaterial {...CLAY} />
+        <cylinderGeometry args={[r * 0.75, r, h, 12]} />
+        <meshStandardMaterial color={glaze} roughness={0.45} metalness={0} />
       </mesh>
       <mesh position={[0, h / 2, 0]}>
         <torusGeometry args={[r * 0.62, r * 0.18, 8, 14]} />
-        <meshStandardMaterial {...CLAY} />
+        <meshStandardMaterial color={glaze} roughness={0.4} metalness={0} />
       </mesh>
     </group>
   );
@@ -55,7 +97,7 @@ function Barrel({ x, z, lean = 0, yaw = 0 }: { x: number; z: number; lean?: numb
     <group position={[x, FLOOR_Y + 14, z]} rotation={[lean, yaw, 0]}>
       <mesh castShadow receiveShadow>
         <cylinderGeometry args={[12, 13.5, 28, 14]} />
-        <meshStandardMaterial {...OAK} />
+        <WoodMat tint="#7d5f3e" rx={0.9} ry={0.45} />
       </mesh>
       {[-9, 0, 9].map((hy) => (
         <mesh key={hy} position={[0, hy, 0]}>
@@ -308,19 +350,24 @@ export function SmithyRoom() {
       <group position={[-48, FLOOR_Y, -26]} rotation={[0, 0.5, 0]}>
         <mesh position={[0, 8, 0]} castShadow receiveShadow>
           <cylinderGeometry args={[8, 9.5, 16, 12]} />
-          <meshStandardMaterial {...OAK} bumpMap={woodBump} bumpScale={0.05} />
+          <WoodMat tint="#6e5233" rx={0.7} ry={0.5} rough={0.9} />
         </mesh>
+        {/* dark forged body, brighter work-polished face */}
         <mesh position={[0, 18.5, 0]} castShadow>
           <boxGeometry args={[10, 5, 7]} />
-          <meshStandardMaterial {...STEEL} />
+          <meshStandardMaterial color="#33383e" roughness={0.55} metalness={0.8} />
         </mesh>
         <mesh position={[0, 22.5, 0]} castShadow>
           <boxGeometry args={[15, 3.5, 6]} />
-          <meshStandardMaterial {...STEEL} />
+          <meshStandardMaterial color="#33383e" roughness={0.55} metalness={0.8} />
+        </mesh>
+        <mesh position={[0, 24.3, 0]}>
+          <boxGeometry args={[14.6, 0.3, 5.6]} />
+          <meshStandardMaterial color="#9aa2ac" roughness={0.22} metalness={0.9} />
         </mesh>
         <mesh position={[10, 22.5, 0]} rotation={[0, 0, -Math.PI / 2]} castShadow>
           <coneGeometry args={[2.6, 9, 10]} />
-          <meshStandardMaterial {...STEEL} />
+          <meshStandardMaterial color="#3c4147" roughness={0.5} metalness={0.8} />
         </mesh>
         {/* hammer resting on the face */}
         <mesh position={[-3, 25.2, 1]} rotation={[0, 0.4, 0]}>
@@ -351,7 +398,7 @@ export function SmithyRoom() {
       <group position={[34, FLOOR_Y, 76]}>
         <mesh position={[0, 26, 0]} castShadow receiveShadow>
           <boxGeometry args={[56, 4, 20]} />
-          <meshStandardMaterial {...OAK} bumpMap={woodBump} bumpScale={0.05} />
+          <WoodMat tint="#967448" rx={1.4} ry={0.5} rough={0.75} />
         </mesh>
         {[-24, 24].map((lx) =>
           [-7, 7].map((lz) => (
@@ -383,14 +430,14 @@ export function SmithyRoom() {
         {[40, 56].map((sy) => (
           <mesh key={sy} position={[0, sy, 0]} castShadow>
             <boxGeometry args={[10, 3, 44]} />
-            <meshStandardMaterial {...OAK} />
+            <WoodMat tint="#8a6a44" rx={1.1} ry={0.3} />
           </mesh>
         ))}
-        <Pot x={0} z={-14} y={44.5} r={3.4} h={7} />
-        <Pot x={0} z={-2} y={44} r={4.2} h={6} />
-        <Pot x={0} z={12} y={44.5} r={2.8} h={7.5} />
-        <Pot x={0} z={-8} y={60} r={3.6} h={6.5} />
-        <Pot x={0} z={6} y={60.5} r={3} h={7.5} />
+        <Pot x={0} z={-14} y={44.5} r={3.4} h={7} glaze="#96603e" />
+        <Pot x={0} z={-2} y={44} r={4.2} h={6} glaze="#5d6e52" />
+        <Pot x={0} z={12} y={44.5} r={2.8} h={7.5} glaze="#7a4a33" />
+        <Pot x={0} z={-8} y={60} r={3.6} h={6.5} glaze="#4f5d6e" />
+        <Pot x={0} z={6} y={60.5} r={3} h={7.5} glaze="#8a6a3e" />
       </group>
       {/* barrels + crates in the corners */}
       <Barrel x={58} z={-72} />
@@ -404,7 +451,7 @@ export function SmithyRoom() {
         <group key={i} position={[cx, FLOOR_Y + s / 2 + (i === 2 ? 22 : 0), cz]} rotation={[0, ry, 0]}>
           <mesh castShadow receiveShadow>
             <boxGeometry args={[s, s, s]} />
-            <meshStandardMaterial {...OAK} bumpMap={woodBump} bumpScale={0.04} />
+            <WoodMat tint="#84663f" rx={0.6} ry={0.6} />
           </mesh>
           <mesh>
             <boxGeometry args={[s * 1.04, s * 0.14, s * 1.04]} />
@@ -417,7 +464,7 @@ export function SmithyRoom() {
         {[-5, 5].map((lz) => (
           <mesh key={lz} position={[0, 39, lz]} castShadow>
             <cylinderGeometry args={[1.4, 1.6, 78, 8]} />
-            <meshStandardMaterial {...OAK} />
+            <WoodMat tint="#94744c" rx={0.3} ry={1.4} />
           </mesh>
         ))}
         {Array.from({ length: 7 }, (_, k) => (
@@ -521,6 +568,88 @@ export function TeamBanners() {
     <group>
       {players.map((p) => (
         <WallBanner key={p} color={p} seat={seats[p]} />
+      ))}
+    </group>
+  );
+}
+
+// ---- chairs at the table --------------------------------------------------------
+
+/** A tall oak game chair (seat ~1.15 m — matched to the 1.5 m table) with a
+ *  footrest stretcher and a cushion in the player's colour. */
+function GameChair({ color, seat }: { color: PlayerColor; seat: number }) {
+  const [dx, dz] = SEAT_DIR[seat] ?? SEAT_DIR[0];
+  const yaw = Math.atan2(-dx, -dz); // chair faces the table
+  const SEAT_H = 37;
+  return (
+    <group position={[dx * 18, FLOOR_Y, dz * 18]} rotation={[0, yaw, 0]}>
+      {/* legs, slightly splayed, with footrest stretchers */}
+      {[-6.5, 6.5].map((lx) =>
+        [-6, 6].map((lz) => (
+          <mesh
+            key={`${lx}${lz}`}
+            position={[lx, SEAT_H / 2, lz]}
+            rotation={[lz > 0 ? -0.03 : 0.03, 0, lx > 0 ? -0.03 : 0.03]}
+            castShadow
+          >
+            <cylinderGeometry args={[1.1, 1.5, SEAT_H, 8]} />
+            <WoodMat tint="#7a5c38" rx={0.25} ry={0.9} />
+          </mesh>
+        )),
+      )}
+      {[
+        [0, -6, 14, 0],
+        [0, 6, 14, 0],
+        [-6.5, 0, 14, Math.PI / 2],
+        [6.5, 0, 14, Math.PI / 2],
+      ].map(([sx, sz, sy, ry], i) => (
+        <mesh key={i} position={[sx, sy, sz]} rotation={[Math.PI / 2, 0, ry]} castShadow>
+          <cylinderGeometry args={[0.8, 0.8, 12, 6]} />
+          <WoodMat tint="#6e5233" rx={0.2} ry={0.6} />
+        </mesh>
+      ))}
+      {/* seat + team cushion */}
+      <mesh position={[0, SEAT_H + 1, 0]} castShadow receiveShadow>
+        <boxGeometry args={[16, 2.4, 15]} />
+        <WoodMat tint="#8a6a44" rx={0.5} ry={0.5} />
+      </mesh>
+      <mesh position={[0, SEAT_H + 3, 0.4]}>
+        <boxGeometry args={[13.5, 1.8, 12.5]} />
+        <meshStandardMaterial color={COLORS[color]} roughness={0.92} metalness={0} />
+      </mesh>
+      {/* tall back with an arched gold-capped top (leans back a touch) */}
+      <group position={[0, SEAT_H + 2, -6.6]} rotation={[0.09, 0, 0]}>
+        {[-6.2, 6.2].map((bx) => (
+          <mesh key={bx} position={[bx, 13, 0]} castShadow>
+            <cylinderGeometry args={[1, 1.2, 26, 8]} />
+            <WoodMat tint="#7a5c38" rx={0.25} ry={0.9} />
+          </mesh>
+        ))}
+        <mesh position={[0, 14, 0]} castShadow>
+          <boxGeometry args={[12.4, 18, 1.6]} />
+          <WoodMat tint="#84663f" rx={0.45} ry={0.6} />
+        </mesh>
+        <mesh position={[0, 26.4, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[7.2, 7.2, 1.8, 12, 1, false, 0, Math.PI]} />
+          <WoodMat tint="#6e5233" rx={0.4} ry={0.4} />
+        </mesh>
+        <mesh position={[0, 27.2, 0]}>
+          <sphereGeometry args={[1.3, 8, 8]} />
+          <meshStandardMaterial {...GOLDTRIM} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+/** A chair at the table for every PLAYING colour, at its seat side. */
+export function TableChairs() {
+  const players = useGame((s) => s.game.players);
+  const seats = useGame((s) => s.game.seats);
+  return (
+    <group>
+      {players.map((p) => (
+        <GameChair key={p} color={p} seat={seats[p]} />
       ))}
     </group>
   );

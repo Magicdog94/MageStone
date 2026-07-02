@@ -245,6 +245,7 @@ function NewGameModal() {
 function SettingsModal() {
   const settings = useGame((s) => s.settings);
   const setTurnSeconds = useGame((s) => s.setTurnSeconds);
+  const setSfxMuted = useGame((s) => s.setSfxMuted);
   const openModal = useGame((s) => s.openModal);
   const closeModal = useGame((s) => s.closeModal);
   const status = useNet((s) => s.status);
@@ -272,6 +273,17 @@ function SettingsModal() {
           value={settings.turnSeconds ?? 0}
           onChange={(v) => setTurnSeconds(v === 0 ? null : v)}
           ariaLabel="Turn timer"
+        />
+      </Field>
+      <Field label="Sound effects" hint="Moves, clashes, dice and UI clicks">
+        <Segmented<'on' | 'off'>
+          options={[
+            { value: 'on', label: 'On' },
+            { value: 'off', label: 'Off' },
+          ]}
+          value={settings.sfxMuted ? 'off' : 'on'}
+          onChange={(v) => setSfxMuted(v === 'off')}
+          ariaLabel="Sound effects"
         />
       </Field>
       <div className="modal-section">Server</div>

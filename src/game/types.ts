@@ -93,6 +93,9 @@ export interface GameState {
    *  seated opposite each other in a 2-player game. */
   seats: Record<PlayerColor, number>;
   current: PlayerColor;
+  /** Round number, starting at 1 — increments when play wraps back to the
+   *  first still-active player. */
+  turn: number;
   turnPhase: TurnPhase;
   dice: Die[];
   units: Unit[];

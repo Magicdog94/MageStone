@@ -791,7 +791,8 @@
   box-shadow: 0 0 14px rgba(201, 162, 74, 0.35);
   animation: ritual-pulse 2s ease-in-out infinite;
 }
-.grave-bank {
+.grave-bank,
+.turn-chip {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
@@ -804,6 +805,10 @@
   font-family: var(--display);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
+}
+.turn-chip {
+  color: var(--gold-bright);
+  letter-spacing: 0.04em;
 }
 .grave-bank svg {
   color: var(--gold-bright);

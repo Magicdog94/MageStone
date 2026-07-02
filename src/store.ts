@@ -40,6 +40,8 @@ export interface Settings {
   healthBars: HealthBarMode;
   /** Per-turn time limit in seconds, or null for no limit. */
   turnSeconds: number | null;
+  /** Silence the sound effects (music has its own toggle). */
+  sfxMuted: boolean;
 }
 
 interface UIState {
@@ -99,6 +101,7 @@ interface UIState {
   closeModal: () => void;
   setHealthBars: (mode: HealthBarMode) => void;
   setTurnSeconds: (seconds: number | null) => void;
+  setSfxMuted: (muted: boolean) => void;
   setHovered: (unitId: string | null) => void;
 
   roll: () => void;
@@ -133,7 +136,7 @@ export const useGame = create<UIState>((set) => ({
   playerCount: 2,
   playerColors: playerSet(2),
   stoneLayoutId: 'diamond',
-  settings: { healthBars: 'off', turnSeconds: 60 },
+  settings: { healthBars: 'off', turnSeconds: 60, sfxMuted: false },
   // Open the New Game selector on first load so the player chooses players/timer
   // before the turn timer starts (the timer pauses while any modal is open).
   modal: 'newGame',
@@ -203,6 +206,7 @@ export const useGame = create<UIState>((set) => ({
   closeModal: () => set({ modal: null }),
   setHealthBars: (mode) => set((s) => ({ settings: { ...s.settings, healthBars: mode } })),
   setTurnSeconds: (seconds) => set((s) => ({ settings: { ...s.settings, turnSeconds: seconds } })),
+  setSfxMuted: (muted) => set((s) => ({ settings: { ...s.settings, sfxMuted: muted } })),
   setHovered: (unitId) => set({ hoveredUnitId: unitId }),
 
   roll: () =>

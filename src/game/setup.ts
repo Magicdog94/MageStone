@@ -157,6 +157,7 @@ function buildGame(players: PlayerColor[], layout: StoneLayout): GameState {
     players,
     seats,
     current: players[0],
+    turn: 1,
     turnPhase: 'roll',
     dice: [],
     units: makeUnits(players, seats),

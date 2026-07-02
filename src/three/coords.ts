@@ -20,9 +20,12 @@ export const COLORS: Record<PlayerColor, string> = {
 // the raised gold trim so tiles read as recessed pockets.
 export const TILE_SURFACE = 0.18;
 
-// The stone plaza the table's stand rises from (world Y). Shared by the table
-// stand (Board.tsx) and the arena environment (Scene.tsx) so they always meet.
-export const FLOOR_Y = -4.8;
+// The smithy floor (world Y). The board is a real ~0.5 m chessboard (1 m ≈ 32
+// units), and the tabletop sits at y≈0 — so a floor at −48 puts the playing
+// surface 1.5 m off the ground: seated-player height, with the wall banners
+// visible behind the board. Shared by the table stand (Board.tsx) and the room
+// (Scene.tsx / Decor.tsx) so they always meet.
+export const FLOOR_Y = -48;
 
 export const BOARD = {
   // Themed emerald-marble surface with the gold arcane inlay + Nexus emblem,

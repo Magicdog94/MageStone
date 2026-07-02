@@ -167,6 +167,7 @@ function buildGame(players: PlayerColor[], layout: StoneLayout): GameState {
     ritual: null,
     lastCombat: null,
     pendingRespawns: [],
+    eliminated: [],
     kills: { red: 0, blue: 0, green: 0, yellow: 0 },
     winner: null,
     log: [`${players[0]} to start. Roll the dice.`],

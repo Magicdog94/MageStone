@@ -103,6 +103,9 @@ export interface GameState {
   ritual: Ritual | null;
   lastCombat: CombatResult | null;
   pendingRespawns: PendingRespawn[];
+  /** Players knocked out of the game: reduced to zero units on the board while
+   *  their base was besieged. They take no turns and never respawn. */
+  eliminated: PlayerColor[];
   /** Enemy units each player has defeated (kill counter). */
   kills: Record<PlayerColor, number>;
   winner: PlayerColor | null;

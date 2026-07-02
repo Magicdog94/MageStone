@@ -12,6 +12,7 @@ import {
 } from '../game/rules';
 import { PipDie } from './Die';
 import { CombatRoll } from './CombatRoll';
+import { EliminationToast } from './EliminationToast';
 import { PlayerStrip } from './PlayerStrip';
 import { SiegeBanner } from './SiegeBanner';
 import { TurnTimer } from './TurnTimer';
@@ -126,6 +127,7 @@ export function HUD() {
         </div>
       )}
       <SiegeBanner />
+      <EliminationToast />
       <button className="gear" onClick={() => openModal('settings')} aria-label="Settings">
         <CogIcon size={20} />
       </button>

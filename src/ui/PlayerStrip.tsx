@@ -21,17 +21,24 @@ export function PlayerStrip() {
         const activated = mage ? mage.activated : (queued?.activated ?? 0);
         const kills = game.kills[p];
         const active = game.current === p && !game.winner;
+        const out = game.eliminated.includes(p);
         return (
           <div
             key={p}
-            className={`pstat${active ? ' active' : ''}`}
+            className={`pstat${active ? ' active' : ''}${out ? ' out' : ''}`}
             style={{ '--pc': COLORS[p] } as CSSProperties}
           >
             <span className="pstat-name">{p}</span>
-            {bots[p] && (
-              <span className="pstat-badge tip" data-tip={`AI bot — ${bots[p]}`}>
-                BOT
+            {out ? (
+              <span className="pstat-badge tip" data-tip="Eliminated — no units left">
+                OUT
               </span>
+            ) : (
+              bots[p] && (
+                <span className="pstat-badge tip" data-tip={`AI bot — ${bots[p]}`}>
+                  BOT
+                </span>
+              )
             )}
             <span className="pstat-metric tip" data-tip="Unactivated MageStones (carried)">
               {silverUrl ? (

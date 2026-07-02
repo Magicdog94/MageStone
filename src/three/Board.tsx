@@ -230,18 +230,18 @@ function useGoldMaterial(emissive = 0.12) {
 }
 
 /** A pulsing wash over a base tile whose owner is under siege (an enemy is
- *  standing on the base, so its Mage/Priest can't respawn). Coloured in the
- *  besieging team's colour and sitting just above the owner's team wash, so the
- *  base reads as claimed by the attacker. */
+ *  standing on the base, so its Mage/Priest can't respawn). The owner's team
+ *  wash is suppressed underneath and this overlay runs near-opaque, so the base
+ *  reads in the besieging team's EXACT colour. */
 function SiegeGlow({ color }: { color: string }) {
   const mat = useRef<THREE.MeshBasicMaterial>(null);
   useFrame(({ clock }) => {
-    if (mat.current) mat.current.opacity = 0.34 + 0.26 * (0.5 + 0.5 * Math.sin(clock.elapsedTime * 3.2));
+    if (mat.current) mat.current.opacity = 0.62 + 0.2 * (0.5 + 0.5 * Math.sin(clock.elapsedTime * 3.2));
   });
   return (
     <mesh position={[0, TILE_TOP + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
       <planeGeometry args={[CELL * TILE_INSET, CELL * TILE_INSET]} />
-      <meshBasicMaterial ref={mat} color={color} transparent opacity={0.4} depthWrite={false} />
+      <meshBasicMaterial ref={mat} color={color} transparent opacity={0.72} depthWrite={false} />
     </mesh>
   );
 }
@@ -313,8 +313,9 @@ function Tile({
       </mesh>
 
       {/* Translucent team wash sitting above the painted art, so the base square
-          reads as that team's colour while the artwork still shows beneath. */}
-      {baseColor && !legal && (
+          reads as that team's colour while the artwork still shows beneath.
+          Hidden while under siege so the attacker's exact colour shows alone. */}
+      {baseColor && !legal && !siege && (
         <mesh position={[0, TILE_TOP + 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[CELL * TILE_INSET, CELL * TILE_INSET]} />
           <meshBasicMaterial color={baseColor} transparent opacity={0.42} />

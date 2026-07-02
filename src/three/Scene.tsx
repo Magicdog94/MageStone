@@ -5,21 +5,20 @@ import { ContactShadows, Environment, Lightformer, OrbitControls } from '@react-
 import { Board } from './Board';
 import { DiceLayer } from './Dice';
 import { BoardTokens, ClashEffect, DeathAnimations, Units } from './Pieces';
-import { arenaCircleTexture, duelNightTexture, groundBumpTexture, stoneFloorTexture } from './textures';
+import { arenaCircleTexture, groundBumpTexture, hazyFogTexture, stoneFloorTexture } from './textures';
 import { FLOOR_Y } from './coords';
 import { useGame } from '../store';
 
 /**
- * Duel-night backdrop — the box-cover scene painted onto an equirectangular
- * texture and set as the scene background (a skydome): emerald storm sky,
- * arcane sigil, mountain + forest silhouettes, and the two rival castles
- * (blue-lit and red-lit). The studio Environment still drives the gold
- * reflections; this only paints the world.
+ * Fog backdrop — a cold, hazy night painted onto an equirectangular texture and
+ * set as the scene background (a skydome): drifting fog banks, a smothered
+ * moon-glow and darkness above. The studio Environment still drives the gold
+ * reflections; this only paints the murk.
  */
-function DuelBackdrop() {
+function FogBackdrop() {
   const scene = useThree((s) => s.scene);
   useEffect(() => {
-    const tex = duelNightTexture();
+    const tex = hazyFogTexture();
     tex.mapping = THREE.EquirectangularReflectionMapping;
     const prev = scene.background;
     // Three.js scene background is an imperative API; assigning it is the side
@@ -34,18 +33,83 @@ function DuelBackdrop() {
 }
 
 /** Procedural studio environment — drives metallic gold reflections, no HDRI.
- *  Warm gilt key with emerald sheen, plus faint blue/red formers echoing the
- *  duelling mages of the cover. */
+ *  Pale moonlit formers with a warm lantern glow low down, so gilt still
+ *  glints through the murk. */
 function StudioEnv() {
   return (
     <Environment resolution={256} frames={1}>
-      <color attach="background" args={['#07120c']} />
-      <Lightformer intensity={2.6} position={[0, 6, 2]} scale={[12, 12, 1]} color="#ffe6b8" />
-      <Lightformer intensity={1.3} position={[-6, 3, 4]} scale={[6, 8, 1]} color="#bfe8d0" />
-      <Lightformer intensity={1.2} position={[6, 3, -4]} scale={[6, 8, 1]} color="#ffcf8a" />
-      <Lightformer intensity={0.8} position={[-8, 2, -2]} scale={[5, 7, 1]} color="#4a86c8" />
-      <Lightformer intensity={0.7} position={[8, 2, 2]} scale={[5, 7, 1]} color="#c85a42" />
+      <color attach="background" args={['#0a0f0c']} />
+      <Lightformer intensity={1.8} position={[0, 6, 2]} scale={[12, 12, 1]} color="#cfdcd4" />
+      <Lightformer intensity={1.0} position={[-6, 3, 4]} scale={[6, 8, 1]} color="#aebfb4" />
+      <Lightformer intensity={1.1} position={[6, 1, -4]} scale={[6, 5, 1]} color="#ffcf8a" />
+      <Lightformer intensity={0.8} position={[-6, 1, -4]} scale={[6, 5, 1]} color="#ffb87a" />
     </Environment>
+  );
+}
+
+/** Iron floor lanterns ringing the arena — small pools of warm, flickering
+ *  light in the cold fog. The flame lights share one flicker clock. */
+function Lanterns() {
+  const lights = useRef<(THREE.PointLight | null)[]>([]);
+  const spots = useMemo(
+    () =>
+      Array.from({ length: 8 }, (_, i) => {
+        const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+        const r = 16.4 + (i % 2) * 1.4;
+        return { x: Math.cos(a) * r, z: Math.sin(a) * r, phase: i * 1.7 };
+      }),
+    [],
+  );
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    spots.forEach((s, i) => {
+      const l = lights.current[i];
+      if (l) l.intensity = 2.0 + 0.35 * Math.sin(t * 7 + s.phase) + 0.2 * Math.sin(t * 23 + s.phase * 2.3);
+    });
+  });
+  return (
+    <group>
+      {spots.map((s, i) => (
+        <group key={i} position={[s.x, FLOOR_Y, s.z]}>
+          {/* stone footing + iron base */}
+          <mesh position={[0, 0.05, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.3, 0.36, 0.1, 10]} />
+            <meshStandardMaterial color="#191d1a" roughness={0.9} />
+          </mesh>
+          {/* glass body with the flame inside */}
+          <mesh position={[0, 0.34, 0]}>
+            <cylinderGeometry args={[0.15, 0.18, 0.42, 10]} />
+            <meshStandardMaterial
+              color="#3a2a18"
+              emissive="#ffb066"
+              emissiveIntensity={1.7}
+              roughness={0.4}
+              transparent
+              opacity={0.92}
+            />
+          </mesh>
+          {/* iron cap + finial */}
+          <mesh position={[0, 0.62, 0]} castShadow>
+            <coneGeometry args={[0.24, 0.2, 10]} />
+            <meshStandardMaterial color="#14171a" roughness={0.7} metalness={0.4} />
+          </mesh>
+          <mesh position={[0, 0.75, 0]}>
+            <sphereGeometry args={[0.045, 8, 8]} />
+            <meshStandardMaterial color="#cba65a" metalness={0.8} roughness={0.4} />
+          </mesh>
+          <pointLight
+            ref={(el) => {
+              lights.current[i] = el;
+            }}
+            position={[0, 0.4, 0]}
+            color="#ff9e5a"
+            intensity={2}
+            distance={13}
+            decay={1.9}
+          />
+        </group>
+      ))}
+    </group>
   );
 }
 
@@ -58,13 +122,13 @@ function StudioEnv() {
 function ArenaEnvironment() {
   const floorMap = useMemo(() => {
     const t = stoneFloorTexture();
-    t.repeat.set(20, 20);
+    t.repeat.set(12, 12); // large slabs — ~7-unit courses across the plaza
     return t;
   }, []);
   const floorBump = useMemo(() => {
     // Clone: the board tiles share this texture at repeat 1.
     const t = groundBumpTexture().clone();
-    t.repeat.set(20, 20);
+    t.repeat.set(12, 12);
     t.needsUpdate = true;
     return t;
   }, []);
@@ -247,17 +311,20 @@ export function Scene() {
       gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
       onPointerMissed={() => clearSelection(null)}
     >
-      <fog attach="fog" args={['#04100a', 34, 90]} />
+      {/* dense cold fog — the arena dissolves into the murk */}
+      <fog attach="fog" args={['#151c18', 26, 64]} />
 
-      <DuelBackdrop />
+      <FogBackdrop />
       <StudioEnv />
       <ArenaEnvironment />
-      <hemisphereLight args={['#8fb8a0', '#0a1410', 0.5]} />
-      <ambientLight intensity={0.12} color={'#cfe0d0'} />
+      <Lanterns />
+      <hemisphereLight args={['#5d6f63', '#0a0f0b', 0.4]} />
+      <ambientLight intensity={0.1} color={'#b9c8bd'} />
+      {/* pale moonlight through the fog — cool and dimmer than before */}
       <directionalLight
         position={[10, 18, 8]}
-        intensity={2.3}
-        color={'#fff1d8'}
+        intensity={1.5}
+        color={'#dfe8ea'}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0002}
@@ -266,9 +333,11 @@ export function Scene() {
         shadow-camera-top={16}
         shadow-camera-bottom={-16}
       />
-      {/* the duelling mages' light: blue rim from the left, red from the right */}
-      <directionalLight position={[-14, 7, -8]} intensity={0.5} color={'#6fb6e8'} />
-      <directionalLight position={[14, 6, -8]} intensity={0.45} color={'#e8785a'} />
+      {/* a soft cold pool over the table keeps the board readable in the gloom */}
+      <spotLight position={[0, 20, 0]} angle={0.62} penumbra={1} intensity={1.4} color={'#cfe0d4'} />
+      {/* the duelling mages' light, faint through the fog */}
+      <directionalLight position={[-14, 7, -8]} intensity={0.3} color={'#6fb6e8'} />
+      <directionalLight position={[14, 6, -8]} intensity={0.28} color={'#e8785a'} />
 
       <Suspense fallback={null}>
         <Board />

@@ -339,102 +339,16 @@ export function emeraldBoardTexture(): THREE.Texture {
   return finish(c, 'emeraldBoard');
 }
 
-// ---- Duel-night backdrop (equirectangular, box-cover theme) ---------------
-
-/** One tower of a castle silhouette: keep body, battlements and a spire. */
-function tower(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  baseY: number,
-  w: number,
-  h: number,
-  fill: string,
-) {
-  ctx.fillStyle = fill;
-  ctx.fillRect(x - w / 2, baseY - h, w, h);
-  // battlement teeth
-  const teeth = Math.max(2, Math.round(w / 12));
-  const tw = w / (teeth * 2 - 1);
-  for (let i = 0; i < teeth; i++) {
-    ctx.fillRect(x - w / 2 + i * tw * 2, baseY - h - tw * 1.4, tw, tw * 1.4);
-  }
-  // spire
-  ctx.beginPath();
-  ctx.moveTo(x - w * 0.34, baseY - h - tw * 1.2);
-  ctx.lineTo(x, baseY - h - tw * 1.2 - h * 0.55);
-  ctx.lineTo(x + w * 0.34, baseY - h - tw * 1.2);
-  ctx.closePath();
-  ctx.fill();
-}
-
-/** A gothic castle silhouette on a crag, rim-lit and haloed in `glowRGB`. */
-function castle(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  horizon: number,
-  scale: number,
-  glowRGB: string,
-  rim: string,
-) {
-  // halo behind the keep
-  const g = ctx.createRadialGradient(x, horizon - scale * 0.5, 0, x, horizon - scale * 0.5, scale * 1.9);
-  g.addColorStop(0, `rgba(${glowRGB},0.34)`);
-  g.addColorStop(0.55, `rgba(${glowRGB},0.12)`);
-  g.addColorStop(1, `rgba(${glowRGB},0)`);
-  ctx.fillStyle = g;
-  ctx.fillRect(x - scale * 2, horizon - scale * 2.4, scale * 4, scale * 2.6);
-
-  // crag the castle stands on
-  const dark = '#04100b';
-  ctx.fillStyle = dark;
-  ctx.beginPath();
-  ctx.moveTo(x - scale * 1.5, horizon + 4);
-  ctx.lineTo(x - scale * 0.8, horizon - scale * 0.34);
-  ctx.lineTo(x - scale * 0.2, horizon - scale * 0.2);
-  ctx.lineTo(x + scale * 0.5, horizon - scale * 0.4);
-  ctx.lineTo(x + scale * 1.4, horizon + 4);
-  ctx.closePath();
-  ctx.fill();
-
-  // towers (central keep flanked by smaller ones)
-  tower(ctx, x, horizon - scale * 0.3, scale * 0.34, scale * 0.9, dark);
-  tower(ctx, x - scale * 0.42, horizon - scale * 0.26, scale * 0.24, scale * 0.55, dark);
-  tower(ctx, x + scale * 0.4, horizon - scale * 0.3, scale * 0.22, scale * 0.62, dark);
-  tower(ctx, x - scale * 0.75, horizon - scale * 0.1, scale * 0.18, scale * 0.34, dark);
-  tower(ctx, x + scale * 0.78, horizon - scale * 0.12, scale * 0.16, scale * 0.4, dark);
-
-  // rim light on the glow side + a few lit windows
-  ctx.strokeStyle = rim;
-  ctx.lineWidth = 2.4;
-  ctx.globalAlpha = 0.5;
-  for (const [tx, tw2, th] of [
-    [x, scale * 0.34, scale * 0.9],
-    [x + scale * 0.4, scale * 0.22, scale * 0.62],
-  ] as const) {
-    ctx.beginPath();
-    ctx.moveTo(tx - tw2 / 2, horizon - scale * 0.3);
-    ctx.lineTo(tx - tw2 / 2, horizon - scale * 0.3 - th);
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = rim;
-  for (let i = 0; i < 10; i++) {
-    const wx = x + (Math.random() - 0.5) * scale * 1.1;
-    const wy = horizon - scale * (0.25 + Math.random() * 0.75);
-    ctx.globalAlpha = 0.25 + Math.random() * 0.4;
-    ctx.fillRect(wx, wy, 3, 5);
-  }
-  ctx.globalAlpha = 1;
-}
+// ---- Hazy fog backdrop (equirectangular) -----------------------------------
 
 /**
- * The scene background: the box-cover duel at night painted onto an
- * equirectangular skydome. An emerald storm sky with a green-gold radiance and
- * a faint arcane sigil over the board, stars, layered mountain + forest
- * silhouettes wrapping 360°, and two rival castles — one rim-lit blue, one red —
- * flanking the default view. Not cached/disposed — lives for the app's lifetime.
+ * The scene background: a cold, hazy night fog painted onto an equirectangular
+ * skydome. No scenery — just layered drifting fog banks around the horizon, a
+ * faint moonlit glow lost in the murk, and darkness above. Matches the scene
+ * fog colour so the floor dissolves seamlessly into the distance. Eerie by
+ * design. Not cached/disposed — lives for the app's lifetime.
  */
-export function duelNightTexture(): THREE.Texture {
+export function hazyFogTexture(): THREE.Texture {
   const W = 4096;
   const H = 2048;
   const c = document.createElement('canvas');
@@ -442,48 +356,46 @@ export function duelNightTexture(): THREE.Texture {
   c.height = H;
   const ctx = c.getContext('2d')!;
   const HORIZON = H * 0.5;
-  const FX = W * 0.25; // the default camera looks toward u=0.25
 
-  // emerald night sky → dark ground haze below the horizon
+  // cold desaturated night: near-black zenith → pale fog band → dark ground
   const sky = ctx.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, '#050f0a');
-  sky.addColorStop(0.18, '#0b2417');
-  sky.addColorStop(0.38, '#123727');
-  sky.addColorStop(0.47, '#1d5434');
-  sky.addColorStop(0.5, '#0a1f14');
-  sky.addColorStop(0.56, '#04100a');
-  sky.addColorStop(1, '#020705');
+  sky.addColorStop(0, '#05070a');
+  sky.addColorStop(0.24, '#0b0f10');
+  sky.addColorStop(0.4, '#161d1c');
+  sky.addColorStop(0.48, '#28322f');
+  sky.addColorStop(0.52, '#242e2b');
+  sky.addColorStop(0.6, '#121815');
+  sky.addColorStop(1, '#05080a');
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, W, H);
 
-  // green-gold radiance behind the front of the scene (the cover's title glow)
-  let g = ctx.createRadialGradient(FX, H * 0.4, 0, FX, H * 0.4, H * 0.56);
-  g.addColorStop(0, 'rgba(120,190,120,0.38)');
-  g.addColorStop(0.5, 'rgba(80,140,90,0.16)');
-  g.addColorStop(1, 'rgba(80,140,90,0)');
+  // a cold moon glow, smothered by the fog (over the default view, u≈0.25)
+  const FX = W * 0.25;
+  let g = ctx.createRadialGradient(FX, H * 0.34, 0, FX, H * 0.34, H * 0.4);
+  g.addColorStop(0, 'rgba(180,200,195,0.16)');
+  g.addColorStop(0.4, 'rgba(150,170,165,0.07)');
+  g.addColorStop(1, 'rgba(150,170,165,0)');
   ctx.fillStyle = g;
-  ctx.fillRect(FX - H * 0.6, 0, H * 1.2, H * 0.55);
-  g = ctx.createRadialGradient(FX, H * 0.42, 0, FX, H * 0.42, H * 0.2);
-  g.addColorStop(0, 'rgba(225,235,170,0.25)');
-  g.addColorStop(1, 'rgba(225,235,170,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(FX - H * 0.25, H * 0.2, H * 0.5, H * 0.45);
+  ctx.fillRect(FX - H * 0.45, 0, H * 0.9, H * 0.6);
 
-  // storm clouds — dark emerald blobs swirling around the sky band (each drawn
-  // at x and x±W so the equirect seam stays invisible)
-  const cloudGreens = ['#08160e', '#0d2517', '#123122', '#1a4229'];
-  for (let i = 0; i < 240; i++) {
+  // layered fog banks drifting around the whole horizon — wide, soft, and
+  // slightly varied in temperature so the murk reads as depth, not a gradient.
+  // Each blob is drawn at x and x±W so the equirect seam stays invisible.
+  const fogs = ['#39443f', '#2e3936', '#46524c', '#26302c', '#515e57'];
+  for (let i = 0; i < 300; i++) {
     const x = Math.random() * W;
-    const y = (0.04 + Math.random() * 0.4) * H;
-    const rx = 120 + Math.random() * 420;
-    const ry = rx * (0.22 + Math.random() * 0.2);
-    const col = cloudGreens[(Math.random() * cloudGreens.length) | 0];
-    const a = 0.2 + Math.random() * 0.3;
+    const band = Math.random();
+    // most banks hug the horizon; a few wisps climb higher or sink lower
+    const y = band < 0.7 ? H * (0.42 + Math.random() * 0.16) : H * (0.28 + Math.random() * 0.42);
+    const rx = 180 + Math.random() * 520;
+    const ry = rx * (0.1 + Math.random() * 0.14);
+    const col = fogs[(Math.random() * fogs.length) | 0];
+    const a = 0.045 + Math.random() * 0.1;
     for (const ox of [0, -W, W]) {
-      const cg = ctx.createRadialGradient(x + ox, y, 0, x + ox, y, rx);
-      cg.addColorStop(0, col + Math.round(a * 255).toString(16).padStart(2, '0'));
-      cg.addColorStop(1, col + '00');
-      ctx.fillStyle = cg;
+      const fg = ctx.createRadialGradient(x + ox, y, 0, x + ox, y, rx);
+      fg.addColorStop(0, col + Math.round(a * 255).toString(16).padStart(2, '0'));
+      fg.addColorStop(1, col + '00');
+      ctx.fillStyle = fg;
       ctx.save();
       ctx.translate(x + ox, y);
       ctx.scale(1, ry / rx);
@@ -493,116 +405,25 @@ export function duelNightTexture(): THREE.Texture {
       ctx.restore();
     }
   }
-  // gold-lit cloud rims near the radiance
-  for (let i = 0; i < 46; i++) {
-    const x = FX + (Math.random() - 0.5) * W * 0.24;
-    const y = (0.16 + Math.random() * 0.26) * H;
-    const rx = 90 + Math.random() * 260;
-    const cg = ctx.createRadialGradient(x, y, 0, x, y, rx);
-    cg.addColorStop(0, 'rgba(200,180,100,0.12)');
-    cg.addColorStop(1, 'rgba(200,180,100,0)');
-    ctx.fillStyle = cg;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(1, 0.32);
-    ctx.beginPath();
-    ctx.arc(0, 0, rx, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
 
-  // stars
-  for (let i = 0; i < 420; i++) {
-    const y = Math.random() * H * 0.42;
-    const v = 190 + ((Math.random() * 60) | 0);
-    ctx.fillStyle = `rgba(${v},${v + 8},${v - 20},${0.12 + Math.random() * 0.45})`;
-    ctx.fillRect(Math.random() * W, y, Math.random() < 0.2 ? 2 : 1, 1);
-  }
-
-  // faint arcane sigil hanging in the sky over the board — the cover's rune
-  // circle. Drawn as an ellipse widened by 1/cos(elevation) so it reads as a
-  // circle on the skydome.
-  {
-    const sy = H * 0.33;
-    const elev = (1 - sy / H - 0.5) * Math.PI;
-    const stretch = 1 / Math.cos(elev);
-    const r = H * 0.15;
-    ctx.save();
-    ctx.translate(FX, sy);
-    ctx.scale(stretch, 1);
-    ctx.strokeStyle = 'rgba(214,178,94,0.13)';
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 0.94, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(214,178,94,0.1)';
-    for (let i = 0; i < 28; i++) {
-      const a = (i / 28) * Math.PI * 2;
-      runeGlyph(ctx, Math.cos(a) * r * 0.88, Math.sin(a) * r * 0.88, r * 0.06, a + Math.PI / 2);
-    }
-    ctx.shadowColor = 'rgba(240,205,120,0.5)';
-    ctx.shadowBlur = 26;
-    drawEmblem(ctx, 0, 0, r * 0.5, 0.1);
-    ctx.restore();
-  }
-
-  // layered mountain silhouettes along the whole horizon
-  for (const [amp, col] of [
-    [H * 0.062, '#0b1d14'],
-    [H * 0.088, '#071510'],
-  ] as const) {
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.moveTo(0, HORIZON + 6);
-    let y = HORIZON - amp * (0.3 + Math.random() * 0.5);
-    for (let x = 0; x <= W; x += 64) {
-      y += (Math.random() - 0.5) * amp * 0.55;
-      y = Math.min(HORIZON - amp * 0.08, Math.max(HORIZON - amp * 1.35, y));
-      // pull the ends together so the strip tiles at the seam
-      const blend = Math.min(1, Math.min(x, W - x) / (W * 0.06));
-      ctx.lineTo(x, HORIZON - (HORIZON - y) * (0.55 + 0.45 * blend));
-    }
-    ctx.lineTo(W, HORIZON + 6);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  // the rival keeps — blue to the left of the default view, red to the right —
-  // plus two distant neutral towers for the far side of the orbit
-  castle(ctx, W * 0.155, HORIZON, H * 0.155, '74,140,220', 'rgba(124,192,255,0.8)');
-  castle(ctx, W * 0.345, HORIZON, H * 0.155, '220,80,58', 'rgba(255,138,114,0.8)');
-  castle(ctx, W * 0.62, HORIZON, H * 0.085, '120,160,130', 'rgba(170,210,180,0.5)');
-  castle(ctx, W * 0.86, HORIZON, H * 0.1, '120,160,130', 'rgba(170,210,180,0.5)');
-
-  // forest silhouette line at the foot of the mountains
-  ctx.fillStyle = '#04110b';
-  for (let x = -20; x < W + 20; x += 14) {
-    const h2 = 18 + Math.random() * 58;
-    const w2 = 10 + Math.random() * 16;
-    ctx.beginPath();
-    ctx.moveTo(x - w2 / 2, HORIZON + 6);
-    ctx.lineTo(x, HORIZON - h2);
-    ctx.lineTo(x + w2 / 2, HORIZON + 6);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  // mist band hugging the horizon
-  g = ctx.createLinearGradient(0, HORIZON - H * 0.025, 0, HORIZON + H * 0.02);
-  g.addColorStop(0, 'rgba(140,210,160,0)');
-  g.addColorStop(0.5, 'rgba(140,210,160,0.09)');
-  g.addColorStop(1, 'rgba(140,210,160,0)');
+  // dense bright core right on the horizon line — the fog wall itself
+  g = ctx.createLinearGradient(0, HORIZON - H * 0.05, 0, HORIZON + H * 0.05);
+  g.addColorStop(0, 'rgba(120,138,130,0)');
+  g.addColorStop(0.5, 'rgba(120,138,130,0.2)');
+  g.addColorStop(1, 'rgba(120,138,130,0)');
   ctx.fillStyle = g;
-  ctx.fillRect(0, HORIZON - H * 0.03, W, H * 0.06);
+  ctx.fillRect(0, HORIZON - H * 0.05, W, H * 0.1);
+
+  // fine grain so the murk doesn't band
+  for (let i = 0; i < 9000; i++) {
+    const v = 60 + ((Math.random() * 60) | 0);
+    ctx.fillStyle = `rgba(${v},${v + 8},${v + 4},${Math.random() * 0.05})`;
+    ctx.fillRect(Math.random() * W, H * 0.2 + Math.random() * H * 0.55, 1, 1);
+  }
 
   // pole vignettes
   const vg = ctx.createLinearGradient(0, 0, 0, H);
-  vg.addColorStop(0, 'rgba(0,0,0,0.5)');
+  vg.addColorStop(0, 'rgba(0,0,0,0.6)');
   vg.addColorStop(0.5, 'rgba(0,0,0,0)');
   vg.addColorStop(1, 'rgba(0,0,0,0.75)');
   ctx.fillStyle = vg;
@@ -616,47 +437,97 @@ export function duelNightTexture(): THREE.Texture {
 
 // ---- Stone plaza floor (tiling) -------------------------------------------
 
-/** Dark flagstone paving with moss and a rare gilt fleck — the arena floor the
- *  table stands on. Tiles seamlessly (stones wrap across the x edge; rows fit
- *  the y edge exactly). */
+/** Large weathered stone slabs — the arena floor the table stands on. Big
+ *  tiles (2 courses per texture repeat) with bevel-shaded edges, hairline
+ *  cracks, damp mottling and a whisper of moss in the joints. Tiles seamlessly
+ *  (slabs wrap across the x edge; rows fit the y edge exactly). */
 export function stoneFloorTexture(): THREE.Texture {
   const hit = cache.get('stoneFloor');
   if (hit) return hit;
   const S = 1024;
   const [c, ctx] = canvas(S);
-  ctx.fillStyle = '#0a130d';
+  // damp joint mortar underneath
+  ctx.fillStyle = '#070b09';
   ctx.fillRect(0, 0, S, S);
-  const shades = ['#0d1912', '#0f1c14', '#0b150f', '#101f16', '#0e1a11'];
-  const rows = 6;
+  const shades = ['#151b18', '#181f1b', '#121815', '#1b2320', '#161d19'];
+  const rows = 2; // two courses per repeat → big slabs
   const rh = S / rows;
   for (let r = 0; r < rows; r++) {
-    let x = -Math.random() * 80;
+    let x = -Math.random() * 160;
     while (x < S) {
-      const w = 120 + Math.random() * 150;
+      const w = 380 + Math.random() * 220;
       const shade = shades[(Math.random() * shades.length) | 0];
       for (const ox of [0, S]) {
-        // draw at x and x+S so stones crossing the left edge wrap to the right
-        const sg = ctx.createLinearGradient(x + ox, r * rh, x + ox + w, r * rh + rh);
+        // draw at x and x+S so slabs crossing the left edge wrap to the right
+        const px = x + ox + 6;
+        const py = r * rh + 6;
+        const pw = w - 12;
+        const ph = rh - 12;
+        // slab face with a diagonal light-to-damp gradient
+        const sg = ctx.createLinearGradient(px, py, px + pw, py + ph);
         sg.addColorStop(0, shade);
-        sg.addColorStop(1, '#0a140e');
+        sg.addColorStop(1, '#0e1411');
         ctx.fillStyle = sg;
         ctx.beginPath();
-        ctx.roundRect(x + ox + 3, r * rh + 3, w - 6, rh - 6, 10);
+        ctx.roundRect(px, py, pw, ph, 14);
         ctx.fill();
+        // bevel: light top-left edge, dark bottom-right edge
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = 'rgba(140,155,145,0.12)';
+        ctx.beginPath();
+        ctx.moveTo(px + 8, py + ph - 10);
+        ctx.lineTo(px + 8, py + 10);
+        ctx.lineTo(px + pw - 10, py + 10);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath();
+        ctx.moveTo(px + pw - 8, py + 12);
+        ctx.lineTo(px + pw - 8, py + ph - 8);
+        ctx.lineTo(px + 12, py + ph - 8);
+        ctx.stroke();
+        // hairline cracks
+        const cracks = 1 + ((Math.random() * 2) | 0);
+        ctx.strokeStyle = 'rgba(5,8,7,0.55)';
+        ctx.lineWidth = 1.6;
+        for (let k = 0; k < cracks; k++) {
+          let cx2 = px + 30 + Math.random() * (pw - 60);
+          let cy2 = py + 20 + Math.random() * (ph - 40);
+          ctx.beginPath();
+          ctx.moveTo(cx2, cy2);
+          for (let seg = 0; seg < 5; seg++) {
+            cx2 += (Math.random() - 0.5) * 90;
+            cy2 += (Math.random() - 0.3) * 70;
+            ctx.lineTo(Math.min(px + pw - 12, Math.max(px + 12, cx2)), Math.min(py + ph - 12, Math.max(py + 12, cy2)));
+          }
+          ctx.stroke();
+        }
+        // damp mottling on the face
+        for (let k = 0; k < 8; k++) {
+          const mx = px + Math.random() * pw;
+          const my = py + Math.random() * ph;
+          const mr = 24 + Math.random() * 70;
+          const mg = ctx.createRadialGradient(mx, my, 0, mx, my, mr);
+          mg.addColorStop(0, `rgba(8,14,11,${0.08 + Math.random() * 0.12})`);
+          mg.addColorStop(1, 'rgba(8,14,11,0)');
+          ctx.fillStyle = mg;
+          ctx.beginPath();
+          ctx.arc(mx, my, mr, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
       x += w;
     }
   }
-  // moss patches (drawn with wrap copies so the tile edge stays seamless)
-  for (let i = 0; i < 70; i++) {
+  // moss creeping from the joints (wrap copies keep the tile seamless)
+  for (let i = 0; i < 46; i++) {
     const x = Math.random() * S;
-    const y = Math.random() * S;
-    const r = 20 + Math.random() * 70;
+    const y = (((Math.random() * rows) | 0) + (Math.random() < 0.5 ? 0 : 1)) * rh + (Math.random() - 0.5) * 26;
+    const r = 14 + Math.random() * 46;
     for (const ox of [0, -S, S]) {
       for (const oy of [0, -S, S]) {
         const mg = ctx.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
-        mg.addColorStop(0, `rgba(38,84,54,${0.05 + Math.random() * 0.09})`);
-        mg.addColorStop(1, 'rgba(38,84,54,0)');
+        mg.addColorStop(0, `rgba(40,76,50,${0.05 + Math.random() * 0.08})`);
+        mg.addColorStop(1, 'rgba(40,76,50,0)');
         ctx.fillStyle = mg;
         ctx.beginPath();
         ctx.arc(x + ox, y + oy, r, 0, Math.PI * 2);
@@ -664,14 +535,10 @@ export function stoneFloorTexture(): THREE.Texture {
       }
     }
   }
-  // grain + the odd gilt fleck
-  for (let i = 0; i < 5000; i++) {
-    const v = 6 + ((Math.random() * 26) | 0);
-    ctx.fillStyle = `rgba(${v},${v + 10},${v + 4},${Math.random() * 0.3})`;
-    ctx.fillRect(Math.random() * S, Math.random() * S, 1, 1);
-  }
-  for (let i = 0; i < 160; i++) {
-    ctx.fillStyle = `rgba(190,160,90,${0.04 + Math.random() * 0.08})`;
+  // stone grain
+  for (let i = 0; i < 7000; i++) {
+    const v = 10 + ((Math.random() * 34) | 0);
+    ctx.fillStyle = `rgba(${v},${v + 6},${v + 3},${Math.random() * 0.28})`;
     ctx.fillRect(Math.random() * S, Math.random() * S, 1, 1);
   }
   return finish(c, 'stoneFloor', true);

@@ -73,7 +73,6 @@ function seatOf(state: GameState, player: PlayerColor): number {
 function homeCell(state: GameState, player: PlayerColor, col: number): Cell {
   return rotateCell({ r: 0, c: col }, seatOf(state, player));
 }
-const mageHome = (state: GameState, p: PlayerColor) => homeCell(state, p, 8);
 
 /** The 8 cells of a player's home edge (its base). */
 function baseCellsOf(state: GameState, player: PlayerColor): Cell[] {
@@ -100,7 +99,7 @@ function enemyInBase(state: GameState, player: PlayerColor): boolean {
  * live positions, so it appears/clears the instant a unit enters or leaves a base.
  */
 export function siegedPlayers(state: GameState): PlayerColor[] {
-  return state.players.filter((p) => enemyInBase(state, p));
+  return state.players.filter((p) => !state.eliminated.includes(p) && enemyInBase(state, p));
 }
 
 /**
@@ -185,20 +184,21 @@ export function warriorCount(state: GameState, owner: PlayerColor): number {
 // ---- Gravestone bank -----------------------------------------------------
 
 /** Gravestone markers each player contributes to the shared bank. */
-export const GRAVES_PER_PLAYER = 4;
+export const GRAVES_PER_PLAYER = 3;
 
-/** Players still in the game — holding a unit or with one queued to respawn.
- *  (Same test conquest victory uses, so the two always agree.) */
+/** Players still in the game — not eliminated, and holding a unit or with one
+ *  queued to respawn. (Same test conquest victory uses, so the two agree.) */
 export function activePlayers(state: GameState): PlayerColor[] {
   return state.players.filter(
     (p) =>
-      state.units.some((u) => u.owner === p) ||
-      state.pendingRespawns.some((pr) => pr.owner === p),
+      !state.eliminated.includes(p) &&
+      (state.units.some((u) => u.owner === p) ||
+        state.pendingRespawns.some((pr) => pr.owner === p)),
   );
 }
 
 /** Maximum gravestones allowed on the board at once: `GRAVES_PER_PLAYER` per
- *  still-active player (8 for 2p, 16 for 4p), so the cap drops by 4 each time a
+ *  still-active player (6 for 2p, 12 for 4p), so the cap drops by 3 each time a
  *  player is eliminated. */
 export function gravestoneCapacity(state: GameState): number {
   return GRAVES_PER_PLAYER * activePlayers(state).length;
@@ -324,14 +324,18 @@ export function moveUnit(state: GameState, unitId: string, dieId: string, dest: 
   if (!legalMoves(state, unit, die.value).some((c) => sameCell(c, dest))) return state;
 
   // A move may vacate an enemy from someone's base → let queued units return.
-  return resolveRespawns({
-    ...state,
-    units: state.units.map((u) =>
-      u.id === unitId ? { ...u, prevCell: u.cell, cell: dest } : u,
-    ),
-    dice: state.dice.map((d) => (d.id === dieId ? { ...d, usedBy: unitId } : d)),
-    unitsMovedThisTurn: [...state.unitsMovedThisTurn, unitId],
-  });
+  // And a Mage stepping onto its own base with 6+ activated stones wins on the
+  // spot, so victory is checked immediately (not deferred to the next action).
+  return checkVictory(
+    resolveRespawns({
+      ...state,
+      units: state.units.map((u) =>
+        u.id === unitId ? { ...u, prevCell: u.cell, cell: dest } : u,
+      ),
+      dice: state.dice.map((d) => (d.id === dieId ? { ...d, usedBy: unitId } : d)),
+      unitsMovedThisTurn: [...state.unitsMovedThisTurn, unitId],
+    }),
+  );
 }
 
 // ---- Actions: shared activation -----------------------------------------
@@ -770,28 +774,52 @@ export function beginRitual(state: GameState, unitId: string): GameState {
 export function checkVictory(state: GameState): GameState {
   if (state.winner) return state;
 
-  // MageStone victory: a Mage with 6+ activated stones standing on its base.
-  for (const player of state.players) {
-    const mage = state.units.find((u) => u.kind === 'mage' && u.owner === player);
-    if (mage && mage.activated >= STONES_TO_WIN && sameCell(mage.cell, mageHome(state, player))) {
-      return { ...state, winner: player, log: [...state.log, `${player} wins by MageStone power!`] };
+  // Eliminations first: a player reduced to ZERO units on the board (their
+  // Mage/Priest respawns locked out by a siege) is out of the game entirely —
+  // queued respawns are voided, and endTurn skips them from here on.
+  let s = state;
+  for (const p of s.players) {
+    if (s.eliminated.includes(p)) continue;
+    if (s.units.some((u) => u.owner === p)) continue;
+    s = {
+      ...s,
+      eliminated: [...s.eliminated, p],
+      pendingRespawns: s.pendingRespawns.filter((pr) => pr.owner !== p),
+      log: [...s.log, `${p} is eliminated!`],
+    };
+  }
+
+  // MageStone victory: a Mage back on any cell of its own base carrying 6 OR
+  // MORE activated stones wins on the spot.
+  for (const player of s.players) {
+    const mage = s.units.find((u) => u.kind === 'mage' && u.owner === player);
+    if (mage && mage.activated >= STONES_TO_WIN && onOwnBase(s, mage)) {
+      return { ...s, winner: player, log: [...s.log, `${player} wins by MageStone power!`] };
     }
   }
 
-  // Conquest: only one player still has any units (a queued respawn counts).
-  const alive = activePlayers(state);
-  if (alive.length === 1 && state.players.length > 1) {
-    return { ...state, winner: alive[0], log: [...state.log, `${alive[0]} wins by conquest!`] };
+  // Conquest: only one player left standing.
+  const alive = activePlayers(s);
+  if (alive.length === 1 && s.players.length > 1) {
+    return { ...s, winner: alive[0], log: [...s.log, `${alive[0]} wins by conquest!`] };
   }
-  return state;
+  return s;
 }
 
 // ---- Phase 5: end of turn ------------------------------------------------
 
 export function endTurn(state: GameState): GameState {
   if (state.winner) return state;
+  // Pass clockwise, skipping eliminated players (they take no more turns).
   const idx = state.players.indexOf(state.current);
-  const next = state.players[(idx + 1) % state.players.length];
+  let next = state.current;
+  for (let hop = 1; hop <= state.players.length; hop++) {
+    const cand = state.players[(idx + hop) % state.players.length];
+    if (!state.eliminated.includes(cand)) {
+      next = cand;
+      break;
+    }
+  }
 
   let s: GameState = resolveRespawns({
     ...state,

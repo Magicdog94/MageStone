@@ -540,6 +540,67 @@
   color: var(--gold);
   background: rgba(0, 0, 0, 0.3);
 }
+.pstat.out {
+  opacity: 0.4;
+  filter: saturate(0.3);
+}
+.pstat.out .pstat-badge {
+  color: #e07b6d;
+  border-color: rgba(192, 57, 43, 0.5);
+}
+
+/* "X is eliminated" toast — pops under the siege alerts, then fades */
+.elim-toasts {
+  position: absolute;
+  top: calc(var(--space-4) + var(--control-md) + var(--space-6) + 130px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+.elim-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px 20px;
+  border-radius: var(--radius-pill);
+  font-family: var(--display);
+  font-size: var(--text-lg);
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  background: rgba(8, 6, 5, 0.92);
+  border: 1px solid rgba(160, 160, 160, 0.55);
+  box-shadow: 0 0 24px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  animation: elim-in 0.35s ease-out, elim-out 0.6s ease-in 4.4s forwards;
+}
+.elim-toast svg {
+  color: #b9b9b9;
+  flex: none;
+}
+.elim-toast strong {
+  color: var(--pc);
+  font-weight: 700;
+}
+@keyframes elim-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes elim-out {
+  to {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
 .pstat-metric {
   display: inline-flex;
   align-items: center;

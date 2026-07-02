@@ -219,7 +219,8 @@ const SECTIONS: Section[] = [
         <ol className="htp-win">
           <li>
             <span className="htp-win-title">Mage Victory</span>
-            Return your Mage to your base while carrying 6 Activated MageStones.
+            Return your Mage to your base carrying 6 or more Activated MageStones — the moment it steps onto
+            your base with at least 6, you win instantly.
           </li>
           <li>
             <span className="htp-win-title">Priest Ritual Victory</span>
@@ -228,8 +229,9 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <span className="htp-win-title">Conquest Victory</span>
-            Be the last player with any units on the board. Lay siege to enemy bases — a besieged base can’t
-            respawn its Mage or Priest — then wipe out whoever remains.
+            Be the last player standing. Lay siege to enemy bases — a besieged base can’t respawn its Mage or
+            Priest — and a besieged player who runs out of units on the board is <em>eliminated</em>: they take no
+            more turns and never respawn.
           </li>
         </ol>
         <BoardOverview />
@@ -248,7 +250,7 @@ const SECTIONS: Section[] = [
           <li>1 Priest</li>
           <li>1 Mage</li>
           <li>4 MageStones</li>
-          <li>4 Gravestones (added to the shared bank)</li>
+          <li>3 Gravestones (added to the shared bank)</li>
         </ul>
         <p className="htp-p">Each player sets up their units on their own base row in this order:</p>
         <div className="htp-formation">
@@ -435,7 +437,8 @@ const SECTIONS: Section[] = [
           </li>
         </ol>
         <p className="htp-p">
-          To win by Mage Victory, your Mage must return to your base with 6 Activated MageStones.
+          To win by Mage Victory, your Mage must return to your base with 6 or more Activated MageStones — the
+          win is instant the moment it arrives.
         </p>
         <StoneDiagram />
       </>
@@ -449,14 +452,15 @@ const SECTIONS: Section[] = [
       <>
         <p className="htp-p">
           When a Warrior is defeated it leaves a Gravestone on its square. Gravestones are drawn from a shared
-          bank, and a Priest can resurrect Warriors from them.
+          bank, and a Priest can resurrect a Warrior from <span className="htp-em">any</span> Gravestone —
+          regardless of whose Warrior fell there.
         </p>
         <h4 className="htp-sub">The Gravestone bank</h4>
         <ul className="htp-list">
-          <li>The bank holds 4 Gravestones per player — 8 in a 2-player game, 16 in a 4-player game.</li>
+          <li>The bank holds 3 Gravestones per player — 6 in a 2-player game, 12 in a 4-player game.</li>
           <li>Placing a Gravestone draws one from the bank; resurrecting a Warrior returns one to it.</li>
           <li>When the bank is empty, a defeated Warrior leaves no Gravestone — the bank caps how many can sit on the board at once.</li>
-          <li>In a 4-player game the bank shrinks by 4 for each player eliminated (down to 4 per remaining player).</li>
+          <li>The bank shrinks by 3 for each player eliminated (down to 3 per remaining player).</li>
         </ul>
         <h4 className="htp-sub">Placement &amp; resurrection</h4>
         <ul className="htp-list">

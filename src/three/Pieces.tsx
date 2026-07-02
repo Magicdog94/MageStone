@@ -288,10 +288,11 @@ function paintedGeometry(src: THREE.BufferGeometry, kind: UnitKind, colorHex: st
     } else {
       col.multiplyScalar(1 - 0.6 * smoothstep(0.08, 0.35, -cv)); // shaded folds
     }
-    // The sculpt's own base (a taller rocky mound on the warrior, a thin disc on
-    // the robed sculpts) is painted plain dark, like the box minis' round bases.
-    const baseBand = kind === 'warrior' ? 0.12 : 0.055;
-    if (height[i] < baseBand) col.lerp(dark, 0.85);
+    // The sculpt's own base (a taller rocky mound on the warrior, a thicker
+    // disc on the robed sculpts) is painted the SAME plain dark on every kind,
+    // so all units stand on identical-looking dark bases.
+    const baseBand = kind === 'warrior' ? 0.12 : 0.09;
+    if (height[i] < baseBand) col.lerp(dark, 0.92);
     const nz = (rand() - 0.5) * 0.05; // paint mottle
     arr[i * 3] = Math.min(1, Math.max(0, col.r + nz));
     arr[i * 3 + 1] = Math.min(1, Math.max(0, col.g + nz));

@@ -6,7 +6,7 @@ import { allCells, cellKey, edgeRotation, N } from '../game/board';
 import type { Cell } from '../game/types';
 import { besiegersOf, siegedPlayers } from '../game/rules';
 import { BOARD, CELL, COLORS, FLOOR_Y, TABLE_HALF, TILE_SURFACE, cellToWorld } from './coords';
-import { emeraldBoardTexture, groundBumpTexture, woodBumpTexture } from './textures';
+import { emeraldBoardTexture, groundBumpTexture, planksBumpTexture, woodBumpTexture } from './textures';
 import { attackTargetIds, moveDestinations, useGame } from '../store';
 
 // Elevation stack (low → high): recessed map tiles, then the raised gold
@@ -57,9 +57,12 @@ function Tabletop() {
     tex.anisotropy = 8;
     tex.needsUpdate = true;
   });
+  // Deep plank relief: heavy seams + grain ridges so the slab reads as built
+  // from thick boards rather than one smooth extrusion.
   const bump = useMemo(() => {
-    const t = woodBumpTexture();
-    t.repeat.set(0.1, 0.1); // match the wood map's plank scale
+    const t = planksBumpTexture().clone();
+    t.repeat.set(0.35, 0.35);
+    t.needsUpdate = true;
     return t;
   }, []);
   const geom = useMemo(() => tabletopGeometry(), []);
@@ -69,9 +72,9 @@ function Tabletop() {
       <meshStandardMaterial
         map={wood}
         bumpMap={bump}
-        bumpScale={0.06}
+        bumpScale={0.14}
         color="#43301d"
-        roughness={0.82}
+        roughness={0.8}
         metalness={0}
         envMapIntensity={0.35}
       />

@@ -226,8 +226,9 @@ export function Scene() {
         <TeamBanners />
         <TableChairs />
       </Suspense>
-      <hemisphereLight args={['#8a7f6d', '#181310', 0.5]} />
-      <ambientLight intensity={0.18} color={'#d8cbb8'} />
+      {/* darker ambient floor: the candles and window shafts carry the room */}
+      <hemisphereLight args={['#8a7f6d', '#15100c', 0.42]} />
+      <ambientLight intensity={0.13} color={'#d8cbb8'} />
       {/* daylight slanting in through the north windows */}
       <directionalLight
         position={[24, 60, -70]}

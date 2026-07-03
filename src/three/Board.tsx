@@ -48,17 +48,29 @@ function tabletopGeometry(): THREE.ExtrudeGeometry {
   return geo;
 }
 
+// The table is ONE piece of furniture: every part — slab, collar, column,
+// plinth — wears the same wood photo under the same single tint, so it reads
+// as one continuous old oak table rather than an assembly of materials.
+const TABLE_TINT = '#4a3624';
+
+/** The shared table-wood photo, cloned per part so each sets its own repeat. */
+function useTableWood(rx: number, ry: number): THREE.Texture {
+  const base = useTexture('/wood-texture.png') as THREE.Texture;
+  return useMemo(() => {
+    const t = base.clone();
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(rx, ry);
+    t.anisotropy = 8;
+    t.needsUpdate = true;
+    return t;
+  }, [base, rx, ry]);
+}
+
 function Tabletop() {
-  const wood = useTexture('/wood-texture.png', (t) => {
-    const tex = t as THREE.Texture;
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(0.1, 0.1); // larger planks (fewer repeats across the slab)
-    tex.anisotropy = 8;
-    tex.needsUpdate = true;
-  });
-  // Deep plank relief: heavy seams + grain ridges so the slab reads as built
-  // from thick boards rather than one smooth extrusion.
+  const wood = useTableWood(0.1, 0.1); // larger planks (fewer repeats across the slab)
+  // Deep plank relief: heavy seams + grain ridges + scattered scratches so the
+  // slab reads as built from thick worn boards rather than one smooth extrusion.
   const bump = useMemo(() => {
     const t = planksBumpTexture().clone();
     t.repeat.set(0.35, 0.35);
@@ -73,7 +85,7 @@ function Tabletop() {
         map={wood}
         bumpMap={bump}
         bumpScale={0.14}
-        color="#43301d"
+        color={TABLE_TINT}
         roughness={0.8}
         metalness={0}
         envMapIntensity={0.35}
@@ -83,17 +95,30 @@ function Tabletop() {
 }
 
 /**
- * The stand the table rises from — a gilt collar under the slab, a carved
- * octagonal column, and a two-step stone plinth standing on the plaza floor
- * (FLOOR_Y), so the table is grounded in the arena instead of floating.
+ * The stand the table rises from — a turned-wood collar under the slab, a
+ * carved octagonal column, and a two-step wooden foot standing on the plaza
+ * floor (FLOOR_Y). All in the table's single wood so slab + stand read as one
+ * heavy piece of furniture.
  */
 function TableStand() {
+  const wood = useTableWood(1.2, 0.5);
   const bump = useMemo(() => {
     const t = woodBumpTexture().clone();
     t.repeat.set(3, 1);
     t.needsUpdate = true;
     return t;
   }, []);
+  const woodMat = (
+    <meshStandardMaterial
+      map={wood}
+      bumpMap={bump}
+      bumpScale={0.06}
+      color={TABLE_TINT}
+      roughness={0.82}
+      metalness={0}
+      envMapIntensity={0.2}
+    />
+  );
   const tableBottom = TABLE_TOP_Y - TABLE_H - 0.12; // slab underside incl. bevel
   const plinthTop = FLOOR_Y + 1.0;
   const colH = tableBottom - plinthTop;
@@ -101,41 +126,29 @@ function TableStand() {
   const rot: [number, number, number] = [0, Math.PI / 8, 0]; // flats face the board edges
   return (
     <group>
-      {/* gold collar joining the slab to the column */}
+      {/* turned collar joining the slab to the column */}
       <mesh position={[0, tableBottom - 0.11, 0]} rotation={rot} castShadow>
         <cylinderGeometry args={[6.1, 6.1, 0.26, 8]} />
-        <meshStandardMaterial
-          color={BOARD.gold}
-          metalness={0.85}
-          roughness={0.35}
-          emissive="#5a3f12"
-          emissiveIntensity={0.15}
-        />
+        {woodMat}
       </mesh>
       {/* carved octagonal pedestal column (the tabletop stands 1.5 m proud) */}
       <mesh position={[0, colMid, 0]} rotation={rot} castShadow receiveShadow>
         <cylinderGeometry args={[5.0, 7.4, colH, 8]} />
-        <meshStandardMaterial color="#372718" bumpMap={bump} bumpScale={0.06} roughness={0.82} metalness={0} />
+        {woodMat}
       </mesh>
-      {/* gold band around the column's waist */}
+      {/* carved moulding around the column's waist */}
       <mesh position={[0, colMid, 0]} rotation={rot}>
         <cylinderGeometry args={[6.6, 6.6, 0.9, 8]} />
-        <meshStandardMaterial
-          color={BOARD.gold}
-          metalness={0.85}
-          roughness={0.4}
-          emissive="#5a3f12"
-          emissiveIntensity={0.12}
-        />
+        {woodMat}
       </mesh>
-      {/* two-step stone plinth on the floor */}
+      {/* two-step wooden foot on the floor */}
       <mesh position={[0, FLOOR_Y + 0.75, 0]} rotation={rot} castShadow receiveShadow>
         <cylinderGeometry args={[8.6, 9.4, 0.5, 8]} />
-        <meshStandardMaterial color="#1a231c" roughness={0.92} metalness={0} />
+        {woodMat}
       </mesh>
       <mesh position={[0, FLOOR_Y + 0.25, 0]} rotation={rot} castShadow receiveShadow>
         <cylinderGeometry args={[10.2, 11, 0.5, 8]} />
-        <meshStandardMaterial color="#161e18" roughness={0.94} metalness={0} />
+        {woodMat}
       </mesh>
     </group>
   );

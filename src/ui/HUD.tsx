@@ -38,6 +38,7 @@ export function HUD() {
   const doRitual = useGame((s) => s.doRitual);
   const openModal = useGame((s) => s.openModal);
   const turnSeconds = useGame((s) => s.settings.turnSeconds);
+  const mobile = useGame((s) => s.settings.layout === 'mobile');
   const combatNonce = useGame((s) => s.combatNonce);
   const online = useGame((s) => s.online);
   const myColor = useGame((s) => s.myColor);
@@ -186,6 +187,7 @@ export function HUD() {
                   kind={d.kind}
                   state={state}
                   onClick={click}
+                  size={mobile ? 34 : 48}
                   title={`${d.kind[0].toUpperCase()}${d.kind.slice(1)} die`}
                 />
               );

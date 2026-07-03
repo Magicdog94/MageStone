@@ -1,27 +1,28 @@
-// The room around the game: a blacksmith's workshop interior, built to real
+// The room around the game: a medieval stone chamber, built to real
 // proportions with the board treated as a REAL CHESSBOARD (~0.5 m across).
 // Scale: the board is 16 world units ≈ 0.5 m → 1 m ≈ 32 units. Everything in
-// here — walls, forge, furniture, banners — is sized off that ruler. The table
-// and the flagstone floor are untouched. Only the wall banners are game-aware
-// (one per PLAYING colour, hung behind that colour's seat).
+// here — walls, furniture, banners — is sized off that ruler. Only the wall
+// banners are game-aware (one per PLAYING colour, hung behind that colour's
+// seat).
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { Billboard, useTexture } from '@react-three/drei';
 import { RoundedBoxGeometry } from 'three-stdlib';
 import type { PlayerColor } from '../game/types';
-import { COLORS, FLOOR_Y } from './coords';
+import { FLOOR_Y } from './coords';
 import {
   bannerTexture,
   cobwebTexture,
   flameGlowTexture,
-  forgeEmbersTexture,
   lightShaftTexture,
   planksBumpTexture,
   planksTexture,
   plasterBumpTexture,
   plasterTexture,
-  windowTexture,
+  shadeGradientTexture,
+  windowGlassTexture,
+  windowLeadTexture,
   woodBumpTexture,
   type BannerTeam,
 } from './textures';
@@ -48,8 +49,6 @@ const WALL_X = 74; // wall centre planes (inner faces ≈ ±72 / ±88)
 const WALL_Z = 90;
 
 const IRON = { color: '#1d2023', roughness: 0.6, metalness: 0.5 } as const;
-const STEEL = { color: '#5f666e', roughness: 0.38, metalness: 0.85 } as const;
-const OAK = { color: '#4a3421', roughness: 0.85, metalness: 0 } as const;
 const DARKOAK = { color: '#2f241a', roughness: 0.9, metalness: 0 } as const;
 const STONE = { color: '#4c463e', roughness: 0.95, metalness: 0 } as const;
 
@@ -112,23 +111,6 @@ function Pot({
   );
 }
 
-function Barrel({ x, z, lean = 0, yaw = 0 }: { x: number; z: number; lean?: number; yaw?: number }) {
-  return (
-    <group position={[x, FLOOR_Y + 14, z]} rotation={[lean, yaw, 0]}>
-      <mesh castShadow receiveShadow>
-        <cylinderGeometry args={[12, 13.5, 28, 14]} />
-        <WoodMat tint="#7d5f3e" rx={0.9} ry={0.45} />
-      </mesh>
-      {[-9, 0, 9].map((hy) => (
-        <mesh key={hy} position={[0, hy, 0]}>
-          <cylinderGeometry args={[13.9 - Math.abs(hy) * 0.12, 13.9 - Math.abs(hy) * 0.12, 1.6, 14]} />
-          <meshStandardMaterial {...IRON} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
 /** A bevelled plank crate with iron straps and bolt heads — no perfect cubes. */
 function PlankCrate({ x, z, s, ry, lift = 0 }: { x: number; z: number; s: number; ry: number; lift?: number }) {
   const planks = useMemo(() => planksTexture(), []);
@@ -159,22 +141,7 @@ function PlankCrate({ x, z, s, ry, lift = 0 }: { x: number; z: number; s: number
   );
 }
 
-function Chain({ x, z, len }: { x: number; z: number; len: number }) {
-  return (
-    <group position={[x, CEIL_Y - 6, z]}>
-      <mesh>
-        <cylinderGeometry args={[0.7, 0.7, len, 6]} />
-        <meshStandardMaterial {...IRON} />
-      </mesh>
-      <mesh position={[0, -len / 2 - 1.5, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[2.4, 0.7, 6, 12]} />
-        <meshStandardMaterial {...IRON} />
-      </mesh>
-    </group>
-  );
-}
-
-/** A warm point light with candle/forge flicker (each keeps its own clock). */
+/** A warm point light with candle flicker (each keeps its own clock). */
 function FlickerLight({
   base,
   seed,
@@ -255,12 +222,16 @@ function Candle({ h = 5.5, r = 1.1 }: { h?: number; r?: number }) {
 }
 
 /**
- * A leaded medieval window with real depth: stone jambs, sill and arch proud of
- * the wall, cloudy glass recessed behind them, a soft cool halo into the room
- * and a faked shaft of daylight angling down to the floor.
+ * A leaded medieval window over a REAL opening in the wall (see PiercedWall).
+ * The world outside is the 3D castle-town diorama (Exterior.tsx) — seen here
+ * through slightly cloudy old glass with raised lead cames, behind bevelled
+ * stone jambs, sill, arch and keystone, with dark stone reveals lining the
+ * cut. Cool daylight spills in: a soft halo around the opening, a shaft down
+ * into the room, and a faint pool on the floorboards below.
  */
 function MedievalWindow({ pos, yaw }: { pos: [number, number, number]; yaw: number }) {
-  const winTex = useMemo(() => windowTexture(), []);
+  const glass = useMemo(() => windowGlassTexture(), []);
+  const lead = useMemo(() => windowLeadTexture(), []);
   const shaft = useMemo(() => lightShaftTexture(), []);
   const glow = useMemo(() => flameGlowTexture(), []);
   return (
@@ -274,51 +245,210 @@ function MedievalWindow({ pos, yaw }: { pos: [number, number, number]; yaw: numb
       <mesh geometry={rbox(36, 3.6, 6)} position={[0, -22.5, 0.8]} castShadow receiveShadow>
         <meshStandardMaterial {...STONE} />
       </mesh>
-      <mesh position={[0, 14.4, 0.6]} rotation={[0, 0, 0]} castShadow>
+      {/* the arch hugs the painted opening so stone frames sky, not wall */}
+      <mesh position={[0, 6.5, 0.6]} castShadow>
         <torusGeometry args={[13.6, 2.4, 8, 18, Math.PI]} />
         <meshStandardMaterial {...STONE} />
       </mesh>
-      <mesh geometry={rbox(5, 4.4, 4.6)} position={[0, 27.6, 0.6]} castShadow>
+      <mesh geometry={rbox(5, 4.4, 4.6)} position={[0, 20.1, 0.6]} castShadow>
         <meshStandardMaterial {...STONE} />
       </mesh>
-      {/* cloudy leaded glass, recessed into the wall */}
-      <mesh position={[0, 0, -0.9]}>
+      {/* dark stone reveals lining the cut through the wall */}
+      {[-12.9, 12.9].map((rx) => (
+        <mesh key={rx} position={[rx, 0, -2.15]}>
+          <boxGeometry args={[1.6, 40, 3.9]} />
+          <meshStandardMaterial color="#3a342c" roughness={0.98} metalness={0} />
+        </mesh>
+      ))}
+      <mesh position={[0, 19.2, -2.15]}>
+        <boxGeometry args={[27, 1.6, 3.9]} />
+        <meshStandardMaterial color="#332d26" roughness={0.98} metalness={0} />
+      </mesh>
+      <mesh position={[0, -19.6, -2.15]}>
+        <boxGeometry args={[27, 1.6, 3.9]} />
+        <meshStandardMaterial color="#46403a" roughness={0.98} metalness={0} />
+      </mesh>
+      {/* cloudy old glass set into the opening — the 3D exterior shows
+          through it slightly softened; env reflections give it a faint sheen */}
+      <mesh position={[0, 0, -1.1]} renderOrder={12}>
         <planeGeometry args={[26, 40]} />
         <meshStandardMaterial
-          map={winTex}
+          map={glass}
           transparent
-          alphaTest={0.3}
-          emissiveMap={winTex}
-          emissive="#ffffff"
-          emissiveIntensity={1.05}
-          color="#7d837c"
-          roughness={0.35}
+          roughness={0.22}
+          metalness={0}
+          envMapIntensity={0.8}
+          depthWrite={false}
+          fog={false}
         />
       </mesh>
-      {/* cool halo bleeding into the room */}
+      {/* raised lead cames just inside the glass */}
+      <mesh position={[0, 0, -0.9]} renderOrder={13}>
+        <planeGeometry args={[26, 40]} />
+        <meshStandardMaterial map={lead} transparent alphaTest={0.35} roughness={0.55} metalness={0.35} fog={false} />
+      </mesh>
+      {/* cool daylight halo spilling into the room around the opening */}
       <mesh position={[0, 0, 2.6]} renderOrder={15}>
-        <planeGeometry args={[48, 58]} />
+        <planeGeometry args={[52, 62]} />
         <meshBasicMaterial
           map={glow}
-          color="#bcd4de"
+          color="#ccdbe2"
           transparent
-          opacity={0.22}
+          opacity={0.18}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
       </mesh>
-      {/* shaft of daylight angling down into the room */}
+      {/* shaft of cool daylight angling down into the room */}
       <mesh position={[0, -16, 13]} rotation={[-0.62, 0, 0]} renderOrder={16}>
         <planeGeometry args={[25, 42]} />
         <meshBasicMaterial
           map={shaft}
-          color="#d4e4ea"
+          color="#d3e0e4"
           transparent
-          opacity={0.4}
+          opacity={0.42}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           side={THREE.DoubleSide}
         />
+      </mesh>
+      {/* faint daylight pool on the floor below the window */}
+      <mesh position={[0, -51.8, 18]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={14}>
+        <planeGeometry args={[46, 24]} />
+        <meshBasicMaterial
+          map={glow}
+          color="#c3d4dc"
+          transparent
+          opacity={0.13}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+/**
+ * The chamber's entrance: a grand arched double-height door of vertical oak
+ * planks, hung on long black iron strap hinges with a ring handle, set in a
+ * bevelled stone surround with a worn threshold. Built at real scale — the
+ * opening is ~1.5 m wide and ~2.3 m to the crown of the arch.
+ */
+function GreatDoor({ pos, yaw }: { pos: [number, number, number]; yaw: number }) {
+  const HALF = 24; // door leaf half-width
+  const JAMB_H = 50; // straight rise before the arch springs
+  const leafGeom = useMemo(() => {
+    const s = new THREE.Shape();
+    s.moveTo(-HALF, 0);
+    s.lineTo(-HALF, JAMB_H);
+    s.absarc(0, JAMB_H, HALF, Math.PI, 0, true);
+    s.lineTo(HALF, 0);
+    s.closePath();
+    const g = new THREE.ExtrudeGeometry(s, {
+      depth: 2.4,
+      bevelEnabled: true,
+      bevelThickness: 0.5,
+      bevelSize: 0.5,
+      bevelSegments: 2,
+    });
+    return g;
+  }, []);
+  // vertical planks: extrude UVs are shape coords, so repeat maps 5 boards
+  // across the leaf with the grain running upright
+  const planks = useMemo(() => {
+    const t = planksTexture().clone();
+    t.repeat.set(1 / (HALF * 2), 1 / (JAMB_H + HALF));
+    t.offset.set(0.5, 0);
+    t.needsUpdate = true;
+    return t;
+  }, []);
+  const planksBump = useMemo(() => {
+    const t = planksBumpTexture().clone();
+    t.repeat.set(1 / (HALF * 2), 1 / (JAMB_H + HALF));
+    t.offset.set(0.5, 0);
+    t.needsUpdate = true;
+    return t;
+  }, []);
+  const leafMats = useMemo(
+    () => [
+      // front/back faces: aged oak boards
+      new THREE.MeshStandardMaterial({
+        map: planks,
+        bumpMap: planksBump,
+        bumpScale: 0.2,
+        color: '#c7a97e',
+        roughness: 0.85,
+        metalness: 0,
+      }),
+      // extruded edge: dark end-grain
+      new THREE.MeshStandardMaterial({ color: '#241a10', roughness: 0.95, metalness: 0 }),
+    ],
+    [planks, planksBump],
+  );
+  /** One long strap hinge: bar from the hinge side, chamfered tip, bolt heads. */
+  const strap = (y: number, len: number) => (
+    <group key={y} position={[-HALF + len / 2 - 1, y, 3.4]}>
+      <mesh geometry={rbox(len, 3, 1)} castShadow>
+        <meshStandardMaterial color="#181a1d" roughness={0.62} metalness={0.55} />
+      </mesh>
+      {/* spear tip on the free end */}
+      <mesh position={[len / 2 + 2.4, 0, 0]} rotation={[0, 0, -Math.PI / 2]} castShadow>
+        <coneGeometry args={[1.5, 5, 4]} />
+        <meshStandardMaterial color="#181a1d" roughness={0.62} metalness={0.55} />
+      </mesh>
+      {/* knuckle barrel at the hinge side + bolts along the strap */}
+      <mesh position={[-len / 2 + 1, 0, -0.4]}>
+        <cylinderGeometry args={[1.1, 1.1, 4.6, 8]} />
+        <meshStandardMaterial color="#101214" roughness={0.55} metalness={0.6} />
+      </mesh>
+      {[-len * 0.28, 0, len * 0.28].map((bx) => (
+        <mesh key={bx} position={[bx, 0, 0.6]}>
+          <sphereGeometry args={[0.55, 6, 6]} />
+          <meshStandardMaterial color="#2e3338" roughness={0.4} metalness={0.7} />
+        </mesh>
+      ))}
+    </group>
+  );
+  return (
+    <group position={pos} rotation={[0, yaw, 0]}>
+      {/* dark seam just proud of the wall face, so the leaf's bevelled edges
+          read as a real gap into the frame */}
+      <mesh position={[0, (JAMB_H + HALF) / 2, 0.15]}>
+        <planeGeometry args={[HALF * 2 + 4, JAMB_H + HALF + 4]} />
+        <meshStandardMaterial color="#0d0a08" roughness={1} />
+      </mesh>
+      {/* the leaf, planks upright */}
+      <mesh geometry={leafGeom} material={leafMats} position={[0, 0, 0]} castShadow receiveShadow />
+      {/* three long strap hinges */}
+      {strap(12, 34)}
+      {strap(38, 40)}
+      {strap(58, 30)}
+      {/* iron ring handle on a backplate, latch side */}
+      <group position={[HALF - 7, 32, 3.4]}>
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[2.2, 2.2, 0.7, 10]} />
+          <meshStandardMaterial color="#14161a" roughness={0.6} metalness={0.55} />
+        </mesh>
+        <mesh position={[0, -2.6, 0.8]} rotation={[0.35, 0, 0]} castShadow>
+          <torusGeometry args={[2.4, 0.55, 8, 14]} />
+          <meshStandardMaterial color="#1c1f23" roughness={0.5} metalness={0.65} />
+        </mesh>
+      </group>
+      {/* stone surround: jambs, arch, keystone, worn threshold step */}
+      {[-(HALF + 4.5), HALF + 4.5].map((jx) => (
+        <mesh key={jx} geometry={rbox(6.5, JAMB_H + 4, 5.5)} position={[jx, (JAMB_H + 4) / 2 - 1, 0.6]} castShadow receiveShadow>
+          <meshStandardMaterial {...STONE} />
+        </mesh>
+      ))}
+      <mesh position={[0, JAMB_H, 0.6]} castShadow>
+        <torusGeometry args={[HALF + 2.8, 3.4, 8, 20, Math.PI]} />
+        <meshStandardMaterial {...STONE} />
+      </mesh>
+      <mesh geometry={rbox(7, 6, 6)} position={[0, JAMB_H + HALF + 4.4, 0.6]} castShadow>
+        <meshStandardMaterial {...STONE} />
+      </mesh>
+      <mesh geometry={rbox(HALF * 2 + 16, 2.6, 9)} position={[0, 1, 2]} receiveShadow>
+        <meshStandardMaterial color="#3e3831" roughness={0.96} metalness={0} />
       </mesh>
     </group>
   );
@@ -358,7 +488,7 @@ function Candelabrum({ x, z, seed }: { x: number; z: number; seed: number }) {
           <Candle h={ch} r={1.05} />
         </group>
       ))}
-      <FlickerLight base={3} seed={seed} position={[0, H + 8, 0]} color="#ffb066" distance={70} decay={1.8} />
+      <FlickerLight base={3.4} seed={seed} position={[0, H + 8, 0]} color="#ffb066" distance={70} decay={1.8} />
     </group>
   );
 }
@@ -367,8 +497,7 @@ function Candelabrum({ x, z, seed }: { x: number; z: number; seed: number }) {
 function Sconce({ pos, yaw, seed }: { pos: [number, number, number]; yaw: number; seed: number }) {
   return (
     <group position={pos} rotation={[0, yaw, 0]}>
-      <mesh position={[0, 0, -1.5]} castShadow>
-        <boxGeometry args={[1.8, 8, 1.2]} />
+      <mesh geometry={rbox(1.8, 8, 1.2)} position={[0, 0, -1.5]} castShadow>
         <meshStandardMaterial {...IRON} />
       </mesh>
       {/* scrolled arm out from the wall */}
@@ -383,7 +512,150 @@ function Sconce({ pos, yaw, seed }: { pos: [number, number, number]; yaw: number
       <group position={[0, 1.4, 2]}>
         <Candle h={5.4} r={0.95} />
       </group>
-      <FlickerLight base={1.6} seed={seed} position={[0, 6, 4]} color="#ffa562" distance={46} decay={1.9} />
+      <FlickerLight base={2} seed={seed} position={[0, 6, 4]} color="#ffa562" distance={46} decay={1.9} />
+    </group>
+  );
+}
+
+// ---- pierced plaster walls -------------------------------------------------
+
+// Window openings cut through the north/south walls (wall space: x across the
+// wall, y up from the floor). Must match MedievalWindow's vista plane (26×40
+// centred at FLOOR_Y+52) with a hair of margin for the stone reveal linings.
+const WIN_W = 27;
+const WIN_Y0 = 32;
+const WIN_Y1 = 72;
+const WALL_HALF_LEN = 76; // N/S walls span x −76..76
+const WALL_H = 90;
+
+/**
+ * One plaster wall slab whose textures sample exactly the slice of the whole
+ * wall's plaster that lies under it — so the grime gradient, cracks and stains
+ * run continuously across the segments around the window openings. `mirror`
+ * flips the u-mapping for the south wall, whose room-facing box face runs
+ * u opposite to world x.
+ */
+function PlasterSeg({
+  x0,
+  x1,
+  y0,
+  y1,
+  z,
+  mirror,
+}: {
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+  z: number;
+  mirror: boolean;
+}) {
+  const w = x1 - x0;
+  const h = y1 - y0;
+  const maps = useMemo(() => {
+    const m = plasterTexture().clone();
+    const b = plasterBumpTexture().clone();
+    const du = (w / (WALL_HALF_LEN * 2)) * 2; // 2 texture repeats across the full wall
+    const u0 = mirror
+      ? ((WALL_HALF_LEN - x1) / (WALL_HALF_LEN * 2)) * 2
+      : ((x0 + WALL_HALF_LEN) / (WALL_HALF_LEN * 2)) * 2;
+    for (const t of [m, b]) {
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(du, h / WALL_H);
+      t.offset.set(u0, y0 / WALL_H);
+      t.needsUpdate = true;
+    }
+    return { m, b };
+  }, [x0, x1, y0, w, h, mirror]);
+  return (
+    <mesh position={[x0 + w / 2, FLOOR_Y + y0 + h / 2, z]} receiveShadow>
+      <boxGeometry args={[w, h, 4]} />
+      <meshStandardMaterial
+        map={maps.m}
+        bumpMap={maps.b}
+        bumpScale={0.35}
+        color="#c0b5a4"
+        roughness={0.97}
+        metalness={0}
+      />
+    </mesh>
+  );
+}
+
+/** A north/south wall built from slabs around REAL window openings, so the
+ *  windows genuinely pierce the wall instead of being painted onto it. */
+function PiercedWall({ z, openings, mirror = false }: { z: number; openings: number[]; mirror?: boolean }) {
+  const segs = useMemo(() => {
+    const xs = [...openings].sort((a, b) => a - b);
+    const out: { x0: number; x1: number; y0: number; y1: number }[] = [];
+    let cursor = -WALL_HALF_LEN;
+    for (const cx of xs) {
+      const l = cx - WIN_W / 2;
+      const r = cx + WIN_W / 2;
+      if (l > cursor) out.push({ x0: cursor, x1: l, y0: 0, y1: WALL_H });
+      out.push({ x0: l, x1: r, y0: 0, y1: WIN_Y0 }); // below the opening
+      out.push({ x0: l, x1: r, y0: WIN_Y1, y1: WALL_H }); // above the opening
+      cursor = r;
+    }
+    if (cursor < WALL_HALF_LEN) out.push({ x0: cursor, x1: WALL_HALF_LEN, y0: 0, y1: WALL_H });
+    return out;
+  }, [openings]);
+  return (
+    <group>
+      {segs.map((s2, i) => (
+        <PlasterSeg key={i} {...s2} z={z} mirror={mirror} />
+      ))}
+    </group>
+  );
+}
+
+/**
+ * Cheap faked ambient occlusion for the room shell: gradient planes darken the
+ * four vertical corners and the wall/floor junction, so the room keeps depth
+ * and weight even under the brighter daylight fill. 12 alpha planes, one
+ * shared texture — no extra lights, no per-frame cost.
+ */
+function RoomShading() {
+  const shade = useMemo(() => shadeGradientTexture(), []);
+  const midY = FLOOR_Y + 45;
+  // two planes per corner, one on each adjoining wall, dark edge into the corner
+  const corners: { pos: [number, number, number]; yaw: number; flip: boolean }[] = [
+    { pos: [-60, midY, -87.6], yaw: 0, flip: false },
+    { pos: [60, midY, -87.6], yaw: 0, flip: true },
+    { pos: [60, midY, 87.6], yaw: Math.PI, flip: false },
+    { pos: [-60, midY, 87.6], yaw: Math.PI, flip: true },
+    { pos: [-71.6, midY, 76], yaw: Math.PI / 2, flip: false },
+    { pos: [-71.6, midY, -76], yaw: Math.PI / 2, flip: true },
+    { pos: [71.6, midY, -76], yaw: -Math.PI / 2, flip: false },
+    { pos: [71.6, midY, 76], yaw: -Math.PI / 2, flip: true },
+  ];
+  // contact-shadow strips on the floor along each wall, dark edge at the wall
+  const strips: { pos: [number, number, number]; rz: number; len: number }[] = [
+    { pos: [0, FLOOR_Y + 0.08, -83], rz: -Math.PI / 2, len: 148 },
+    { pos: [0, FLOOR_Y + 0.08, 83], rz: Math.PI / 2, len: 148 },
+    { pos: [-67, FLOOR_Y + 0.08, 0], rz: 0, len: 176 },
+    { pos: [67, FLOOR_Y + 0.08, 0], rz: Math.PI, len: 176 },
+  ];
+  return (
+    <group>
+      {corners.map((c2, i) => (
+        <mesh
+          key={`c${i}`}
+          position={c2.pos}
+          rotation={[0, c2.yaw, 0]}
+          scale={[c2.flip ? -1 : 1, 1, 1]}
+          renderOrder={4}
+        >
+          <planeGeometry args={[26, 90]} />
+          <meshBasicMaterial map={shade} transparent opacity={0.5} depthWrite={false} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+      {strips.map((s2, i) => (
+        <mesh key={`s${i}`} position={s2.pos} rotation={[-Math.PI / 2, 0, s2.rz]} renderOrder={4}>
+          <planeGeometry args={[10, s2.len]} />
+          <meshBasicMaterial map={shade} transparent opacity={0.55} depthWrite={false} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -391,10 +663,9 @@ function Sconce({ pos, yaw, seed }: { pos: [number, number, number]; yaw: number
 // ---- the room -------------------------------------------------------------------
 
 /**
- * Walls, timber ceiling, forge, windows, doorway and real-scale furnishings —
- * anvil on its stump, workbench with tools, pottery shelves, barrels, crates,
- * a leaning ladder, hanging chains, candelabra and sconces. Warm flame lights
- * flicker on a shared clock.
+ * Walls, timber ceiling, windows, the great door and real-scale furnishings —
+ * pottery shelves, crates, candelabra and sconces — kept deliberately
+ * uncluttered. Warm flame lights flicker on a shared clock.
  */
 export function SmithyRoom() {
   const plaster = useMemo(() => {
@@ -407,7 +678,6 @@ export function SmithyRoom() {
     t.repeat.set(2, 1);
     return t;
   }, []);
-  const embers = useMemo(() => forgeEmbersTexture(), []);
   const cobweb = useMemo(() => cobwebTexture(), []);
   const woodBump = useMemo(() => {
     const t = woodBumpTexture().clone();
@@ -421,7 +691,7 @@ export function SmithyRoom() {
       map={plaster}
       bumpMap={plasterBump}
       bumpScale={0.35}
-      color="#b0a698"
+      color="#c0b5a4"
       roughness={0.97}
       metalness={0}
     />
@@ -429,6 +699,9 @@ export function SmithyRoom() {
 
   return (
     <group>
+      {/* faked ambient occlusion: darkened vertical corners + wall/floor
+          contact strips (cheap gradient planes, no extra lights) */}
+      <RoomShading />
       {/* ---- shell: four walls + timber ceiling ---- */}
       <mesh position={[-WALL_X, FLOOR_Y + 45, 0]} receiveShadow>
         <boxGeometry args={[4, 90, 188]} />
@@ -438,14 +711,9 @@ export function SmithyRoom() {
         <boxGeometry args={[4, 90, 188]} />
         {wallMat}
       </mesh>
-      <mesh position={[0, FLOOR_Y + 45, -WALL_Z]} receiveShadow>
-        <boxGeometry args={[152, 90, 4]} />
-        {wallMat}
-      </mesh>
-      <mesh position={[0, FLOOR_Y + 45, WALL_Z]} receiveShadow>
-        <boxGeometry args={[152, 90, 4]} />
-        {wallMat}
-      </mesh>
+      {/* north + south walls pierced with real window openings */}
+      <PiercedWall z={-WALL_Z} openings={[-38, 38]} />
+      <PiercedWall z={WALL_Z} openings={[-44]} mirror />
       <mesh position={[0, CEIL_Y + 2, 0]}>
         <boxGeometry args={[156, 4, 192]} />
         <meshStandardMaterial {...DARKOAK} bumpMap={woodBump} bumpScale={0.08} />
@@ -465,165 +733,17 @@ export function SmithyRoom() {
       <mesh geometry={rbox(10, 9, 186)} position={[0, CEIL_Y - 9, 0]} castShadow>
         <WoodMat tint="#41301f" rx={0.4} ry={3} rough={0.9} />
       </mesh>
-      {/* chains + hooks hanging from the beams near the forge */}
-      <Chain x={-42} z={-52} len={22} />
-      <Chain x={-30} z={-40} len={30} />
-      <Chain x={-50} z={-28} len={16} />
-
-      {/* ---- forge (west wall, offset clear of the banner) ---- */}
-      <group position={[-70, FLOOR_Y, -52]}>
-        {/* chimney breast rising into the ceiling */}
-        <mesh position={[6, 45, 0]} castShadow receiveShadow>
-          <boxGeometry args={[16, 90, 60]} />
-          <meshStandardMaterial {...STONE} />
-        </mesh>
-        {/* hearth opening: dark firebox + banked coals */}
-        <mesh position={[14.5, 16, 0]}>
-          <planeGeometry args={[44, 32]} />
-          <meshStandardMaterial color="#0a0605" roughness={1} side={THREE.DoubleSide} />
-        </mesh>
-        <mesh position={[15, 4.5, 0]} rotation={[-Math.PI / 2 + 0.35, Math.PI / 2, 0]}>
-          <planeGeometry args={[40, 20]} />
-          <meshStandardMaterial map={embers} emissiveMap={embers} emissive="#ffffff" emissiveIntensity={1.6} color="#1c0f08" />
-        </mesh>
-        {/* mantel beam + jambs */}
-        <mesh geometry={rbox(6, 5, 56)} position={[15, 34, 0]} castShadow>
-          <WoodMat tint="#4a3826" rx={0.3} ry={1.4} rough={0.9} />
-        </mesh>
-        {[-26, 26].map((jz) => (
-          <mesh key={jz} position={[14.5, 16, jz]} castShadow>
-            <boxGeometry args={[5, 32, 6]} />
-            <meshStandardMaterial {...STONE} />
-          </mesh>
-        ))}
-        <FlickerLight base={14} seed={0.7} position={[18, 12, 0]} color="#ff7a30" distance={150} decay={1.7} />
-      </group>
-
-      {/* ---- leaded windows (north wall pair + one on the south) ---- */}
+      {/* ---- leaded windows (north wall pair + one on the south) over real
+              openings — the 3D castle-town exterior shows through the glass,
+              a different angle of the same world at each window ---- */}
       <MedievalWindow pos={[-38, FLOOR_Y + 52, -WALL_Z + 2.2]} yaw={0} />
       <MedievalWindow pos={[38, FLOOR_Y + 52, -WALL_Z + 2.2]} yaw={0} />
       <MedievalWindow pos={[-44, FLOOR_Y + 52, WALL_Z - 2.2]} yaw={Math.PI} />
 
-      {/* ---- doorway (east wall): stone arch over a dark passage ---- */}
-      <group position={[WALL_X - 3, FLOOR_Y, 42]}>
-        <mesh position={[0, 26, 0]} rotation={[0, -Math.PI / 2, 0]}>
-          <planeGeometry args={[30, 52]} />
-          <meshStandardMaterial color="#171310" roughness={1} />
-        </mesh>
-        {/* faint lamplight down the passage */}
-        <mesh position={[-0.5, 30, -6]} rotation={[0, -Math.PI / 2, 0]}>
-          <planeGeometry args={[8, 40]} />
-          <meshStandardMaterial color="#2a1c10" emissive="#c96f2a" emissiveIntensity={0.35} />
-        </mesh>
-        {[-17, 17].map((jz) => (
-          <mesh key={jz} position={[-1, 24, jz]} castShadow>
-            <boxGeometry args={[6, 48, 5]} />
-            <meshStandardMaterial {...STONE} />
-          </mesh>
-        ))}
-        <mesh position={[-1, 50, 0]} rotation={[Math.PI / 2, 0, Math.PI / 2]} castShadow>
-          <torusGeometry args={[17, 3, 8, 16, Math.PI]} />
-          <meshStandardMaterial {...STONE} />
-        </mesh>
-      </group>
+      {/* ---- the great oak door (east wall, south of the banner zone) ---- */}
+      <GreatDoor pos={[WALL_X - 2, FLOOR_Y, 52]} yaw={-Math.PI / 2} />
 
       {/* ---- furnishings (all at real scale) ---- */}
-      {/* anvil on an oak stump, near the forge */}
-      <group position={[-48, FLOOR_Y, -26]} rotation={[0, 0.5, 0]}>
-        <mesh position={[0, 8, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[8, 9.5, 16, 12]} />
-          <WoodMat tint="#6e5233" rx={0.7} ry={0.5} rough={0.9} />
-        </mesh>
-        {/* dark forged body, brighter work-polished face */}
-        <mesh position={[0, 18.5, 0]} castShadow>
-          <boxGeometry args={[10, 5, 7]} />
-          <meshStandardMaterial color="#33383e" roughness={0.55} metalness={0.8} />
-        </mesh>
-        <mesh position={[0, 22.5, 0]} castShadow>
-          <boxGeometry args={[15, 3.5, 6]} />
-          <meshStandardMaterial color="#33383e" roughness={0.55} metalness={0.8} />
-        </mesh>
-        <mesh position={[0, 24.3, 0]}>
-          <boxGeometry args={[14.6, 0.3, 5.6]} />
-          <meshStandardMaterial color="#9aa2ac" roughness={0.22} metalness={0.9} />
-        </mesh>
-        <mesh position={[10, 22.5, 0]} rotation={[0, 0, -Math.PI / 2]} castShadow>
-          <coneGeometry args={[2.6, 9, 10]} />
-          <meshStandardMaterial color="#3c4147" roughness={0.5} metalness={0.8} />
-        </mesh>
-        {/* hammer resting on the face */}
-        <mesh position={[-3, 25.2, 1]} rotation={[0, 0.4, 0]}>
-          <boxGeometry args={[5, 2.4, 2.4]} />
-          <meshStandardMaterial {...STEEL} />
-        </mesh>
-        <mesh position={[-3, 25.2, 5]} rotation={[Math.PI / 2, 0, 0.4]}>
-          <cylinderGeometry args={[0.8, 0.9, 9, 6]} />
-          <meshStandardMaterial {...OAK} />
-        </mesh>
-      </group>
-      {/* quenching bucket */}
-      <group position={[-36, FLOOR_Y, -40]}>
-        <mesh position={[0, 5.5, 0]} castShadow>
-          <cylinderGeometry args={[6, 5, 11, 12]} />
-          <meshStandardMaterial {...OAK} />
-        </mesh>
-        <mesh position={[0, 9.5, 0]}>
-          <cylinderGeometry args={[6.2, 6.2, 1, 12]} />
-          <meshStandardMaterial {...IRON} />
-        </mesh>
-        <mesh position={[0, 10.8, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[5.6, 12]} />
-          <meshStandardMaterial color="#101418" roughness={0.15} metalness={0.4} />
-        </mesh>
-      </group>
-      {/* workbench along the south wall, tools on top */}
-      <group position={[34, FLOOR_Y, 76]}>
-        {/* two slightly offset plank slabs — a heavy, uneven medieval top */}
-        <mesh geometry={rbox(56, 3.2, 11)} position={[0, 26, -4.6]} rotation={[0, 0, 0.004]} castShadow receiveShadow>
-          <WoodMat tint="#8f6f45" rx={1.4} ry={0.35} rough={0.78} />
-        </mesh>
-        <mesh geometry={rbox(56, 3.2, 10)} position={[0.8, 25.7, 5.4]} rotation={[0, 0, -0.005]} castShadow receiveShadow>
-          <WoodMat tint="#977a4e" rx={1.4} ry={0.32} rough={0.78} />
-        </mesh>
-        {[-24, 24].map((lx) =>
-          [-7, 7].map((lz) => (
-            <mesh key={`${lx}${lz}`} geometry={rbox(4, 24, 4)} position={[lx, 12, lz]} castShadow>
-              <WoodMat tint="#57422b" rx={0.25} ry={0.8} rough={0.85} />
-            </mesh>
-          )),
-        )}
-        {/* tankard by the tools */}
-        <group position={[-22, 29.4, 4]}>
-          <mesh castShadow>
-            <cylinderGeometry args={[1.9, 2.2, 4.4, 12]} />
-            <meshStandardMaterial color="#4e5258" roughness={0.45} metalness={0.7} />
-          </mesh>
-          <mesh position={[0, 2.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[1.9, 0.3, 6, 12]} />
-            <meshStandardMaterial color="#5e646c" roughness={0.4} metalness={0.75} />
-          </mesh>
-          <mesh position={[2.6, 0, 0]} rotation={[0, 0, 0]}>
-            <torusGeometry args={[1.3, 0.32, 6, 12, Math.PI]} />
-            <meshStandardMaterial color="#4e5258" roughness={0.45} metalness={0.7} />
-          </mesh>
-        </group>
-        {/* tongs, horseshoes, a jug */}
-        <mesh position={[-14, 28.6, 2]} rotation={[0, 0.5, 0]}>
-          <boxGeometry args={[16, 1, 1.6]} />
-          <meshStandardMaterial {...IRON} />
-        </mesh>
-        <mesh position={[-13, 28.6, 4]} rotation={[0, 0.9, 0]}>
-          <boxGeometry args={[16, 1, 1.6]} />
-          <meshStandardMaterial {...IRON} />
-        </mesh>
-        {[4, 11].map((hx) => (
-          <mesh key={hx} position={[hx, 28.4, -3]} rotation={[Math.PI / 2, 0, hx * 0.2]}>
-            <torusGeometry args={[3.4, 1, 6, 12, Math.PI * 1.3]} />
-            <meshStandardMaterial {...IRON} />
-          </mesh>
-        ))}
-        <Pot x={21} z={2} y={31.5} r={4} h={7} />
-      </group>
       {/* pottery shelves on the east wall */}
       <group position={[68, FLOOR_Y, -46]}>
         {[40, 56].map((sy) => (
@@ -633,8 +753,7 @@ export function SmithyRoom() {
             </mesh>
             {/* forged iron brackets */}
             {[-16, 16].map((bz) => (
-              <mesh key={bz} position={[2.4, sy - 3.2, bz]} rotation={[0, 0, 0.78]}>
-                <boxGeometry args={[6.5, 1.2, 1.2]} />
+              <mesh key={bz} geometry={rbox(6.5, 1.2, 1.2)} position={[2.4, sy - 3.2, bz]} rotation={[0, 0, 0.78]}>
                 <meshStandardMaterial {...IRON} />
               </mesh>
             ))}
@@ -679,48 +798,14 @@ export function SmithyRoom() {
           </group>
         ))}
       </group>
-      {/* barrels + crates in the corners */}
-      <Barrel x={58} z={-72} />
-      <Barrel x={38} z={-76} />
-      <Barrel x={52} z={-52} lean={Math.PI / 2} yaw={0.9} />
+      {/* crates in the south-west corner */}
       {[
-        [-56, 66, 22, 0.2],
-        [-40, 72, 18, 0.7],
-        [-52, 62, 16, 0.45],
+        [-46, 70, 22, 0.2],
+        [-26, 76, 18, 0.7],
+        [-42, 66, 16, 0.45],
       ].map(([cx, cz, s, ry], i) => (
         <PlankCrate key={i} x={cx} z={cz} s={s} ry={ry} lift={i === 2 ? 22 : 0} />
       ))}
-      {/* grain sacks slumped beside the crates */}
-      {[
-        [-42, 54, 1.0],
-        [-33, 62, 2.1],
-      ].map(([sx, sz, sr], i) => (
-        <group key={i} position={[sx, FLOOR_Y, sz]} rotation={[0, sr, 0]}>
-          <mesh position={[0, 5, 0]} scale={[1, 0.8, 0.9]} castShadow receiveShadow>
-            <sphereGeometry args={[6.4, 10, 8]} />
-            <meshStandardMaterial color="#8a7350" roughness={1} bumpMap={woodBump} bumpScale={0.1} />
-          </mesh>
-          <mesh position={[0, 10.2, 0]} rotation={[0.2, 0.4, 0.15]} castShadow>
-            <cylinderGeometry args={[1.4, 2.6, 3, 8]} />
-            <meshStandardMaterial color="#796444" roughness={1} />
-          </mesh>
-        </group>
-      ))}
-      {/* ladder leaning on the east wall */}
-      <group position={[58, FLOOR_Y, -14]} rotation={[0, 0, -0.24]}>
-        {[-5, 5].map((lz) => (
-          <mesh key={lz} position={[0, 39, lz]} castShadow>
-            <cylinderGeometry args={[1.4, 1.6, 78, 8]} />
-            <WoodMat tint="#94744c" rx={0.3} ry={1.4} />
-          </mesh>
-        ))}
-        {Array.from({ length: 7 }, (_, k) => (
-          <mesh key={k} position={[0, 10 + k * 10, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-            <cylinderGeometry args={[1, 1, 10, 6]} />
-            <meshStandardMaterial {...OAK} />
-          </mesh>
-        ))}
-      </group>
 
       {/* ---- dusty cobwebs in the high corners ---- */}
       {[
@@ -845,69 +930,6 @@ export function TeamBanners() {
     <group>
       {players.map((p) => (
         <WallBanner key={p} color={p} seat={seats[p]} />
-      ))}
-    </group>
-  );
-}
-
-// ---- chairs at the table --------------------------------------------------------
-
-/** A tall backless oak stool (seat ~1.15 m — matched to the 1.5 m table) with
- *  footrest stretchers and a cushion in the player's colour. No back, so it
- *  never blocks the view of the board or the banners. */
-function GameStool({ color, seat }: { color: PlayerColor; seat: number }) {
-  const [dx, dz] = SEAT_DIR[seat] ?? SEAT_DIR[0];
-  const yaw = Math.atan2(-dx, -dz); // footrests square-on to the table
-  const SEAT_H = 37;
-  return (
-    <group position={[dx * 18, FLOOR_Y, dz * 18]} rotation={[0, yaw, 0]}>
-      {/* four splayed legs */}
-      {[-5.2, 5.2].map((lx) =>
-        [-5.2, 5.2].map((lz) => (
-          <mesh
-            key={`${lx}${lz}`}
-            position={[lx, SEAT_H / 2, lz]}
-            rotation={[lz > 0 ? -0.06 : 0.06, 0, lx > 0 ? -0.06 : 0.06]}
-            castShadow
-          >
-            <cylinderGeometry args={[1.0, 1.5, SEAT_H, 8]} />
-            <WoodMat tint="#7a5c38" rx={0.25} ry={0.9} />
-          </mesh>
-        )),
-      )}
-      {/* footrest stretchers */}
-      {[
-        [0, -6, 13, 0],
-        [0, 6, 13, 0],
-        [-6, 0, 13, Math.PI / 2],
-        [6, 0, 13, Math.PI / 2],
-      ].map(([sx, sz, sy, ry], i) => (
-        <mesh key={i} position={[sx, sy, sz]} rotation={[Math.PI / 2, 0, ry]} castShadow>
-          <cylinderGeometry args={[0.8, 0.8, 12, 6]} />
-          <WoodMat tint="#6e5233" rx={0.2} ry={0.6} />
-        </mesh>
-      ))}
-      {/* round seat + team cushion */}
-      <mesh position={[0, SEAT_H + 1, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[8, 7.2, 2.4, 14]} />
-        <WoodMat tint="#8a6a44" rx={0.5} ry={0.5} />
-      </mesh>
-      <mesh position={[0, SEAT_H + 2.8, 0]}>
-        <cylinderGeometry args={[6.8, 7.1, 1.6, 14]} />
-        <meshStandardMaterial color={COLORS[color]} roughness={0.92} metalness={0} />
-      </mesh>
-    </group>
-  );
-}
-
-/** A stool at the table for every PLAYING colour, at its seat side. */
-export function TableChairs() {
-  const players = useGame((s) => s.game.players);
-  const seats = useGame((s) => s.game.seats);
-  return (
-    <group>
-      {players.map((p) => (
-        <GameStool key={p} color={p} seat={seats[p]} />
       ))}
     </group>
   );

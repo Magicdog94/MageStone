@@ -25,7 +25,24 @@ import type { Cell, GameState, PlayerColor, UnitKind } from './game/types';
 import type { BotLevel } from './game/bot';
 
 export type HealthBarMode = 'off' | 'always' | 'hover';
+export type LayoutMode = 'desktop' | 'mobile';
 export type ModalId = 'newGame' | 'settings' | null;
+
+// Compact phone layout: restored from the player's saved choice, else
+// auto-detected once from the device (coarse pointer or a small viewport —
+// e.g. an iPhone 14 in landscape is 844×390).
+function detectLayout(): LayoutMode {
+  try {
+    const saved = localStorage.getItem('ms-layout');
+    if (saved === 'mobile' || saved === 'desktop') return saved;
+  } catch {
+    /* storage may be unavailable (private mode) — fall through to detection */
+  }
+  if (typeof window === 'undefined') return 'desktop';
+  const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+  const small = Math.min(window.screen?.width ?? 9999, window.screen?.height ?? 9999) < 500;
+  return coarse || small ? 'mobile' : 'desktop';
+}
 
 /** A unit that was just defeated — captured before the engine removes it, so the
  *  3D layer can play its collapse animation at the square where it fell. */
@@ -42,6 +59,8 @@ export interface Settings {
   turnSeconds: number | null;
   /** Silence the sound effects (music has its own toggle). */
   sfxMuted: boolean;
+  /** Interface layout: compact 'mobile' (phones, landscape) or full 'desktop'. */
+  layout: LayoutMode;
 }
 
 interface UIState {
@@ -102,6 +121,7 @@ interface UIState {
   setHealthBars: (mode: HealthBarMode) => void;
   setTurnSeconds: (seconds: number | null) => void;
   setSfxMuted: (muted: boolean) => void;
+  setLayout: (layout: LayoutMode) => void;
   setHovered: (unitId: string | null) => void;
 
   roll: () => void;
@@ -136,7 +156,7 @@ export const useGame = create<UIState>((set) => ({
   playerCount: 2,
   playerColors: playerSet(2),
   stoneLayoutId: 'diamond',
-  settings: { healthBars: 'off', turnSeconds: 60, sfxMuted: false },
+  settings: { healthBars: 'off', turnSeconds: 60, sfxMuted: false, layout: detectLayout() },
   // Open the New Game selector on first load so the player chooses players/timer
   // before the turn timer starts (the timer pauses while any modal is open).
   modal: 'newGame',
@@ -207,6 +227,14 @@ export const useGame = create<UIState>((set) => ({
   setHealthBars: (mode) => set((s) => ({ settings: { ...s.settings, healthBars: mode } })),
   setTurnSeconds: (seconds) => set((s) => ({ settings: { ...s.settings, turnSeconds: seconds } })),
   setSfxMuted: (muted) => set((s) => ({ settings: { ...s.settings, sfxMuted: muted } })),
+  setLayout: (layout) => {
+    try {
+      localStorage.setItem('ms-layout', layout);
+    } catch {
+      /* storage unavailable — the choice still applies for this session */
+    }
+    set((s) => ({ settings: { ...s.settings, layout } }));
+  },
   setHovered: (unitId) => set({ hoveredUnitId: unitId }),
 
   roll: () =>

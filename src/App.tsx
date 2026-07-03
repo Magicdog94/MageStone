@@ -8,12 +8,21 @@ import { FullscreenToggle } from './ui/FullscreenToggle';
 import { useMusic } from './audio/music';
 import { initSfx } from './audio/sfx';
 import { useNet } from './net/useNet';
+import { useGame } from './store';
 import './App.css';
 
 export default function App() {
   const screen = useNet((s) => s.screen);
   const init = useNet((s) => s.init);
   useEffect(() => init(), [init]);
+
+  // Compact phone layout: a body class scopes the CSS overrides so it also
+  // reaches the entry screens, modals and floating toggles (Settings → Layout).
+  const layout = useGame((s) => s.settings.layout);
+  useEffect(() => {
+    document.body.classList.toggle('ui-mobile', layout === 'mobile');
+    return () => document.body.classList.remove('ui-mobile');
+  }, [layout]);
 
   // Autoplay is blocked until the player interacts, so kick off the score on the
   // first gesture anywhere (a landing button, the board, etc.). It then plays

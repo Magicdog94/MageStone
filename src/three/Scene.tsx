@@ -6,7 +6,9 @@ import { Board } from './Board';
 import { DiceLayer } from './Dice';
 import { BoardTokens, ClashEffect, DeathAnimations, Units } from './Pieces';
 import { arenaCircleTexture, groundBumpTexture, hazyFogTexture, stoneFloorTexture } from './textures';
-import { SmithyRoom, TableChairs, TeamBanners } from './Decor';
+import { SmithyRoom, TeamBanners } from './Decor';
+import { ExteriorWorld } from './Exterior';
+import { FantasyProps } from './Props';
 import { FLOOR_Y } from './coords';
 import { useGame } from '../store';
 
@@ -39,11 +41,11 @@ function FogBackdrop() {
 function StudioEnv() {
   return (
     <Environment resolution={256} frames={1}>
-      <color attach="background" args={['#0a0f0c']} />
-      <Lightformer intensity={1.8} position={[0, 6, 2]} scale={[12, 12, 1]} color="#cfdcd4" />
-      <Lightformer intensity={1.0} position={[-6, 3, 4]} scale={[6, 8, 1]} color="#aebfb4" />
-      <Lightformer intensity={1.1} position={[6, 1, -4]} scale={[6, 5, 1]} color="#ffcf8a" />
-      <Lightformer intensity={0.8} position={[-6, 1, -4]} scale={[6, 5, 1]} color="#ffb87a" />
+      <color attach="background" args={['#12140f']} />
+      <Lightformer intensity={2.1} position={[0, 6, 2]} scale={[12, 12, 1]} color="#dde5da" />
+      <Lightformer intensity={1.2} position={[-6, 3, 4]} scale={[6, 8, 1]} color="#c2ccc0" />
+      <Lightformer intensity={1.2} position={[6, 1, -4]} scale={[6, 5, 1]} color="#ffd494" />
+      <Lightformer intensity={0.9} position={[-6, 1, -4]} scale={[6, 5, 1]} color="#ffc084" />
     </Environment>
   );
 }
@@ -103,7 +105,7 @@ function ArenaEnvironment() {
           map={floorMap}
           bumpMap={floorBump}
           bumpScale={0.05}
-          color="#cfd8cf"
+          color="#d9d2c2"
           roughness={0.94}
           metalness={0}
           envMapIntensity={0.15}
@@ -212,28 +214,31 @@ export function Scene() {
       shadows="percentage"
       dpr={[1, 2]}
       camera={{ position: [0, 20, 21], fov: 38 }}
-      gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
+      gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.16 }}
       onPointerMissed={() => clearSelection(null)}
     >
       {/* light interior haze — smoke off the forge, not outdoor fog */}
-      <fog attach="fog" args={['#171410', 70, 300]} />
+      <fog attach="fog" args={['#241f17', 110, 380]} />
 
       <FogBackdrop />
       <StudioEnv />
       <ArenaEnvironment />
       <Suspense fallback={null}>
         <SmithyRoom />
+        <ExteriorWorld />
+        <FantasyProps />
         <TeamBanners />
-        <TableChairs />
       </Suspense>
-      {/* darker ambient floor: the candles and window shafts carry the room */}
-      <hemisphereLight args={['#8a7f6d', '#15100c', 0.42]} />
-      <ambientLight intensity={0.13} color={'#d8cbb8'} />
-      {/* daylight slanting in through the north windows */}
+      {/* daylight fill — the open windows pour real sun into the chamber, so
+          the ambient floor is lifted well above the old candlelit murk */}
+      <hemisphereLight args={['#b8ac97', '#241b12', 0.62]} />
+      <ambientLight intensity={0.24} color={'#e2d6c2'} />
+      {/* cool daylight slanting in through the north windows (the candles
+          carry the warmth; the windows carry the cool) */}
       <directionalLight
         position={[24, 60, -70]}
-        intensity={1.5}
-        color={'#dfe8f0'}
+        intensity={2.2}
+        color={'#dfe8ef'}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0002}
@@ -242,8 +247,10 @@ export function Scene() {
         shadow-camera-top={16}
         shadow-camera-bottom={-16}
       />
+      {/* softer bounce from the south window (no shadow — just fill) */}
+      <directionalLight position={[-30, 40, 70]} intensity={0.55} color={'#d9e2e8'} />
       {/* a soft pool over the table keeps the board readable */}
-      <spotLight position={[0, 34, 0]} angle={0.7} penumbra={1} intensity={2.2} color={'#e8e2d2'} />
+      <spotLight position={[0, 34, 0]} angle={0.7} penumbra={1} intensity={2.5} color={'#ece5d2'} />
 
       <Suspense fallback={null}>
         <Board />

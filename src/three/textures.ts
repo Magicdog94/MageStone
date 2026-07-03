@@ -400,6 +400,60 @@ export function plasterTexture(): THREE.Texture {
       ctx.fillRect(x + ox - w / 2, 0, w, h);
     }
   }
+  // hairline cracks wandering down the plaster
+  for (let i = 0; i < 14; i++) {
+    const x0 = Math.random() * S;
+    const y0 = Math.random() * S * 0.5;
+    const len = 6 + ((Math.random() * 8) | 0);
+    for (const ox of [0, -S, S]) {
+      ctx.strokeStyle = `rgba(28,24,20,${0.3 + Math.random() * 0.3})`;
+      ctx.lineWidth = 1 + Math.random();
+      let x = x0 + ox;
+      let y = y0;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      for (let s2 = 0; s2 < len; s2++) {
+        x += (Math.random() - 0.5) * 44;
+        y += 20 + Math.random() * 46; // cracks run downward
+        ctx.lineTo(x, y);
+        // the odd branch
+        if (Math.random() < 0.25) {
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + (Math.random() - 0.5) * 60, y + 20 + Math.random() * 40);
+          ctx.moveTo(x, y);
+        }
+      }
+      ctx.stroke();
+    }
+  }
+  // rising damp + grime at the foot of the wall (walls map v over full height)
+  const damp = ctx.createLinearGradient(0, S * 0.62, 0, S);
+  damp.addColorStop(0, 'rgba(38,34,28,0)');
+  damp.addColorStop(0.6, 'rgba(38,34,28,0.22)');
+  damp.addColorStop(1, 'rgba(24,22,18,0.5)');
+  ctx.fillStyle = damp;
+  ctx.fillRect(0, S * 0.62, S, S * 0.38);
+  // faint green damp bloom in the lowest courses
+  for (let i = 0; i < 18; i++) {
+    const x = Math.random() * S;
+    const y = S * 0.82 + Math.random() * S * 0.18;
+    const r = 20 + Math.random() * 60;
+    for (const ox of [0, -S, S]) {
+      const g = ctx.createRadialGradient(x + ox, y, 0, x + ox, y, r);
+      g.addColorStop(0, `rgba(52,68,44,${0.06 + Math.random() * 0.1})`);
+      g.addColorStop(1, 'rgba(52,68,44,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x + ox, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  // soot shading up near the ceiling (candle smoke collects there)
+  const soot = ctx.createLinearGradient(0, 0, 0, S * 0.14);
+  soot.addColorStop(0, 'rgba(26,22,18,0.3)');
+  soot.addColorStop(1, 'rgba(26,22,18,0)');
+  ctx.fillStyle = soot;
+  ctx.fillRect(0, 0, S, S * 0.14);
   // fine grain
   for (let i = 0; i < 12000; i++) {
     const v = 90 + ((Math.random() * 80) | 0);
@@ -450,95 +504,264 @@ export function forgeEmbersTexture(): THREE.Texture {
   return finish(c, 'embers');
 }
 
-/** A leaded arched window glowing with pale daylight (transparent outside the
- *  arch — use with alphaTest). */
-export function windowTexture(): THREE.Texture {
-  const hit = cache.get('window');
+// ---- Exterior world (seen through the windows) ------------------------------
+
+/**
+ * The painted far distance behind the 3D exterior diorama: a muted natural sky
+ * with soft stratus and cumulus, and low rolling farmland — hedgerow field
+ * patchwork, treelines — dissolving into haze at the horizon. Deliberately
+ * desaturated (aerial perspective); the horizon sits at ~55% down so the plane
+ * can straddle eye level. Shared by both dioramas with different UV offsets.
+ */
+export function exteriorBackdropTexture(): THREE.Texture {
+  const hit = cache.get('extBackdrop');
   if (hit) return hit;
-  const W = 256;
-  const H = 384;
+  const W = 1024;
+  const H = 512;
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
   const ctx = c.getContext('2d')!;
-  const arch = () => {
-    ctx.beginPath();
-    ctx.moveTo(18, H - 10);
-    ctx.lineTo(18, 130);
-    ctx.arc(W / 2, 130, W / 2 - 18, Math.PI, 0);
-    ctx.lineTo(W - 18, H - 10);
-    ctx.closePath();
+  let seed = 24601;
+  const rand = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 0xffffffff;
   };
-  // pale foggy daylight
-  arch();
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#d8e4e6');
-  g.addColorStop(0.55, '#b9c9c6');
-  g.addColorStop(1, '#8fa39c');
-  ctx.fillStyle = g;
-  ctx.fill();
-  // soft hot spot (the smothered sun)
-  arch();
-  ctx.save();
-  ctx.clip();
-  const s = ctx.createRadialGradient(W * 0.42, H * 0.3, 0, W * 0.42, H * 0.3, W * 0.7);
-  s.addColorStop(0, 'rgba(255,252,238,0.85)');
-  s.addColorStop(1, 'rgba(255,252,238,0)');
-  ctx.fillStyle = s;
-  ctx.fillRect(0, 0, W, H);
-  // frosted, cloudy old glass — uneven blotches per pane
-  for (let i = 0; i < 60; i++) {
-    const bx = Math.random() * W;
-    const by = Math.random() * H;
-    const br = 12 + Math.random() * 40;
-    const lite = Math.random() < 0.55;
-    const g2 = ctx.createRadialGradient(bx, by, 0, bx, by, br);
-    g2.addColorStop(0, lite ? 'rgba(255,255,250,0.16)' : 'rgba(120,135,130,0.14)');
-    g2.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g2;
+  const HOR = H * 0.55;
+
+  // sky: grey-blue zenith fading to warm-grey haze at the horizon
+  const sky = ctx.createLinearGradient(0, 0, 0, HOR);
+  sky.addColorStop(0, '#7695ae');
+  sky.addColorStop(0.6, '#a9bcc8');
+  sky.addColorStop(1, '#dfe3de');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, HOR + 2);
+  // soft stratus streaks
+  for (let i = 0; i < 26; i++) {
+    const y = rand() * HOR * 0.8;
+    const x = rand() * W;
+    const w = 120 + rand() * 320;
+    const h = 6 + rand() * 16;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, w / 2);
+    g.addColorStop(0, `rgba(238,240,238,${0.1 + rand() * 0.16})`);
+    g.addColorStop(1, 'rgba(238,240,238,0)');
+    ctx.fillStyle = g;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(1, h / (w / 2));
     ctx.beginPath();
-    ctx.arc(bx, by, br, 0, Math.PI * 2);
+    ctx.arc(0, 0, w / 2, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   }
-  // lead cames: diamond lattice + mullion, with a light edge so they read RAISED
-  for (let k = -6; k < 10; k++) {
-    for (const [dir, off] of [
-      [1, 0],
-      [-1, H],
-    ] as const) {
-      ctx.strokeStyle = 'rgba(230,232,228,0.5)'; // catchlight above the came
-      ctx.lineWidth = 7;
+  // a few soft cumulus with shaded undersides
+  for (let i = 0; i < 5; i++) {
+    const cx = rand() * W;
+    const cy = HOR * (0.2 + rand() * 0.45);
+    const s = 30 + rand() * 46;
+    for (let p = 0; p < 6; p++) {
+      const px = cx + (rand() - 0.5) * s * 2.2;
+      const py = cy - rand() * s * 0.5;
+      const pr = s * (0.3 + rand() * 0.4);
+      const g = ctx.createRadialGradient(px, py - pr * 0.3, 0, px, py, pr);
+      g.addColorStop(0, 'rgba(244,245,243,0.5)');
+      g.addColorStop(1, 'rgba(244,245,243,0)');
+      ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.moveTo(k * 48 + (dir === 1 ? 0 : off), dir === 1 ? 0 : 0);
-      ctx.lineTo(k * 48 + (dir === 1 ? H : off - H), H);
-      ctx.stroke();
-      ctx.strokeStyle = 'rgba(34,32,28,0.9)'; // the lead itself
-      ctx.lineWidth = 4.5;
+      ctx.arc(px, py, pr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(150,160,168,0.10)';
+    ctx.fillRect(cx - s * 1.6, cy + s * 0.1, s * 3.2, s * 0.28);
+  }
+
+  // farmland: banded field patchwork, palest at the horizon
+  const fields = ['#7c8a62', '#8f9468', '#a29a72', '#6f7f58', '#93987a'];
+  let y = HOR;
+  let band = 0;
+  while (y < H) {
+    const bh = 14 + band * 10 + rand() * 16;
+    let x = -rand() * 120;
+    while (x < W) {
+      const fw = 90 + rand() * 220;
+      const col = fields[(rand() * fields.length) | 0];
+      ctx.fillStyle = col;
+      ctx.fillRect(x, y, fw, bh + 2);
+      // aerial perspective: the farther the band, the paler it reads
+      ctx.fillStyle = `rgba(223,227,222,${Math.max(0, 0.5 - band * 0.16).toFixed(3)})`;
+      ctx.fillRect(x, y, fw, bh + 2);
+      // hedgerow seam
+      ctx.fillStyle = `rgba(70,80,54,${0.25 + band * 0.1})`;
+      ctx.fillRect(x + fw - 2, y, 2.5, bh + 2);
+      x += fw;
+    }
+    // hedgerow along the band boundary + occasional treeline blobs
+    ctx.fillStyle = `rgba(74,86,58,${0.3 + band * 0.1})`;
+    ctx.fillRect(0, y + bh, W, 2 + band * 0.8);
+    for (let t = 0; t < Math.max(6, 26 - band * 4); t++) {
+      const tx = rand() * W;
+      const tr = 3 + band * 2.4 + rand() * 4;
+      ctx.fillStyle = `rgba(66,80,52,${0.35 + band * 0.12})`;
       ctx.beginPath();
-      ctx.moveTo(k * 48 + (dir === 1 ? 0 : off) + 1, dir === 1 ? 1 : 1);
-      ctx.lineTo(k * 48 + (dir === 1 ? H : off - H) + 1, H);
-      ctx.stroke();
+      ctx.arc(tx, y + bh - tr * 0.4, tr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    y += bh;
+    band++;
+  }
+  // haze veil dissolving the far fields into the sky
+  const haze = ctx.createLinearGradient(0, HOR - 6, 0, HOR + H * 0.12);
+  haze.addColorStop(0, 'rgba(223,227,222,0.55)');
+  haze.addColorStop(1, 'rgba(223,227,222,0)');
+  ctx.fillStyle = haze;
+  ctx.fillRect(0, HOR - 6, W, H * 0.12 + 6);
+
+  const t = finish(c, 'extBackdrop', true);
+  t.wrapT = THREE.ClampToEdgeWrapping;
+  return t;
+}
+
+/** Courtyard/meadow ground outside the windows — drab worn grass, dirt patches
+ *  and wheel-worn wear. Muted so it recedes; tiles seamlessly. */
+export function exteriorGroundTexture(): THREE.Texture {
+  const hit = cache.get('extGround');
+  if (hit) return hit;
+  const S = 512;
+  const [c, ctx] = canvas(S);
+  ctx.fillStyle = '#6d7351';
+  ctx.fillRect(0, 0, S, S);
+  for (let i = 0; i < 120; i++) {
+    const x = Math.random() * S;
+    const y = Math.random() * S;
+    const r = 14 + Math.random() * 60;
+    const worn = Math.random() < 0.4;
+    for (const ox of [0, -S, S]) {
+      for (const oy of [0, -S, S]) {
+        const g = ctx.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
+        g.addColorStop(0, worn ? `rgba(134,118,86,${0.1 + Math.random() * 0.16})` : `rgba(84,96,60,${0.1 + Math.random() * 0.16})`);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x + ox, y + oy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
-  ctx.strokeStyle = 'rgba(230,232,228,0.5)';
-  ctx.lineWidth = 13;
+  for (let i = 0; i < 5000; i++) {
+    const v = Math.random();
+    ctx.fillStyle = v < 0.5 ? 'rgba(50,58,36,0.2)' : 'rgba(150,148,110,0.14)';
+    ctx.fillRect(Math.random() * S, Math.random() * S, 1, 1);
+  }
+  return finish(c, 'extGround', true);
+}
+
+// Shared arch silhouette for the window glass + lead layers (26×40 plane).
+const GLASS_W = 320;
+const GLASS_H = 480;
+function glassArch(ctx: CanvasRenderingContext2D) {
+  const M = 22;
+  const ARC_Y = 162;
   ctx.beginPath();
-  ctx.moveTo(W / 2, 40);
-  ctx.lineTo(W / 2, H);
-  ctx.stroke();
-  ctx.strokeStyle = 'rgba(34,32,28,0.92)';
-  ctx.lineWidth = 9;
-  ctx.beginPath();
-  ctx.moveTo(W / 2 + 1, 41);
-  ctx.lineTo(W / 2 + 1, H);
+  ctx.moveTo(M, GLASS_H - 8);
+  ctx.lineTo(M, ARC_Y);
+  ctx.arc(GLASS_W / 2, ARC_Y, GLASS_W / 2 - M, Math.PI, 0);
+  ctx.lineTo(GLASS_W - M, GLASS_H - 8);
+  ctx.closePath();
+}
+
+/**
+ * Cloudy medieval glass on transparency: a faint blue-white veil (low alpha so
+ * the exterior stays visible) with frost blotches, a diagonal sheen and grime
+ * gathering at the edges. Alpha 0 outside the arch. Used with `transparent`.
+ */
+export function windowGlassTexture(): THREE.Texture {
+  const hit = cache.get('winGlass');
+  if (hit) return hit;
+  const c = document.createElement('canvas');
+  c.width = GLASS_W;
+  c.height = GLASS_H;
+  const ctx = c.getContext('2d')!;
+  glassArch(ctx);
+  ctx.save();
+  ctx.clip();
+  // base veil
+  ctx.fillStyle = 'rgba(210,222,228,0.13)';
+  ctx.fillRect(0, 0, GLASS_W, GLASS_H);
+  // frost blotches — uneven old glass
+  for (let i = 0; i < 46; i++) {
+    const x = Math.random() * GLASS_W;
+    const y = Math.random() * GLASS_H;
+    const r = 14 + Math.random() * 44;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(224,232,235,${0.05 + Math.random() * 0.13})`);
+    g.addColorStop(1, 'rgba(224,232,235,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // diagonal sheen band
+  const sheen = ctx.createLinearGradient(0, GLASS_H * 0.2, GLASS_W, GLASS_H * 0.75);
+  sheen.addColorStop(0, 'rgba(235,240,242,0)');
+  sheen.addColorStop(0.45, 'rgba(235,240,242,0.1)');
+  sheen.addColorStop(0.55, 'rgba(235,240,242,0.1)');
+  sheen.addColorStop(1, 'rgba(235,240,242,0)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(0, 0, GLASS_W, GLASS_H);
+  // grime creeping in from the frame
+  ctx.strokeStyle = 'rgba(58,54,44,0.3)';
+  ctx.lineWidth = 30;
+  glassArch(ctx);
   ctx.stroke();
   ctx.restore();
-  // thin dark reveal where glass meets the stone frame (frame is geometry)
-  arch();
-  ctx.strokeStyle = '#26221c';
-  ctx.lineWidth = 8;
+  return finish(c, 'winGlass');
+}
+
+/**
+ * Raised lead cames over the glass: a diamond lattice with a heavier central
+ * mullion and a border following the arch. Each came carries an upper-left
+ * catchlight so it reads as raised metal. Transparent elsewhere (alphaTest).
+ */
+export function windowLeadTexture(): THREE.Texture {
+  const hit = cache.get('winLead');
+  if (hit) return hit;
+  const c = document.createElement('canvas');
+  c.width = GLASS_W;
+  c.height = GLASS_H;
+  const ctx = c.getContext('2d')!;
+  glassArch(ctx);
+  ctx.save();
+  ctx.clip();
+  const came = (x0: number, y0: number, x1: number, y1: number, w: number) => {
+    ctx.strokeStyle = 'rgba(214,220,216,0.6)'; // catchlight
+    ctx.lineWidth = w + 2;
+    ctx.beginPath();
+    ctx.moveTo(x0 - 1.4, y0 - 1.4);
+    ctx.lineTo(x1 - 1.4, y1 - 1.4);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(38,40,38,0.95)'; // the lead
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+  };
+  // diamond lattice
+  const step = 62;
+  for (let k = -10; k < 14; k++) {
+    came(k * step, 0, k * step + GLASS_H, GLASS_H, 4.5);
+    came(k * step, 0, k * step - GLASS_H, GLASS_H, 4.5);
+  }
+  // heavier central mullion + a transom bar at the arch springing
+  came(GLASS_W / 2, 30, GLASS_W / 2, GLASS_H, 9);
+  came(0, 162, GLASS_W, 162, 7);
+  // border came following the arch
+  ctx.strokeStyle = 'rgba(38,40,38,0.95)';
+  ctx.lineWidth = 14;
+  glassArch(ctx);
   ctx.stroke();
-  return finish(c, 'window');
+  ctx.restore();
+  return finish(c, 'winLead');
 }
 
 // ---- Team banners -----------------------------------------------------------
@@ -958,6 +1181,26 @@ export function plasterBumpTexture(): THREE.Texture {
       ctx.stroke();
     }
   }
+  // crack grooves (dark = recessed) echoing the colour map's cracks
+  for (let i = 0; i < 14; i++) {
+    const x0 = Math.random() * S;
+    const y0 = Math.random() * S * 0.5;
+    const len = 6 + ((Math.random() * 8) | 0);
+    for (const ox of [0, -S, S]) {
+      ctx.strokeStyle = 'rgba(30,30,30,0.6)';
+      ctx.lineWidth = 1.5 + Math.random();
+      let x = x0 + ox;
+      let y = y0;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      for (let s2 = 0; s2 < len; s2++) {
+        x += (Math.random() - 0.5) * 44;
+        y += 20 + Math.random() * 46;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+  }
   // pocks + grain
   for (let i = 0; i < 9000; i++) {
     const v = 90 + ((Math.random() * 80) | 0);
@@ -965,6 +1208,25 @@ export function plasterBumpTexture(): THREE.Texture {
     ctx.fillRect(Math.random() * S, Math.random() * S, Math.random() < 0.2 ? 2 : 1, 1);
   }
   const t = finish(c, 'plasterBump', true);
+  t.colorSpace = THREE.NoColorSpace;
+  return t;
+}
+
+/** A soft black gradient on transparency — dark at the LEFT edge (u=0), fading
+ *  to clear at the right. Reused for faked ambient occlusion: wall-corner
+ *  shading, wall/floor contact strips, and shadows tucked behind props. */
+export function shadeGradientTexture(): THREE.Texture {
+  const hit = cache.get('shadeGradient');
+  if (hit) return hit;
+  const S = 256;
+  const [c, ctx] = canvas(S);
+  const g = ctx.createLinearGradient(0, 0, S, 0);
+  g.addColorStop(0, 'rgba(0,0,0,0.9)');
+  g.addColorStop(0.45, 'rgba(0,0,0,0.32)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S, S);
+  const t = finish(c, 'shadeGradient');
   t.colorSpace = THREE.NoColorSpace;
   return t;
 }
@@ -1057,6 +1319,31 @@ export function planksBumpTexture(): THREE.Texture {
     }
     ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(p * pw - 2, 0, 4, S);
+  }
+  // scattered scratches + small dents (recessed) — worn working wood
+  for (let i = 0; i < 26; i++) {
+    ctx.strokeStyle = `rgba(52,52,52,${0.35 + Math.random() * 0.3})`;
+    ctx.lineWidth = 1;
+    const x = Math.random() * S;
+    const y = Math.random() * S;
+    const a = (Math.random() - 0.5) * 1.2;
+    const l = 10 + Math.random() * 46;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.sin(a) * l, y + Math.cos(a) * l);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 14; i++) {
+    const x = Math.random() * S;
+    const y = Math.random() * S;
+    const r = 2 + Math.random() * 5;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(60,60,60,0.7)');
+    g.addColorStop(1, 'rgba(60,60,60,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
   }
   const t = finish(c, 'planksBump', true);
   t.colorSpace = THREE.NoColorSpace;
@@ -1244,19 +1531,19 @@ export function hazyFogTexture(): THREE.Texture {
 
 // ---- Stone plaza floor (tiling) -------------------------------------------
 
-/** Large weathered stone slabs — the arena floor the table stands on. Big
+/** Large worn flagstones — the old stone floor the table stands on. Big
  *  tiles (2 courses per texture repeat) with bevel-shaded edges, hairline
- *  cracks, damp mottling and a whisper of moss in the joints. Tiles seamlessly
- *  (slabs wrap across the x edge; rows fit the y edge exactly). */
+ *  cracks and centuries of foot-worn staining. Tiles seamlessly (slabs wrap
+ *  across the x edge; rows fit the y edge exactly). */
 export function stoneFloorTexture(): THREE.Texture {
   const hit = cache.get('stoneFloor');
   if (hit) return hit;
   const S = 1024;
   const [c, ctx] = canvas(S);
-  // damp joint mortar underneath
-  ctx.fillStyle = '#070b09';
+  // dark joint mortar underneath
+  ctx.fillStyle = '#2b2620';
   ctx.fillRect(0, 0, S, S);
-  const shades = ['#151b18', '#181f1b', '#121815', '#1b2320', '#161d19'];
+  const shades = ['#6a6455', '#726b5c', '#5e584a', '#7a7263', '#655e50'];
   const rows = 2; // two courses per repeat → big slabs
   const rh = S / rows;
   for (let r = 0; r < rows; r++) {
@@ -1270,17 +1557,17 @@ export function stoneFloorTexture(): THREE.Texture {
         const py = r * rh + 6;
         const pw = w - 12;
         const ph = rh - 12;
-        // slab face with a diagonal light-to-damp gradient
+        // slab face with a diagonal light-to-worn gradient
         const sg = ctx.createLinearGradient(px, py, px + pw, py + ph);
         sg.addColorStop(0, shade);
-        sg.addColorStop(1, '#0e1411');
+        sg.addColorStop(1, '#4c463b');
         ctx.fillStyle = sg;
         ctx.beginPath();
         ctx.roundRect(px, py, pw, ph, 14);
         ctx.fill();
         // bevel: light top-left edge, dark bottom-right edge
         ctx.lineWidth = 5;
-        ctx.strokeStyle = 'rgba(140,155,145,0.12)';
+        ctx.strokeStyle = 'rgba(206,196,174,0.16)';
         ctx.beginPath();
         ctx.moveTo(px + 8, py + ph - 10);
         ctx.lineTo(px + 8, py + 10);
@@ -1294,7 +1581,7 @@ export function stoneFloorTexture(): THREE.Texture {
         ctx.stroke();
         // hairline cracks
         const cracks = 1 + ((Math.random() * 2) | 0);
-        ctx.strokeStyle = 'rgba(5,8,7,0.55)';
+        ctx.strokeStyle = 'rgba(34,30,24,0.55)';
         ctx.lineWidth = 1.6;
         for (let k = 0; k < cracks; k++) {
           let cx2 = px + 30 + Math.random() * (pw - 60);
@@ -1308,14 +1595,14 @@ export function stoneFloorTexture(): THREE.Texture {
           }
           ctx.stroke();
         }
-        // damp mottling on the face
+        // age stains and foot-worn patches on the face
         for (let k = 0; k < 8; k++) {
           const mx = px + Math.random() * pw;
           const my = py + Math.random() * ph;
           const mr = 24 + Math.random() * 70;
           const mg = ctx.createRadialGradient(mx, my, 0, mx, my, mr);
-          mg.addColorStop(0, `rgba(8,14,11,${0.08 + Math.random() * 0.12})`);
-          mg.addColorStop(1, 'rgba(8,14,11,0)');
+          mg.addColorStop(0, `rgba(50,44,34,${0.08 + Math.random() * 0.12})`);
+          mg.addColorStop(1, 'rgba(50,44,34,0)');
           ctx.fillStyle = mg;
           ctx.beginPath();
           ctx.arc(mx, my, mr, 0, Math.PI * 2);
@@ -1325,7 +1612,7 @@ export function stoneFloorTexture(): THREE.Texture {
       x += w;
     }
   }
-  // moss creeping from the joints (wrap copies keep the tile seamless)
+  // old grime settled along the joints (wrap copies keep the tile seamless)
   for (let i = 0; i < 46; i++) {
     const x = Math.random() * S;
     const y = (((Math.random() * rows) | 0) + (Math.random() < 0.5 ? 0 : 1)) * rh + (Math.random() - 0.5) * 26;
@@ -1333,8 +1620,8 @@ export function stoneFloorTexture(): THREE.Texture {
     for (const ox of [0, -S, S]) {
       for (const oy of [0, -S, S]) {
         const mg = ctx.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
-        mg.addColorStop(0, `rgba(40,76,50,${0.05 + Math.random() * 0.08})`);
-        mg.addColorStop(1, 'rgba(40,76,50,0)');
+        mg.addColorStop(0, `rgba(44,38,30,${0.05 + Math.random() * 0.08})`);
+        mg.addColorStop(1, 'rgba(44,38,30,0)');
         ctx.fillStyle = mg;
         ctx.beginPath();
         ctx.arc(x + ox, y + oy, r, 0, Math.PI * 2);
@@ -1344,8 +1631,8 @@ export function stoneFloorTexture(): THREE.Texture {
   }
   // stone grain
   for (let i = 0; i < 7000; i++) {
-    const v = 10 + ((Math.random() * 34) | 0);
-    ctx.fillStyle = `rgba(${v},${v + 6},${v + 3},${Math.random() * 0.28})`;
+    const v = 70 + ((Math.random() * 70) | 0);
+    ctx.fillStyle = `rgba(${v},${v - 5},${v - 14},${Math.random() * 0.24})`;
     ctx.fillRect(Math.random() * S, Math.random() * S, 1, 1);
   }
   return finish(c, 'stoneFloor', true);

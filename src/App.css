@@ -2261,3 +2261,172 @@
   color: var(--ink);
   border-color: var(--gold);
 }
+
+/* ============================================================
+   MOBILE LAYOUT — Settings → Display → Layout → "Mobile".
+   A compact HUD for phones in landscape, designed on the iPhone 14
+   (844×390 CSS px + notch/home-bar safe areas). Everything is scoped
+   under body.ui-mobile so the Desktop layout is completely untouched.
+
+   The arrangement:
+     top-left   player cards, with the turn-timer bar under them
+     top-right  settings gear, then the Turn/gravestone chips beside it
+     bottom     one slim full-width action bar (dice · unit · actions)
+     bottom-left  music + fullscreen pills (the action bar starts after them)
+   The brand mark and the prose log are hidden — the board gets the pixels.
+   ============================================================ */
+body.ui-mobile {
+  /* shrink the whole token layer: control heights, type, spacing */
+  --control-sm: 24px;
+  --control-md: 30px;
+  --control-lg: 36px;
+  --text-xs: 10px;
+  --text-sm: 11px;
+  --text-md: 12px;
+  --text-lg: 15px;
+  --space-3: 8px;
+  --space-4: 10px;
+  --space-5: 12px;
+  --space-6: 14px;
+  --icon-md: 18px;
+  --icon-lg: 20px;
+}
+
+body.ui-mobile .brand,
+body.ui-mobile .log {
+  display: none;
+}
+
+/* ---- top-left: player cards + the turn timer under them ---- */
+body.ui-mobile .player-strip {
+  top: 6px;
+  left: calc(env(safe-area-inset-left, 0px) + 8px);
+  transform: none;
+  gap: 4px;
+}
+body.ui-mobile .pstat {
+  padding: 0 6px;
+  gap: 4px;
+}
+body.ui-mobile .pstat-token {
+  width: 14px;
+  height: 14px;
+}
+body.ui-mobile .pstat-metric {
+  gap: 2px;
+  padding-left: 4px;
+}
+body.ui-mobile .pstat-metric svg {
+  width: 14px;
+  height: 14px;
+}
+body.ui-mobile .pstat-badge {
+  font-size: 8px;
+  padding: 0 3px;
+}
+body.ui-mobile .turn-timer-top {
+  top: 40px;
+  left: calc(env(safe-area-inset-left, 0px) + 8px);
+  transform: none;
+  width: 180px !important; /* the inline measured width is a desktop concern */
+  height: 4px;
+}
+
+/* ---- top-right: gear, with the round + gravestone chips beside it ---- */
+body.ui-mobile .gear {
+  top: 6px;
+  right: calc(env(safe-area-inset-right, 0px) + 8px);
+}
+body.ui-mobile .top-chips {
+  top: 6px;
+  right: calc(env(safe-area-inset-right, 0px) + 46px);
+  left: auto;
+  transform: none;
+}
+body.ui-mobile .leave-btn {
+  top: 44px;
+  left: auto;
+  right: calc(env(safe-area-inset-right, 0px) + 8px);
+}
+
+/* centre-top banners ride lower fixed offsets on the small screen */
+body.ui-mobile .siege-alert {
+  top: 64px;
+}
+body.ui-mobile .elim-toasts {
+  top: 92px;
+}
+body.ui-mobile .combat-toast,
+body.ui-mobile .combat-roll {
+  top: 44px;
+}
+body.ui-mobile .turn-banner {
+  top: 40px;
+}
+
+/* ---- bottom: one slim action bar spanning the width ---- */
+body.ui-mobile .hud-bottom {
+  left: calc(env(safe-area-inset-left, 0px) + 88px); /* gutter for the pills */
+  right: calc(env(safe-area-inset-right, 0px) + 8px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
+  transform: none;
+  width: auto;
+  max-width: none;
+  gap: 8px;
+  padding: 4px 10px;
+}
+body.ui-mobile .dice {
+  gap: 4px;
+  min-height: 38px;
+}
+body.ui-mobile .selinfo {
+  min-width: 84px;
+  line-height: 1.25;
+}
+body.ui-mobile .unit-actions {
+  margin-top: 2px;
+  gap: 4px;
+}
+body.ui-mobile .unit-actions button {
+  padding: 2px 8px;
+}
+body.ui-mobile .ritual-flag {
+  padding: 0 6px;
+}
+
+/* ---- bottom-left: music + fullscreen pills in the action-bar gutter ---- */
+body.ui-mobile .music-toggle {
+  left: calc(env(safe-area-inset-left, 0px) + 8px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
+  width: 34px;
+  height: 34px;
+}
+body.ui-mobile .fs-toggle {
+  left: calc(env(safe-area-inset-left, 0px) + 48px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
+  width: 34px;
+  height: 34px;
+}
+
+/* ---- entry screens + modals fit short landscape viewports ---- */
+body.ui-mobile .entry {
+  overflow-y: auto;
+}
+body.ui-mobile .entry-cover {
+  padding-left: calc(env(safe-area-inset-left, 0px) + 40px);
+}
+body.ui-mobile .modal {
+  max-height: min(96vh, 96dvh);
+  width: min(560px, 96vw);
+}
+body.ui-mobile .modal-head,
+body.ui-mobile .modal-foot {
+  padding: var(--space-2) var(--space-4);
+}
+body.ui-mobile .layout-map {
+  width: 44px;
+  height: 44px;
+}
+body.ui-mobile .winner {
+  padding: var(--space-4) var(--space-6);
+}

@@ -246,6 +246,7 @@ function SettingsModal() {
   const settings = useGame((s) => s.settings);
   const setTurnSeconds = useGame((s) => s.setTurnSeconds);
   const setSfxMuted = useGame((s) => s.setSfxMuted);
+  const setLayout = useGame((s) => s.setLayout);
   const openModal = useGame((s) => s.openModal);
   const closeModal = useGame((s) => s.closeModal);
   const status = useNet((s) => s.status);
@@ -284,6 +285,18 @@ function SettingsModal() {
           value={settings.sfxMuted ? 'off' : 'on'}
           onChange={(v) => setSfxMuted(v === 'off')}
           ariaLabel="Sound effects"
+        />
+      </Field>
+      <div className="modal-section">Display</div>
+      <Field label="Layout" hint="Mobile is a compact interface for phones (landscape)">
+        <Segmented<'mobile' | 'desktop'>
+          options={[
+            { value: 'mobile', label: 'Mobile' },
+            { value: 'desktop', label: 'Desktop' },
+          ]}
+          value={settings.layout}
+          onChange={setLayout}
+          ariaLabel="Layout"
         />
       </Field>
       <div className="modal-section">Server</div>

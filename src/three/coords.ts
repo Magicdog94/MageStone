@@ -20,6 +20,11 @@ export const COLORS: Record<PlayerColor, string> = {
 // the raised gold trim so tiles read as recessed pockets.
 export const TILE_SURFACE = 0.18;
 
+// Half-width of the SQUARE tabletop the board sits on. The board spans ±8, so
+// this leaves a wooden strip around it — where the dice are rolled. Shared by
+// the table slab (Board.tsx) and the dice tray (Dice.tsx).
+export const TABLE_HALF = 13.6;
+
 // The smithy floor (world Y). The board is a real ~0.5 m chessboard (1 m ≈ 32
 // units), and the tabletop sits at y≈0 — so a floor at −48 puts the playing
 // surface 1.5 m off the ground: seated-player height, with the wall banners

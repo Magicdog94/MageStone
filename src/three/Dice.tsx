@@ -4,6 +4,7 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { CuboidCollider, Physics, RigidBody, type RapierRigidBody } from '@react-three/rapier';
 import { RoundedBoxGeometry } from 'three-stdlib';
 import { FACE_VALUES, diceFaceTextures, type DiceKind } from './textures';
+import { TABLE_HALF } from './coords';
 import { useGame } from '../store';
 
 const DIE = 0.7; // edge length
@@ -11,8 +12,34 @@ const H = DIE / 2;
 // Beveled die body — keeps BoxGeometry's 6 face groups (so the pip textures
 // still map per-face) with rounding-aware UVs. Shared across every die.
 const DIE_GEOMETRY = new RoundedBoxGeometry(DIE, DIE, DIE, 4, 0.08);
-const FLOOR_Y = 0.32; // dice rest just above the board surface
-const TRAY = 2.6; // half-extent of the containment area (keeps dice clustered)
+const TABLE_SURF = 0.02; // the wooden tabletop the dice land on (not the board)
+
+// The dice are rolled OFF the game board, on the square table's wooden strip
+// directly behind the CURRENT player's base — then regrouped in a row there.
+// The strip runs from the board edge (±8) to the table edge (±TABLE_HALF).
+const TRAY_RAD = (TABLE_HALF - 8) / 2 - 0.3; // half-depth of the roll area
+const TRAY_CENTER = 8 + 0.3 + TRAY_RAD; // distance of its centre from origin
+const TRAY_LAT = 3.1; // half-width along the table edge
+
+/** Outward (dx,dz) per seat: 0=top(-z) 1=right(+x) 2=bottom(+z) 3=left(-x). */
+const SEAT_OUT: [number, number][] = [
+  [0, -1],
+  [1, 0],
+  [0, 1],
+  [-1, 0],
+];
+
+/** Local tray coords → world: `lat` runs along the table edge, `rad` outward
+ *  from the tray centre (positive = toward the table edge). */
+function trayToWorld(seat: number, lat: number, rad: number): [number, number] {
+  const [dx, dz] = SEAT_OUT[seat] ?? SEAT_OUT[0];
+  const cx = dx * TRAY_CENTER;
+  const cz = dz * TRAY_CENTER;
+  // lateral axis = outward rotated 90°
+  const lx = -dz;
+  const lz = dx;
+  return [cx + lx * lat + dx * rad, cz + lz * lat + dz * rad];
+}
 
 // Local face normals in BoxGeometry material order [+x,-x,+y,-y,+z,-z].
 const NORMALS = [
@@ -97,6 +124,9 @@ function DiceBodies() {
   const myColor = useGame((s) => s.myColor);
   const current = useGame((s) => s.game.current);
 
+  // The tray sits behind the CURRENT roller's base, so it hops seat to seat.
+  const seat = useGame((s) => s.game.seats[s.game.current] ?? 0);
+
   const bodies = useRef<(RapierRigidBody | null)[]>([]);
   const reported = useRef(false);
   const settleFrames = useRef(0);
@@ -107,7 +137,7 @@ function DiceBodies() {
   const isRemoteViewer = online && current !== myColor;
   const show = rolling || phase === 'discard';
 
-  // Throw fresh on each roll.
+  // Throw fresh on each roll — onto the roller's strip of the table.
   useEffect(() => {
     if (!rolling) return;
     reported.current = false;
@@ -117,8 +147,11 @@ function DiceBodies() {
       if (!b) return;
       // Launch each die in its own lane (not a tight column) so they land spread
       // out and flat instead of piling on top of each other.
-      const x = (i - 2) * 0.9 + rand(-0.2, 0.2);
-      const z = rand(-1.2, 1.2);
+      const [x, z] = trayToWorld(
+        seat,
+        (i - 2) * 0.9 + rand(-0.15, 0.15),
+        rand(-TRAY_RAD * 0.55, TRAY_RAD * 0.55),
+      );
       b.setTranslation({ x, y: 2.8 + (i % 2) * 0.5, z }, true);
       const e = new THREE.Euler(rand(0, 6.28), rand(0, 6.28), rand(0, 6.28));
       const q = new THREE.Quaternion().setFromEuler(e);
@@ -126,7 +159,7 @@ function DiceBodies() {
       b.setLinvel({ x: rand(-1, 1), y: 1, z: rand(-1.2, 1.2) }, true);
       b.setAngvel({ x: rand(-13, 13), y: rand(-13, 13), z: rand(-13, 13) }, true);
     });
-  }, [rollNonce, rolling]);
+  }, [rollNonce, rolling, seat]);
 
   useFrame(() => {
     if (!rolling || reported.current) return;
@@ -158,7 +191,8 @@ function DiceBodies() {
         const faceIdx = FACE_VALUES.indexOf(values[i]);
         const q = new THREE.Quaternion().setFromUnitVectors(NORMALS[faceIdx], UP);
         q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, rand(0, Math.PI * 2)));
-        b.setTranslation({ x: (i - 2) * LANE, y: FLOOR_Y + H, z: 0 }, true);
+        const [x, z] = trayToWorld(seat, (i - 2) * LANE, 0);
+        b.setTranslation({ x, y: TABLE_SURF + H, z }, true);
         b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
         b.setLinvel({ x: 0, y: 0, z: 0 }, true);
         b.setAngvel({ x: 0, y: 0, z: 0 }, true);
@@ -179,7 +213,8 @@ function DiceBodies() {
       const faceIdx = FACE_VALUES.indexOf(v);
       const q = new THREE.Quaternion().setFromUnitVectors(NORMALS[faceIdx], UP);
       q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, (i * 1.3) % (Math.PI * 2)));
-      b.setTranslation({ x: (i - 2) * LANE, y: FLOOR_Y + H, z: 0 }, true);
+      const [x, z] = trayToWorld(seat, (i - 2) * LANE, 0);
+      b.setTranslation({ x, y: TABLE_SURF + H, z }, true);
       b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
       b.setLinvel({ x: 0, y: 0, z: 0 }, true);
       b.setAngvel({ x: 0, y: 0, z: 0 }, true);
@@ -209,7 +244,7 @@ function DiceBodies() {
             friction={0.9}
             angularDamping={0.55}
             linearDamping={0.3}
-            position={[i * 1.2 - 2.4, FLOOR_Y + H, 0]}
+            position={[trayToWorld(seat, i * 1.2 - 2.4, 0)[0], TABLE_SURF + H, trayToWorld(seat, i * 1.2 - 2.4, 0)[1]]}
           >
             <DieMesh
               kind={kind}
@@ -233,18 +268,27 @@ function DiceBodies() {
   );
 }
 
-/** Isolated physics world: just the dice + an invisible containment tray.
- *  Left running (idle bodies auto-sleep) so a throw always steps cleanly. */
+/** Isolated physics world: the dice, a floor spanning the whole square table,
+ *  and invisible containment walls around the CURRENT roller's strip (keyed by
+ *  seat so they hop with the turn). Left running (idle bodies auto-sleep) so a
+ *  throw always steps cleanly. */
 export function DiceLayer() {
+  const seat = useGame((s) => s.game.seats[s.game.current] ?? 0);
+  const [dx, dz] = SEAT_OUT[seat] ?? SEAT_OUT[0];
+  // Rotate the wall frame so local +z points out of the roller's table edge
+  // (the walls are symmetric, so lateral mirroring doesn't matter).
+  const yaw = Math.atan2(dx, dz);
   return (
     <Physics gravity={[0, -22, 0]}>
-      {/* floor */}
-      <CuboidCollider args={[TRAY, 0.15, TRAY]} position={[0, FLOOR_Y - 0.15, 0]} />
-      {/* walls */}
-      <CuboidCollider args={[TRAY, 3, 0.2]} position={[0, FLOOR_Y + 3, -TRAY]} />
-      <CuboidCollider args={[TRAY, 3, 0.2]} position={[0, FLOOR_Y + 3, TRAY]} />
-      <CuboidCollider args={[0.2, 3, TRAY]} position={[-TRAY, FLOOR_Y + 3, 0]} />
-      <CuboidCollider args={[0.2, 3, TRAY]} position={[TRAY, FLOOR_Y + 3, 0]} />
+      {/* floor: the whole wooden tabletop */}
+      <CuboidCollider args={[TABLE_HALF, 0.15, TABLE_HALF]} position={[0, TABLE_SURF - 0.15, 0]} />
+      {/* containment walls around the active roll strip */}
+      <group key={seat} rotation={[0, yaw, 0]}>
+        <CuboidCollider args={[TRAY_LAT, 3, 0.2]} position={[0, TABLE_SURF + 3, TRAY_CENTER - TRAY_RAD]} />
+        <CuboidCollider args={[TRAY_LAT, 3, 0.2]} position={[0, TABLE_SURF + 3, TRAY_CENTER + TRAY_RAD]} />
+        <CuboidCollider args={[0.2, 3, TRAY_RAD]} position={[-TRAY_LAT, TABLE_SURF + 3, TRAY_CENTER]} />
+        <CuboidCollider args={[0.2, 3, TRAY_RAD]} position={[TRAY_LAT, TABLE_SURF + 3, TRAY_CENTER]} />
+      </group>
       <DiceBodies />
     </Physics>
   );

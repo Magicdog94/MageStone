@@ -810,6 +810,25 @@
   color: var(--gold-bright);
   letter-spacing: 0.04em;
 }
+/* round + gravestone-bank chips, centred under the turn timer */
+.top-chips {
+  position: absolute;
+  top: calc(var(--space-4) + var(--control-md) + var(--space-6) + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.top-chips .grave-bank,
+.top-chips .turn-chip {
+  background: rgba(8, 12, 9, 0.78);
+}
+.grave-token {
+  display: block;
+  border-radius: 50%;
+}
 .grave-bank svg {
   color: var(--gold-bright);
 }

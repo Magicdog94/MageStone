@@ -575,81 +575,62 @@ export function TeamBanners() {
 
 // ---- chairs at the table --------------------------------------------------------
 
-/** A tall oak game chair (seat ~1.15 m — matched to the 1.5 m table) with a
- *  footrest stretcher and a cushion in the player's colour. */
-function GameChair({ color, seat }: { color: PlayerColor; seat: number }) {
+/** A tall backless oak stool (seat ~1.15 m — matched to the 1.5 m table) with
+ *  footrest stretchers and a cushion in the player's colour. No back, so it
+ *  never blocks the view of the board or the banners. */
+function GameStool({ color, seat }: { color: PlayerColor; seat: number }) {
   const [dx, dz] = SEAT_DIR[seat] ?? SEAT_DIR[0];
-  const yaw = Math.atan2(-dx, -dz); // chair faces the table
+  const yaw = Math.atan2(-dx, -dz); // footrests square-on to the table
   const SEAT_H = 37;
   return (
     <group position={[dx * 18, FLOOR_Y, dz * 18]} rotation={[0, yaw, 0]}>
-      {/* legs, slightly splayed, with footrest stretchers */}
-      {[-6.5, 6.5].map((lx) =>
-        [-6, 6].map((lz) => (
+      {/* four splayed legs */}
+      {[-5.2, 5.2].map((lx) =>
+        [-5.2, 5.2].map((lz) => (
           <mesh
             key={`${lx}${lz}`}
             position={[lx, SEAT_H / 2, lz]}
-            rotation={[lz > 0 ? -0.03 : 0.03, 0, lx > 0 ? -0.03 : 0.03]}
+            rotation={[lz > 0 ? -0.06 : 0.06, 0, lx > 0 ? -0.06 : 0.06]}
             castShadow
           >
-            <cylinderGeometry args={[1.1, 1.5, SEAT_H, 8]} />
+            <cylinderGeometry args={[1.0, 1.5, SEAT_H, 8]} />
             <WoodMat tint="#7a5c38" rx={0.25} ry={0.9} />
           </mesh>
         )),
       )}
+      {/* footrest stretchers */}
       {[
-        [0, -6, 14, 0],
-        [0, 6, 14, 0],
-        [-6.5, 0, 14, Math.PI / 2],
-        [6.5, 0, 14, Math.PI / 2],
+        [0, -6, 13, 0],
+        [0, 6, 13, 0],
+        [-6, 0, 13, Math.PI / 2],
+        [6, 0, 13, Math.PI / 2],
       ].map(([sx, sz, sy, ry], i) => (
         <mesh key={i} position={[sx, sy, sz]} rotation={[Math.PI / 2, 0, ry]} castShadow>
           <cylinderGeometry args={[0.8, 0.8, 12, 6]} />
           <WoodMat tint="#6e5233" rx={0.2} ry={0.6} />
         </mesh>
       ))}
-      {/* seat + team cushion */}
+      {/* round seat + team cushion */}
       <mesh position={[0, SEAT_H + 1, 0]} castShadow receiveShadow>
-        <boxGeometry args={[16, 2.4, 15]} />
+        <cylinderGeometry args={[8, 7.2, 2.4, 14]} />
         <WoodMat tint="#8a6a44" rx={0.5} ry={0.5} />
       </mesh>
-      <mesh position={[0, SEAT_H + 3, 0.4]}>
-        <boxGeometry args={[13.5, 1.8, 12.5]} />
+      <mesh position={[0, SEAT_H + 2.8, 0]}>
+        <cylinderGeometry args={[6.8, 7.1, 1.6, 14]} />
         <meshStandardMaterial color={COLORS[color]} roughness={0.92} metalness={0} />
       </mesh>
-      {/* tall back with an arched gold-capped top (leans back a touch) */}
-      <group position={[0, SEAT_H + 2, -6.6]} rotation={[0.09, 0, 0]}>
-        {[-6.2, 6.2].map((bx) => (
-          <mesh key={bx} position={[bx, 13, 0]} castShadow>
-            <cylinderGeometry args={[1, 1.2, 26, 8]} />
-            <WoodMat tint="#7a5c38" rx={0.25} ry={0.9} />
-          </mesh>
-        ))}
-        <mesh position={[0, 14, 0]} castShadow>
-          <boxGeometry args={[12.4, 18, 1.6]} />
-          <WoodMat tint="#84663f" rx={0.45} ry={0.6} />
-        </mesh>
-        <mesh position={[0, 26.4, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-          <cylinderGeometry args={[7.2, 7.2, 1.8, 12, 1, false, 0, Math.PI]} />
-          <WoodMat tint="#6e5233" rx={0.4} ry={0.4} />
-        </mesh>
-        <mesh position={[0, 27.2, 0]}>
-          <sphereGeometry args={[1.3, 8, 8]} />
-          <meshStandardMaterial {...GOLDTRIM} />
-        </mesh>
-      </group>
     </group>
   );
 }
 
-/** A chair at the table for every PLAYING colour, at its seat side. */
+/** A stool at the table for every PLAYING colour, at its seat side. */
 export function TableChairs() {
   const players = useGame((s) => s.game.players);
   const seats = useGame((s) => s.game.seats);
   return (
     <group>
       {players.map((p) => (
-        <GameChair key={p} color={p} seat={seats[p]} />
+        <GameStool key={p} color={p} seat={seats[p]} />
       ))}
     </group>
   );

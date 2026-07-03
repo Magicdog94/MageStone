@@ -10,6 +10,7 @@ import {
   magePowerDie,
   unitById,
 } from '../game/rules';
+import { useTokenUrl } from '../three/tokens';
 import { PipDie } from './Die';
 import { CombatRoll } from './CombatRoll';
 import { EliminationToast } from './EliminationToast';
@@ -89,6 +90,7 @@ export function HUD() {
 
   const graveBank = gravestoneBank(game);
   const graveCap = gravestoneCapacity(game);
+  const graveUrl = useTokenUrl('gravestone');
 
   const phaseHint = rolling
     ? 'Rolling the dice…'
@@ -118,9 +120,25 @@ export function HUD() {
         </div>
       )}
 
-      {/* Top: player status, turn timer, settings */}
+      {/* Top: player status, turn timer, round + gravestone-bank chips, settings */}
       <PlayerStrip />
       <TurnTimer key={`${game.current}:${turnSeconds ?? 'off'}`} width={timerWidth} />
+      <div className="top-chips">
+        <span className="turn-chip tip" data-tip="Round — advances when play returns to the first player">
+          Turn {game.turn ?? 1}
+        </span>
+        <span
+          className="grave-bank tip"
+          data-tip={`Gravestone bank: ${graveBank} left to place · up to ${graveCap} on the board (3 per active player).`}
+        >
+          {graveUrl ? (
+            <img className="grave-token" src={graveUrl} alt="" width={22} height={22} />
+          ) : (
+            <GraveIcon size={18} />
+          )}
+          {graveBank}
+        </span>
+      </div>
       {online && (
         <div className={`turn-banner ${myTurn ? 'mine' : ''}`} style={{ '--accent': COLORS[game.current] } as CSSProperties}>
           {myTurn ? 'Your turn' : `${cap(game.current)}'s turn`}
@@ -202,18 +220,6 @@ export function HUD() {
         </div>
 
         <div className="spacer" />
-
-        <span className="turn-chip tip" data-tip="Round — advances when play returns to the first player">
-          Turn {game.turn ?? 1}
-        </span>
-
-        <span
-          className="grave-bank tip"
-          data-tip={`Gravestone bank: ${graveBank} left to place · up to ${graveCap} on the board (3 per active player).`}
-        >
-          <GraveIcon size={18} />
-          {graveBank}
-        </span>
 
         {game.ritual && (
           <span className="ritual-flag" title="A ritual is in progress">

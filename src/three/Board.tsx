@@ -2,10 +2,10 @@ import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useTexture } from '@react-three/drei';
-import { allCells, cellKey, CUT, edgeRotation, inNexus, N } from '../game/board';
+import { allCells, cellKey, edgeRotation, N } from '../game/board';
 import type { Cell } from '../game/types';
 import { besiegersOf, siegedPlayers } from '../game/rules';
-import { BOARD, CELL, COLORS, FLOOR_Y, TILE_SURFACE, cellToWorld } from './coords';
+import { BOARD, CELL, COLORS, FLOOR_Y, TABLE_HALF, TILE_SURFACE, cellToWorld } from './coords';
 import { emeraldBoardTexture, groundBumpTexture, woodBumpTexture } from './textures';
 import { attackTargetIds, moveDestinations, useGame } from '../store';
 
@@ -17,73 +17,23 @@ const GOLD_TOP = 0.235; // gold lattice raised ~0.055 above the tiles
 const GOLD_H = 0.22;
 const TILE_INSET = 0.94; // tile size within the cell → thin gold trim
 
-// Wooden tabletop the board rests on: the board's cut-corner octagon silhouette
-// offset outward by half a tile, bevelled, four × the gold-trim height (it grows
-// downward), sitting flush under the board tiles.
+// Wooden tabletop the board rests on: a SQUARE slab (TABLE_HALF half-width),
+// bevelled, four × the gold-trim height (it grows downward), sitting flush
+// under the board tiles — the strip around the board is where dice are rolled.
 const TABLE_H = GOLD_H * 5;
-const TABLE_MARGIN = 1.5; // wide wooden table surface around the board
 const TABLE_TOP_Y = TILE_TOP - TILE_H; // 0.02 — board tiles rest on this surface
 
 // The board surface is a single procedural emerald-marble texture (no pictorial
 // art) spanned full-bleed across the 16×16 grid: each tile samples its own slice
 // so the marbling flows continuously under the raised gold lattice.
 
-/** Board outline (cut-corner octagon) as a minimal corner-only vertex loop. */
-function boardOutline(): [number, number][] {
-  const off = N / 2; // 8 → board spans world [-8, 8]
-  const inset = (R: number) => Math.max(0, CUT - Math.min(R, N - 1 - R));
-  const xL = (R: number) => inset(R) - off;
-  const xR = (R: number) => off - inset(R);
-  const raw: [number, number][] = [];
-  for (let R = 0; R < N; R++) raw.push([xR(R), R - off], [xR(R), R + 1 - off]);
-  for (let R = N - 1; R >= 0; R--) raw.push([xL(R), R + 1 - off], [xL(R), R - off]);
-  // Drop duplicate, then collinear, vertices → keep only the corner turns.
-  const dedup = raw.filter((p, i) => {
-    const q = raw[(i - 1 + raw.length) % raw.length];
-    return p[0] !== q[0] || p[1] !== q[1];
-  });
-  return dedup.filter((p, i) => {
-    const a = dedup[(i - 1 + dedup.length) % dedup.length];
-    const b = dedup[(i + 1) % dedup.length];
-    return !((a[0] === p[0] && p[0] === b[0]) || (a[1] === p[1] && p[1] === b[1]));
-  });
-}
-
-/** Offset a rectilinear loop outward by `m` (squared corners). Each vertex joins
- *  one vertical and one horizontal edge; shift x by the vertical edge's outward
- *  normal and z by the horizontal edge's. */
-function offsetOutline(pts: [number, number][], m: number): [number, number][] {
-  let area = 0;
-  for (let i = 0; i < pts.length; i++) {
-    const a = pts[i];
-    const b = pts[(i + 1) % pts.length];
-    area += a[0] * b[1] - b[0] * a[1];
-  }
-  const s = area > 0 ? 1 : -1; // orientation → outward-normal sign
-  const n = pts.length;
-  return pts.map((cur, i) => {
-    const prev = pts[(i - 1 + n) % n];
-    const next = pts[(i + 1) % n];
-    let nx = cur[0];
-    let nz = cur[1];
-    for (const [a, b] of [
-      [prev, cur],
-      [cur, next],
-    ] as const) {
-      const dx = b[0] - a[0];
-      const dz = b[1] - a[1];
-      if (dx === 0) nx = cur[0] + s * Math.sign(dz) * m; // vertical edge → shift x
-      else nz = cur[1] - s * Math.sign(dx) * m; // horizontal edge → shift z
-    }
-    return [nx, nz] as [number, number];
-  });
-}
-
 function tabletopGeometry(): THREE.ExtrudeGeometry {
-  const pts = offsetOutline(boardOutline(), TABLE_MARGIN);
+  const s = TABLE_HALF;
   const shape = new THREE.Shape();
-  shape.moveTo(pts[0][0], pts[0][1]);
-  for (let i = 1; i < pts.length; i++) shape.lineTo(pts[i][0], pts[i][1]);
+  shape.moveTo(-s, -s);
+  shape.lineTo(s, -s);
+  shape.lineTo(s, s);
+  shape.lineTo(-s, s);
   shape.closePath();
 
   const geo = new THREE.ExtrudeGeometry(shape, {
@@ -251,7 +201,6 @@ function Tile({
   legal,
   target,
   baseColor,
-  nexus,
   siege,
   map,
   bump,
@@ -261,19 +210,18 @@ function Tile({
   target: boolean;
   /** Team colour for a home-base tile, or null for ordinary tiles. */
   baseColor: string | null;
-  /** True for the central 2×2 Nexus tiles (gilded). */
-  nexus: boolean;
   /** Besieging team's colour when this base tile's owner is under siege, else null. */
   siege: string | null;
   map: THREE.Texture;
   bump: THREE.Texture;
 }) {
   const moveTo = useGame((s) => s.moveTo);
-  // Every tile samples its slice of the emerald-marble surface; the 2×2 Nexus is
-  // gilded by a warmer multiplier so the ritual zone still reads at the centre.
+  // Every tile samples its slice of the emerald-marble surface — including the
+  // 2×2 Nexus, which keeps its drawn gold emblem but no longer gets a warm tint,
+  // so the marble flows unbroken across the centre.
   const geom = useMemo(() => tileGeometry(cell), [cell]);
   const pos = cellToWorld(cell, 0);
-  const baseTint = baseColor ?? (nexus ? BOARD.nexus : BOARD.stone);
+  const baseTint = baseColor ?? BOARD.stone;
 
   return (
     <group position={[pos[0], 0, pos[2]]}>
@@ -304,11 +252,9 @@ function Tile({
           color={legal ? BOARD.highlight : baseTint}
           envMapIntensity={0.5}
           roughness={0.82}
-          metalness={nexus ? 0.25 : 0.05}
-          emissive={
-            legal ? BOARD.highlight : siege ? siege : baseColor ? baseColor : nexus ? BOARD.nexus : '#000000'
-          }
-          emissiveIntensity={legal ? 0.4 : siege ? 0.55 : baseColor ? 0.32 : nexus ? 0.16 : 0}
+          metalness={0.05}
+          emissive={legal ? BOARD.highlight : siege ? siege : baseColor ? baseColor : '#000000'}
+          emissiveIntensity={legal ? 0.4 : siege ? 0.55 : baseColor ? 0.32 : 0}
         />
       </mesh>
 
@@ -444,7 +390,6 @@ export function Board() {
             legal={legalKeys.has(k)}
             target={targetKeys.has(k)}
             baseColor={baseColor}
-            nexus={inNexus(cell.r, cell.c)}
             siege={rot !== null ? siegeGlowBySeat.get(rot) ?? null : null}
           />
         );

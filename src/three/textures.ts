@@ -1212,6 +1212,24 @@ export function plasterBumpTexture(): THREE.Texture {
   return t;
 }
 
+/** A soft radial black blob on transparency — a faked contact shadow laid flat
+ *  under furniture so every piece sits INTO the floor instead of floating. */
+export function contactShadowTexture(): THREE.Texture {
+  const hit = cache.get('contactShadow');
+  if (hit) return hit;
+  const S = 128;
+  const [c, ctx] = canvas(S);
+  const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g.addColorStop(0, 'rgba(0,0,0,0.55)');
+  g.addColorStop(0.55, 'rgba(0,0,0,0.28)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S, S);
+  const t = finish(c, 'contactShadow');
+  t.colorSpace = THREE.NoColorSpace;
+  return t;
+}
+
 /** A soft black gradient on transparency — dark at the LEFT edge (u=0), fading
  *  to clear at the right. Reused for faked ambient occlusion: wall-corner
  *  shading, wall/floor contact strips, and shadows tucked behind props. */
@@ -1541,9 +1559,9 @@ export function stoneFloorTexture(): THREE.Texture {
   const S = 1024;
   const [c, ctx] = canvas(S);
   // dark joint mortar underneath
-  ctx.fillStyle = '#2b2620';
+  ctx.fillStyle = '#3a352c';
   ctx.fillRect(0, 0, S, S);
-  const shades = ['#6a6455', '#726b5c', '#5e584a', '#7a7263', '#655e50'];
+  const shades = ['#7a7466', '#847e6f', '#6e6759', '#8c8676', '#75705f'];
   const rows = 2; // two courses per repeat → big slabs
   const rh = S / rows;
   for (let r = 0; r < rows; r++) {
@@ -1553,18 +1571,31 @@ export function stoneFloorTexture(): THREE.Texture {
       const shade = shades[(Math.random() * shades.length) | 0];
       for (const ox of [0, S]) {
         // draw at x and x+S so slabs crossing the left edge wrap to the right
-        const px = x + ox + 6;
-        const py = r * rh + 6;
-        const pw = w - 12;
-        const ph = rh - 12;
-        // slab face with a diagonal light-to-worn gradient
+        const px = x + ox + 3;
+        const py = r * rh + 3;
+        const pw = w - 6;
+        const ph = rh - 6;
+        // dressed ashlar face with a gentle diagonal tone gradient
         const sg = ctx.createLinearGradient(px, py, px + pw, py + ph);
         sg.addColorStop(0, shade);
-        sg.addColorStop(1, '#4c463b');
+        sg.addColorStop(1, '#635d50');
         ctx.fillStyle = sg;
         ctx.beginPath();
-        ctx.roundRect(px, py, pw, ph, 14);
+        ctx.roundRect(px, py, pw, ph, 4);
         ctx.fill();
+        // faint burnished sheen — centuries of feet have polished the crown
+        const polish = ctx.createRadialGradient(
+          px + pw * 0.5,
+          py + ph * 0.45,
+          0,
+          px + pw * 0.5,
+          py + ph * 0.45,
+          Math.max(pw, ph) * 0.55,
+        );
+        polish.addColorStop(0, 'rgba(232,226,208,0.10)');
+        polish.addColorStop(1, 'rgba(232,226,208,0)');
+        ctx.fillStyle = polish;
+        ctx.fillRect(px, py, pw, ph);
         // bevel: light top-left edge, dark bottom-right edge
         ctx.lineWidth = 5;
         ctx.strokeStyle = 'rgba(206,196,174,0.16)';
@@ -1579,29 +1610,25 @@ export function stoneFloorTexture(): THREE.Texture {
         ctx.lineTo(px + pw - 8, py + ph - 8);
         ctx.lineTo(px + 12, py + ph - 8);
         ctx.stroke();
-        // hairline cracks
-        const cracks = 1 + ((Math.random() * 2) | 0);
-        ctx.strokeStyle = 'rgba(34,30,24,0.55)';
-        ctx.lineWidth = 1.6;
-        for (let k = 0; k < cracks; k++) {
-          let cx2 = px + 30 + Math.random() * (pw - 60);
-          let cy2 = py + 20 + Math.random() * (ph - 40);
+        // the odd chipped corner — age without breaking the dressed look
+        if (Math.random() < 0.35) {
+          const cx2 = Math.random() < 0.5 ? px + 4 : px + pw - 4;
+          const cy2 = Math.random() < 0.5 ? py + 4 : py + ph - 4;
+          const chip = ctx.createRadialGradient(cx2, cy2, 0, cx2, cy2, 10 + Math.random() * 12);
+          chip.addColorStop(0, 'rgba(46,42,34,0.5)');
+          chip.addColorStop(1, 'rgba(46,42,34,0)');
+          ctx.fillStyle = chip;
           ctx.beginPath();
-          ctx.moveTo(cx2, cy2);
-          for (let seg = 0; seg < 5; seg++) {
-            cx2 += (Math.random() - 0.5) * 90;
-            cy2 += (Math.random() - 0.3) * 70;
-            ctx.lineTo(Math.min(px + pw - 12, Math.max(px + 12, cx2)), Math.min(py + ph - 12, Math.max(py + 12, cy2)));
-          }
-          ctx.stroke();
+          ctx.arc(cx2, cy2, 22, 0, Math.PI * 2);
+          ctx.fill();
         }
-        // age stains and foot-worn patches on the face
-        for (let k = 0; k < 8; k++) {
+        // the faintest age mottling — kept whisper-quiet so the slabs read grand
+        for (let k = 0; k < 3; k++) {
           const mx = px + Math.random() * pw;
           const my = py + Math.random() * ph;
-          const mr = 24 + Math.random() * 70;
+          const mr = 30 + Math.random() * 80;
           const mg = ctx.createRadialGradient(mx, my, 0, mx, my, mr);
-          mg.addColorStop(0, `rgba(50,44,34,${0.08 + Math.random() * 0.12})`);
+          mg.addColorStop(0, `rgba(50,44,34,${0.03 + Math.random() * 0.05})`);
           mg.addColorStop(1, 'rgba(50,44,34,0)');
           ctx.fillStyle = mg;
           ctx.beginPath();
@@ -1612,15 +1639,15 @@ export function stoneFloorTexture(): THREE.Texture {
       x += w;
     }
   }
-  // old grime settled along the joints (wrap copies keep the tile seamless)
-  for (let i = 0; i < 46; i++) {
+  // a light dusting of grime along the joints (wrap copies keep it seamless)
+  for (let i = 0; i < 14; i++) {
     const x = Math.random() * S;
     const y = (((Math.random() * rows) | 0) + (Math.random() < 0.5 ? 0 : 1)) * rh + (Math.random() - 0.5) * 26;
     const r = 14 + Math.random() * 46;
     for (const ox of [0, -S, S]) {
       for (const oy of [0, -S, S]) {
         const mg = ctx.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
-        mg.addColorStop(0, `rgba(44,38,30,${0.05 + Math.random() * 0.08})`);
+        mg.addColorStop(0, `rgba(44,38,30,${0.03 + Math.random() * 0.04})`);
         mg.addColorStop(1, 'rgba(44,38,30,0)');
         ctx.fillStyle = mg;
         ctx.beginPath();

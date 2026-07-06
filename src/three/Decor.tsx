@@ -49,7 +49,6 @@ const WALL_X = 74; // wall centre planes (inner faces ≈ ±72 / ±88)
 const WALL_Z = 90;
 
 const IRON = { color: '#1d2023', roughness: 0.6, metalness: 0.5 } as const;
-const DARKOAK = { color: '#2f241a', roughness: 0.9, metalness: 0 } as const;
 const STONE = { color: '#4c463e', roughness: 0.95, metalness: 0 } as const;
 
 /** The real wood-grain photo (shared with the tabletop), cloned per use so each
@@ -493,6 +492,73 @@ function Candelabrum({ x, z, seed }: { x: number; z: number; seed: number }) {
   );
 }
 
+/**
+ * Old iron ring chandeliers: forged hoops with eight dripping candles each,
+ * hung by three chains from ceiling bosses. They hang over the open floor at
+ * EITHER SIDE of the table (a pair along the hall's axis, like a real great
+ * hall) — the board-locked camera can actually frame them when tilting up,
+ * and they never cross the board's sightlines. `lit` adds the real flicker
+ * light (one per pair keeps the light budget sane; the flames are emissive
+ * on both regardless).
+ */
+function Chandelier({ z, lit = false }: { z: number; lit?: boolean }) {
+  const RING_Y = 25;
+  const RING_R = 20;
+  return (
+    <group position={[0, 0, z]}>
+      {/* ceiling boss + drop chain */}
+      <mesh position={[0, CEIL_Y - 2.2, 0]}>
+        <cylinderGeometry args={[2.2, 1.4, 1.6, 10]} />
+        <meshStandardMaterial {...IRON} />
+      </mesh>
+      <mesh position={[0, (CEIL_Y - 2.2 + RING_Y + 4) / 2, 0]}>
+        <cylinderGeometry args={[0.5, 0.5, CEIL_Y - 2.2 - RING_Y - 4, 6]} />
+        <meshStandardMaterial {...IRON} />
+      </mesh>
+      {/* three splayed chains from the hub down to the ring */}
+      {[0, 2.1, 4.2].map((a) => (
+        <group key={a} rotation={[0, a, 0]}>
+          <mesh position={[RING_R / 2, RING_Y + 2.6, 0]} rotation={[0, 0, 1.25]}>
+            <cylinderGeometry args={[0.35, 0.35, RING_R * 1.12, 6]} />
+            <meshStandardMaterial {...IRON} />
+          </mesh>
+        </group>
+      ))}
+      {/* the forged hoop, with a slimmer decorative under-ring */}
+      <mesh position={[0, RING_Y, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <torusGeometry args={[RING_R, 1.1, 8, 36]} />
+        <meshStandardMaterial {...IRON} roughness={0.55} />
+      </mesh>
+      <mesh position={[0, RING_Y - 2.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[RING_R - 1.6, 0.4, 6, 30]} />
+        <meshStandardMaterial {...IRON} />
+      </mesh>
+      {/* eight candles on drip pans around the hoop */}
+      {Array.from({ length: 8 }, (_, i) => {
+        const a = (i / 8) * Math.PI * 2;
+        const x = Math.cos(a) * RING_R;
+        const z = Math.sin(a) * RING_R;
+        const h = 4 + (i % 3) * 0.8; // uneven burn
+        return (
+          <group key={i} position={[x, RING_Y, z]}>
+            <mesh position={[0, 1, 0]}>
+              <cylinderGeometry args={[1.7, 1.3, 0.7, 10]} />
+              <meshStandardMaterial {...IRON} roughness={0.5} />
+            </mesh>
+            <group position={[0, 1.5 + h / 2, 0]}>
+              <Candle h={h} r={0.85} />
+            </group>
+          </group>
+        );
+      })}
+      {/* one warm glow at the hoop — washes the beams above and the floor below */}
+      {lit && (
+        <FlickerLight base={4.5} seed={17.3} position={[0, RING_Y + 2, 0]} color="#ffb066" distance={90} decay={1.9} />
+      )}
+    </group>
+  );
+}
+
 /** Iron wall sconce with a single dripping candle on a forged bracket. */
 function Sconce({ pos, yaw, seed }: { pos: [number, number, number]; yaw: number; seed: number }) {
   return (
@@ -714,9 +780,18 @@ export function SmithyRoom() {
       {/* north + south walls pierced with real window openings */}
       <PiercedWall z={-WALL_Z} openings={[-38, 38]} />
       <PiercedWall z={WALL_Z} openings={[-44]} mirror />
+      {/* ceiling boards — self-lit a touch so looking up never reads as void */}
       <mesh position={[0, CEIL_Y + 2, 0]}>
         <boxGeometry args={[156, 4, 192]} />
-        <meshStandardMaterial {...DARKOAK} bumpMap={woodBump} bumpScale={0.08} />
+        <meshStandardMaterial
+          color="#54422e"
+          bumpMap={woodBump}
+          bumpScale={0.08}
+          roughness={0.92}
+          metalness={0}
+          emissive="#54422e"
+          emissiveIntensity={0.55}
+        />
       </mesh>
       {/* ceiling beams (~60 cm apart) + kingpost beam */}
       {[-72, -48, -24, 0, 24, 48, 72].map((bz, i) => (
@@ -824,7 +899,9 @@ export function SmithyRoom() {
         </mesh>
       ))}
 
-      {/* ---- lights: candelabra ring + wall sconces ---- */}
+      {/* ---- lights: chandelier pair + candelabra ring + wall sconces ---- */}
+      <Chandelier z={-58} lit />
+      <Chandelier z={58} />
       <Candelabrum x={-34} z={-34} seed={1.9} />
       <Candelabrum x={34} z={-34} seed={3.8} />
       <Candelabrum x={-34} z={34} seed={5.7} />
@@ -894,14 +971,22 @@ function drapedCloth(): THREE.PlaneGeometry {
   return g;
 }
 
+// Lateral slide along the wall per SEAT, so hangings clear wall furniture
+// (the west wall's centre now carries the arcane bookcase).
+const BANNER_SLIDE: Record<number, number> = { 3: -44 };
+
 function WallBanner({ color, seat }: { color: PlayerColor; seat: number }) {
   const tex = useBannerTexture(color);
   const cloth = useMemo(() => drapedCloth(), []);
   const [dx, dz] = SEAT_DIR[seat] ?? SEAT_DIR[0];
   const dist = (dx !== 0 ? WALL_X : WALL_Z) - 4.5; // just off the wall face
+  const slide = BANNER_SLIDE[seat] ?? 0;
   const yaw = Math.atan2(-dx, -dz);
   return (
-    <group position={[dx * dist, FLOOR_Y + 54, dz * dist]} rotation={[0, yaw, 0]}>
+    <group
+      position={[dx * dist + (dz !== 0 ? slide : 0), FLOOR_Y + 54, dz * dist + (dx !== 0 ? slide : 0)]}
+      rotation={[0, yaw, 0]}
+    >
       {/* soft contact shadow on the wall behind the cloth */}
       <mesh position={[0, -2, -1.6]}>
         <planeGeometry args={[44, 68]} />

@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { SkeletonUtils } from 'three-stdlib';
 import { Billboard, useGLTF } from '@react-three/drei';
 import { FLOOR_Y } from './coords';
-import { flameGlowTexture } from './textures';
+import { contactShadowTexture, flameGlowTexture } from './textures';
 
 const KIT = '/models/exterior/';
 const M = 32; // world units per metre (matches Decor.tsx)
@@ -65,6 +65,18 @@ function Prop({
   return <primitive object={obj} position={pos} rotation={[rx, ry, 0]} scale={s} />;
 }
 
+/** A soft contact shadow laid on the floor under a piece of furniture, so it
+ *  sits INTO the room instead of floating on the flagstones. */
+function ShadowBlob({ pos, w, d, opacity = 0.45 }: { pos: [number, number]; w: number; d: number; opacity?: number }) {
+  const tex = useMemo(() => contactShadowTexture(), []);
+  return (
+    <mesh position={[pos[0], FLOOR_Y + 0.12, pos[1]]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={3}>
+      <planeGeometry args={[w, d]} />
+      <meshBasicMaterial map={tex} transparent opacity={opacity} depthWrite={false} />
+    </mesh>
+  );
+}
+
 /** A lit wall torch: the kit's iron bracket plus an emissive flame and a warm
  *  glow sprite — no real light, so the lighting budget is untouched. */
 function WallTorch({ pos, ry }: { pos: [number, number, number]; ry: number }) {
@@ -104,26 +116,38 @@ function WallTorch({ pos, ry }: { pos: [number, number, number]; ry: number }) {
 export function FantasyProps() {
   return (
     <group>
-      {/* ---- arcane library (west wall, between the banner zone and the
-              crates): a tall bookcase stocked with books, potions and a
-              chalice, and a lectern with an open tome before it ---- */}
-      <Prop name="Bookcase_2" pos={[-65, FLOOR_Y, 44]} ry={Math.PI / 2} />
-      <Prop name="BookGroup_Medium_1" pos={[-65, FLOOR_Y + 19.5, 46]} ry={Math.PI / 2} />
-      <Prop name="BookGroup_Small_1" pos={[-65, FLOOR_Y + 19.5, 33]} ry={Math.PI / 2} />
-      <Prop name="BookGroup_Medium_2" pos={[-65, FLOOR_Y + 45.5, 43]} ry={Math.PI / 2} />
-      <Prop name="Chalice" pos={[-65, FLOOR_Y + 45.5, 55]} />
-      <Prop name="Book_Stack_1" pos={[-65, FLOOR_Y + 71.5, 48]} ry={Math.PI / 2 + 0.3} />
-      <Prop name="Potion_2" pos={[-65, FLOOR_Y + 71.5, 34]} />
-      <Prop name="Potion_1" pos={[-65, FLOOR_Y + 71.5, 29]} />
-      <Prop name="SmallBottles_1" pos={[-65, FLOOR_Y + 19.5, 52]} ry={Math.PI / 2} />
+      {/* ---- arcane library: the bookcase CENTRED on the west wall, stocked
+              with books, potions and a chalice (the 4-player yellow banner
+              slides north of it — see Decor's BANNER_SLIDE) ---- */}
+      <group position={[-65, FLOOR_Y, 0]}>
+        <Prop name="Bookcase_2" pos={[0, 0, 0]} ry={Math.PI / 2} />
+        <Prop name="BookGroup_Medium_1" pos={[0, 19.5, 2]} ry={Math.PI / 2} />
+        <Prop name="BookGroup_Small_1" pos={[0, 19.5, -11]} ry={Math.PI / 2} />
+        <Prop name="SmallBottles_1" pos={[0, 19.5, 8]} ry={Math.PI / 2} />
+        <Prop name="BookGroup_Medium_2" pos={[0, 45.5, -1]} ry={Math.PI / 2} />
+        <Prop name="Chalice" pos={[0, 45.5, 11]} />
+        <Prop name="Book_Stack_1" pos={[0, 71.5, 4]} ry={Math.PI / 2 + 0.3} />
+        <Prop name="Potion_2" pos={[0, 71.5, -10]} />
+        <Prop name="Potion_1" pos={[0, 71.5, -15]} />
+      </group>
+      <ShadowBlob pos={[-64, 0]} w={34} d={58} />
 
-      {/* ---- cauldron in the north-west corner ---- */}
-      <Prop name="Cauldron" pos={[-44, FLOOR_Y, -62]} ry={0.3} />
+      {/* ---- stores corner (south-west): cauldron beside the crates ---- */}
+      <Prop name="Cauldron" pos={[-56, FLOOR_Y, 38]} ry={0.3} />
+      <ShadowBlob pos={[-56, 38]} w={40} d={40} />
+      <ShadowBlob pos={[-40, 70]} w={60} d={44} opacity={0.4} />
 
-      {/* ---- armoury rack under the east-wall shelves ---- */}
+      {/* ---- benches under the north + south banners — a hall, not a shed ---- */}
+      <Prop name="Bench" pos={[0, FLOOR_Y, -80]} s={26} />
+      <ShadowBlob pos={[0, -80]} w={80} d={22} />
+      <Prop name="Bench" pos={[0, FLOOR_Y, 80]} ry={Math.PI} s={26} />
+      <ShadowBlob pos={[0, 80]} w={80} d={22} />
+
+      {/* ---- armoury rack under the east-wall shelves, by the door ---- */}
       <Prop name="WeaponStand" pos={[56, FLOOR_Y, -44]} ry={-Math.PI / 2} />
       <Prop name="Sword_Bronze" pos={[56, FLOOR_Y + 7, -50]} ry={-Math.PI / 2} rx={-0.2} />
       <Prop name="Shield_Wooden" pos={[53, FLOOR_Y + 10, -30]} ry={-Math.PI / 2 - 0.5} rx={0.25} />
+      <ShadowBlob pos={[56, -44]} w={42} d={52} />
 
       {/* ---- wall torch in the north-east corner ---- */}
       <WallTorch pos={[56, FLOOR_Y + 52, -85.5]} ry={0} />
@@ -132,6 +156,7 @@ export function FantasyProps() {
 }
 
 for (const n of [
+  'Bench',
   'Bookcase_2',
   'BookGroup_Medium_1',
   'BookGroup_Medium_2',

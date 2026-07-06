@@ -62,13 +62,13 @@ function StudioEnv() {
 function ArenaEnvironment() {
   const floorMap = useMemo(() => {
     const t = stoneFloorTexture();
-    t.repeat.set(12, 12); // large slabs — ~7-unit courses across the plaza
+    t.repeat.set(6, 6); // GRAND slabs — ~half-metre dressed courses
     return t;
   }, []);
   const floorBump = useMemo(() => {
     // Clone: the board tiles share this texture at repeat 1.
     const t = groundBumpTexture().clone();
-    t.repeat.set(12, 12);
+    t.repeat.set(6, 6);
     t.needsUpdate = true;
     return t;
   }, []);
@@ -105,11 +105,11 @@ function ArenaEnvironment() {
         <meshStandardMaterial
           map={floorMap}
           bumpMap={floorBump}
-          bumpScale={0.05}
-          color="#d9d2c2"
-          roughness={0.94}
+          bumpScale={0.04}
+          color="#cfc6b3"
+          roughness={0.9}
           metalness={0}
-          envMapIntensity={0.15}
+          envMapIntensity={0.35}
         />
       </mesh>
       {/* gold summoning circle inlaid around the stand */}
@@ -233,7 +233,9 @@ export function Scene() {
       </Suspense>
       {/* daylight fill — the open windows pour real sun into the chamber, so
           the ambient floor is lifted well above the old candlelit murk */}
-      <hemisphereLight args={['#b8ac97', '#241b12', 0.62]} />
+      {/* ground term lifted so DOWN-facing surfaces (the beamed ceiling when
+          the player tilts up) read as warm wood instead of a black void */}
+      <hemisphereLight args={['#b8ac97', '#4a3b2c', 0.62]} />
       <ambientLight intensity={0.24} color={'#e2d6c2'} />
       {/* cool daylight slanting in through the north windows (the candles
           carry the warmth; the windows carry the cool) */}
@@ -275,7 +277,9 @@ export function Scene() {
         minDistance={10}
         maxDistance={32}
         minPolarAngle={0.35}
-        maxPolarAngle={Math.PI / 2.15}
+        /* dips ~22° below the table plane, so tilting up reveals the beamed
+           ceiling and the chandelier without the camera entering the table */
+        maxPolarAngle={Math.PI * 0.62}
         target={[0, 0, 0]}
       />
       <WasdPan />

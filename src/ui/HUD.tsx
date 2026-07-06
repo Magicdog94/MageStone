@@ -14,6 +14,7 @@ import { useTokenUrl } from '../three/tokens';
 import { PipDie } from './Die';
 import { CombatRoll } from './CombatRoll';
 import { EliminationToast } from './EliminationToast';
+import { PadControls } from './PadControls';
 import { PlayerStrip } from './PlayerStrip';
 import { SiegeBanner } from './SiegeBanner';
 import { TurnTimer } from './TurnTimer';
@@ -264,6 +265,8 @@ export function HUD() {
           </div>
         ))}
       </div>
+
+      <PadControls />
 
       <Modals />
     </div>

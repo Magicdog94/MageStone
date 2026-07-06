@@ -2394,6 +2394,57 @@ body.ui-mobile .ritual-flag {
   padding: 0 6px;
 }
 
+/* ---- arrow pad: touch panning (the mobile WASD), above the action bar ---- */
+.dpad {
+  position: absolute;
+  right: calc(env(safe-area-inset-right, 0px) + 10px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 58px);
+  display: grid;
+  grid-template-columns: repeat(3, 38px);
+  grid-template-rows: repeat(2, 38px);
+  gap: 4px;
+  z-index: 6;
+}
+.dpad-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gold-line);
+  background: rgba(8, 17, 12, 0.55);
+  color: var(--gold-bright);
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+.dpad-btn:active {
+  background: rgba(40, 70, 52, 0.85);
+  border-color: var(--gold);
+  color: #fff3d6;
+}
+.dpad-up {
+  grid-column: 2;
+  grid-row: 1;
+}
+.dpad-left {
+  grid-column: 1;
+  grid-row: 2;
+}
+.dpad-down {
+  grid-column: 2;
+  grid-row: 2;
+}
+.dpad-right {
+  grid-column: 3;
+  grid-row: 2;
+}
+
 /* ---- bottom-left: music + fullscreen pills in the action-bar gutter ---- */
 body.ui-mobile .music-toggle {
   left: calc(env(safe-area-inset-left, 0px) + 8px);

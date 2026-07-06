@@ -9,6 +9,7 @@ import { arenaCircleTexture, groundBumpTexture, hazyFogTexture, stoneFloorTextur
 import { SmithyRoom, TeamBanners } from './Decor';
 import { ExteriorWorld } from './Exterior';
 import { FantasyProps } from './Props';
+import { panState } from './pan';
 import { FLOOR_Y } from './coords';
 import { useGame } from '../store';
 
@@ -170,9 +171,10 @@ function WasdPan({ speed = 10, bound = 11 }: { speed?: number; bound?: number })
   useFrame((state, dt) => {
     const controls = state.controls as OrbitLike | null;
     if (!controls) return;
+    // Keyboard WASD and the mobile arrow pad (panState) both steer the pan.
     const k = keys.current;
-    const x = (k.d ? 1 : 0) - (k.a ? 1 : 0);
-    const z = (k.w ? 1 : 0) - (k.s ? 1 : 0);
+    const x = (k.d || panState.d ? 1 : 0) - (k.a || panState.a ? 1 : 0);
+    const z = (k.w || panState.w ? 1 : 0) - (k.s || panState.s ? 1 : 0);
     if (x === 0 && z === 0) return;
 
     const fwd = new THREE.Vector3();

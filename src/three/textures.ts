@@ -341,7 +341,7 @@ export function emeraldBoardTexture(): THREE.Texture {
 
 // ---- Smithy interior surfaces -----------------------------------------------
 
-/** Aged lime-plaster wall with water stains and patches of exposed stone —
+/** Aged lime-plaster wall with water stains, cracks and rising damp —
  *  the smithy's walls (tiles horizontally). */
 export function plasterTexture(): THREE.Texture {
   const hit = cache.get('plaster');
@@ -371,22 +371,8 @@ export function plasterTexture(): THREE.Texture {
       ctx.fill();
     }
   }
-  // exposed stone patches near the bottom (plaster fallen away)
-  for (let i = 0; i < 26; i++) {
-    const x = Math.random() * S;
-    const y = S * 0.55 + Math.random() * S * 0.42;
-    const w = 30 + Math.random() * 70;
-    const h = 18 + Math.random() * 34;
-    for (const ox of [0, -S, S]) {
-      ctx.fillStyle = `rgba(${70 + (Math.random() * 25) | 0},${64 + (Math.random() * 20) | 0},${56 + (Math.random() * 16) | 0},0.9)`;
-      ctx.beginPath();
-      ctx.roundRect(x + ox, y, w, h, 8);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(30,26,22,0.55)';
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
-    }
-  }
+  // (no exposed-stone patches — the hard-edged rectangles read as square
+  //  holes in the wall from across the room, especially around the windows)
   // water-stain streaks from the top
   for (let i = 0; i < 24; i++) {
     const x = Math.random() * S;
@@ -1165,22 +1151,7 @@ export function plasterBumpTexture(): THREE.Texture {
       ctx.fill();
     }
   }
-  // raised stone patches near the bottom (matching the colour map's patches)
-  for (let i = 0; i < 30; i++) {
-    const x = Math.random() * S;
-    const y = S * 0.55 + Math.random() * S * 0.42;
-    const w = 30 + Math.random() * 70;
-    const h = 18 + Math.random() * 34;
-    for (const ox of [0, -S, S]) {
-      ctx.fillStyle = 'rgba(190,190,190,0.5)';
-      ctx.beginPath();
-      ctx.roundRect(x + ox, y, w, h, 8);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(40,40,40,0.7)';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-    }
-  }
+  // (no raised stone-patch rectangles — removed with the colour map's)
   // crack grooves (dark = recessed) echoing the colour map's cracks
   for (let i = 0; i < 14; i++) {
     const x0 = Math.random() * S;

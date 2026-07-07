@@ -5,10 +5,10 @@ import { ContactShadows, Environment, Lightformer, OrbitControls } from '@react-
 import { Board } from './Board';
 import { DiceLayer } from './Dice';
 import { BoardTokens, ClashEffect, DeathAnimations, Units } from './Pieces';
-import { hazyFogTexture } from './textures';
+import { arenaCircleTexture, hazyFogTexture, tudorFloorTexture } from './textures';
 import { SmithyRoom, TeamBanners } from './Decor';
 import { ExteriorWorld } from './Exterior';
-import { ScanEnvironment } from './Scans';
+import { FantasyProps } from './Props';
 import { panState } from './pan';
 import { FLOOR_Y } from './coords';
 import { useGame } from '../store';
@@ -54,12 +54,18 @@ function StudioEnv() {
 // The lanterns, team banners and medieval props now live in ./Decor.
 
 /**
- * The arena the table stands in. The visible floor is now the user's scanned
- * castle stone (Scans.tsx::CastleFloor); underneath it sits only a plain dark
- * backstop plane (so any dip in the scan shows shadow, never void), plus the
- * slow-drifting gold motes.
+ * The arena the table stands in: a floor of dark old oak — WIDE boards, laid
+ * wall to wall — with the grand gold summoning circle inlaid around the
+ * stand, and slow-drifting gold motes.
  */
 function ArenaEnvironment() {
+  const floorMap = useMemo(() => {
+    const t = tudorFloorTexture();
+    // 3 repeats over 200 units → boards ~11 units (~35 cm) wide: WIDE panels
+    t.repeat.set(3, 3);
+    return t;
+  }, []);
+  const circle = useMemo(() => arenaCircleTexture(), []);
   // Gold motes drifting around the table (seeded LCG — pure & stable per render).
   const motePositions = useMemo(() => {
     let seed = 987654321;
@@ -85,10 +91,21 @@ function ArenaEnvironment() {
 
   return (
     <group>
-      {/* dark backstop beneath the scanned stone floor */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y - 6, 0]}>
-        <planeGeometry args={[220, 220]} />
-        <meshStandardMaterial color="#221d17" roughness={1} metalness={0} />
+      {/* dark oak plank floor — square so it runs wall-to-wall under the room */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y, 0]} receiveShadow>
+        <planeGeometry args={[200, 200]} />
+        <meshStandardMaterial
+          map={floorMap}
+          color="#75654f"
+          roughness={0.82}
+          metalness={0}
+          envMapIntensity={0.3}
+        />
+      </mesh>
+      {/* gold summoning circle inlaid around the stand */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y + 0.02, 0]}>
+        <planeGeometry args={[30, 30]} />
+        <meshBasicMaterial map={circle} transparent opacity={0.85} depthWrite={false} />
       </mesh>
       {/* slow-drifting gold motes */}
       <points ref={motes}>
@@ -189,7 +206,7 @@ export function Scene() {
       shadows="percentage"
       dpr={[1, 2]}
       camera={{ position: [0, 20, 21], fov: 38 }}
-      gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.16, localClippingEnabled: true }}
+      gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.16 }}
       onPointerMissed={() => clearSelection(null)}
     >
       {/* light interior haze — smoke off the forge, not outdoor fog */}
@@ -201,7 +218,7 @@ export function Scene() {
       <Suspense fallback={null}>
         <SmithyRoom />
         <ExteriorWorld />
-        <ScanEnvironment />
+        <FantasyProps />
         <TeamBanners />
       </Suspense>
       {/* daylight fill — the open windows pour real sun into the chamber, so

@@ -80,6 +80,36 @@ function WoodMat({ tint = '#a58860', rx = 0.6, ry = 0.6, rough = 0.8 }: { tint?:
 
 // ---- small parts ---------------------------------------------------------------
 
+function Pot({
+  x,
+  z,
+  y,
+  r = 3,
+  h = 6,
+  glaze = '#96603e',
+}: {
+  x: number;
+  z: number;
+  y: number;
+  r?: number;
+  h?: number;
+  /** Fired-clay glaze colour — varied per pot so the shelf reads hand-made. */
+  glaze?: string;
+}) {
+  return (
+    <group position={[x, y, z]}>
+      <mesh castShadow>
+        <cylinderGeometry args={[r * 0.75, r, h, 12]} />
+        <meshStandardMaterial color={glaze} roughness={0.45} metalness={0} />
+      </mesh>
+      <mesh position={[0, h / 2, 0]}>
+        <torusGeometry args={[r * 0.62, r * 0.18, 8, 14]} />
+        <meshStandardMaterial color={glaze} roughness={0.4} metalness={0} />
+      </mesh>
+    </group>
+  );
+}
+
 /** A warm point light with candle flicker (each keeps its own clock). */
 function FlickerLight({
   base,
@@ -525,9 +555,12 @@ function RoomShading() {
     { pos: [71.6, midY, 76], yaw: -Math.PI / 2, flip: true },
   ];
   // contact-shadow strips on the floor along each wall, dark edge at the wall
-  // (the old wall/floor contact strips are gone — the scanned stone dado and
-  // the uneven scanned floor meet with real geometry now)
-  const strips: { pos: [number, number, number]; rz: number; len: number }[] = [];
+  const strips: { pos: [number, number, number]; rz: number; len: number }[] = [
+    { pos: [0, FLOOR_Y + 0.08, -83], rz: -Math.PI / 2, len: 148 },
+    { pos: [0, FLOOR_Y + 0.08, 83], rz: Math.PI / 2, len: 148 },
+    { pos: [-67, FLOOR_Y + 0.08, 0], rz: 0, len: 176 },
+    { pos: [67, FLOOR_Y + 0.08, 0], rz: Math.PI, len: 176 },
+  ];
   return (
     <group>
       {corners.map((c2, i) => (
@@ -644,8 +677,61 @@ export function SmithyRoom() {
       {/* ---- the great oak door (east wall, south of the banner zone) ---- */}
       <GreatDoor pos={[WALL_X - 2, FLOOR_Y, 52]} yaw={-Math.PI / 2} />
 
-      {/* (furniture now comes exclusively from the user's supplied files —
-          see three/Scans.tsx) */}
+      {/* ---- furnishings (all at real scale) ---- */}
+      {/* pottery shelves on the east wall */}
+      <group position={[68, FLOOR_Y, -46]}>
+        {[40, 56].map((sy) => (
+          <group key={sy}>
+            <mesh geometry={rbox(10, 2.6, 44)} position={[0, sy, 0]} castShadow>
+              <WoodMat tint="#8a6a44" rx={1.1} ry={0.3} />
+            </mesh>
+            {/* forged iron brackets */}
+            {[-16, 16].map((bz) => (
+              <mesh key={bz} geometry={rbox(6.5, 1.2, 1.2)} position={[2.4, sy - 3.2, bz]} rotation={[0, 0, 0.78]}>
+                <meshStandardMaterial {...IRON} />
+              </mesh>
+            ))}
+          </group>
+        ))}
+        {/* pottery, old books and a pair of scrolls */}
+        <Pot x={0} z={-14} y={44.3} r={3.4} h={7} glaze="#96603e" />
+        <Pot x={0} z={-4} y={43.8} r={4.2} h={6} glaze="#5d6e52" />
+        {[
+          [6, '#5a3030', 7, 0],
+          [8.4, '#2f4a3a', 6.2, 0],
+          [10.8, '#3a3a5c', 7.4, 0],
+          [13.8, '#6b5a2c', 6.6, -0.24],
+        ].map(([bz, col, bh, lean], i) => (
+          <mesh
+            key={i}
+            geometry={rbox(5.4, bh as number, 1.9)}
+            position={[0, 41.3 + (bh as number) / 2, bz as number]}
+            rotation={[Number(lean), 0, 0]}
+            castShadow
+          >
+            <meshStandardMaterial color={col as string} roughness={0.85} />
+          </mesh>
+        ))}
+        <Pot x={0} z={-12} y={59.6} r={3.6} h={6.5} glaze="#4f5d6e" />
+        <Pot x={0} z={-1} y={60} r={3} h={7.5} glaze="#8a6a3e" />
+        {/* rolled parchments */}
+        {[
+          [8, 57.6, 0],
+          [9.2, 59.4, 0.35],
+          [13, 57.6, -0.2],
+        ].map(([sz2, sy2, ry2], i) => (
+          <group key={i} position={[0, sy2 as number, sz2 as number]} rotation={[0, ry2 as number, Math.PI / 2]}>
+            <mesh castShadow>
+              <cylinderGeometry args={[0.9, 0.9, 7.5, 8]} />
+              <meshStandardMaterial color="#d8c9a3" roughness={0.8} />
+            </mesh>
+            <mesh>
+              <cylinderGeometry args={[1.0, 1.0, 1.6, 8]} />
+              <meshStandardMaterial color="#7a2a24" roughness={0.8} />
+            </mesh>
+          </group>
+        ))}
+      </group>
       {/* ---- dusty cobwebs in the high corners ---- */}
       {[
         { pos: [WALL_X - 3, CEIL_Y - 4, -WALL_Z + 3] as [number, number, number], yaw: -Math.PI * 0.75 },
@@ -734,7 +820,7 @@ function WallBanner({ color, seat }: { color: PlayerColor; seat: number }) {
   const tex = useBannerTexture(color);
   const cloth = useMemo(() => drapedCloth(), []);
   const [dx, dz] = SEAT_DIR[seat] ?? SEAT_DIR[0];
-  const dist = (dx !== 0 ? WALL_X : WALL_Z) - 11; // clear of the stone dado cladding
+  const dist = (dx !== 0 ? WALL_X : WALL_Z) - 4.5; // just off the wall face
   const yaw = Math.atan2(-dx, -dz);
   return (
     <group position={[dx * dist, FLOOR_Y + 54, dz * dist]} rotation={[0, yaw, 0]}>

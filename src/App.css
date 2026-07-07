@@ -2212,14 +2212,16 @@
 /* siege alert — enemy standing on a player's base (respawns are blocked) */
 .siege-alert {
   position: absolute;
-  top: calc(var(--space-4) + var(--control-md) + var(--space-6) + 80px);
+  /* tucked directly under the Turn + gravestone chips, compact enough that it
+     never reaches down over the board */
+  top: calc(var(--space-4) + var(--control-md) + var(--space-6) + var(--control-md) + 12px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 6;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   pointer-events: none;
 }
 .siege-pill {
@@ -2228,10 +2230,10 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 6px 16px;
+  padding: 3px 12px;
   border-radius: var(--radius-pill);
   font-family: var(--display);
-  font-size: var(--text-md);
+  font-size: var(--text-sm);
   letter-spacing: 0.04em;
   color: var(--ink);
   background: rgba(10, 8, 6, 0.85);
@@ -2384,7 +2386,7 @@ body.ui-mobile .leave-btn {
 
 /* centre-top banners ride lower fixed offsets on the small screen */
 body.ui-mobile .siege-alert {
-  top: 64px;
+  top: 78px; /* directly under the centred Turn + gravestone chips */
 }
 body.ui-mobile .elim-toasts {
   top: 92px;

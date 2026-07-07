@@ -80,66 +80,6 @@ function WoodMat({ tint = '#a58860', rx = 0.6, ry = 0.6, rough = 0.8 }: { tint?:
 
 // ---- small parts ---------------------------------------------------------------
 
-function Pot({
-  x,
-  z,
-  y,
-  r = 3,
-  h = 6,
-  glaze = '#96603e',
-}: {
-  x: number;
-  z: number;
-  y: number;
-  r?: number;
-  h?: number;
-  /** Fired-clay glaze colour — varied per pot so the shelf reads hand-made. */
-  glaze?: string;
-}) {
-  return (
-    <group position={[x, y, z]}>
-      <mesh castShadow>
-        <cylinderGeometry args={[r * 0.75, r, h, 12]} />
-        <meshStandardMaterial color={glaze} roughness={0.45} metalness={0} />
-      </mesh>
-      <mesh position={[0, h / 2, 0]}>
-        <torusGeometry args={[r * 0.62, r * 0.18, 8, 14]} />
-        <meshStandardMaterial color={glaze} roughness={0.4} metalness={0} />
-      </mesh>
-    </group>
-  );
-}
-
-/** A bevelled plank crate with iron straps and bolt heads — no perfect cubes. */
-function PlankCrate({ x, z, s, ry, lift = 0 }: { x: number; z: number; s: number; ry: number; lift?: number }) {
-  const planks = useMemo(() => planksTexture(), []);
-  const planksBump = useMemo(() => planksBumpTexture(), []);
-  return (
-    <group position={[x, FLOOR_Y + s / 2 + lift, z]} rotation={[0.015, ry, -0.01]}>
-      <mesh geometry={rbox(s, s, s)} castShadow receiveShadow>
-        <meshStandardMaterial map={planks} bumpMap={planksBump} bumpScale={0.16} color="#a9865c" roughness={0.85} />
-      </mesh>
-      {/* iron straps + bolts */}
-      {[-s * 0.32, s * 0.32].map((sy) => (
-        <group key={sy}>
-          <mesh geometry={rbox(s * 1.03, s * 0.09, s * 1.03)} position={[0, sy, 0]}>
-            <meshStandardMaterial color="#26292d" roughness={0.55} metalness={0.6} />
-          </mesh>
-          {[0, 1, 2, 3].map((k) => {
-            const a = (k * Math.PI) / 2 + Math.PI / 4;
-            return (
-              <mesh key={k} position={[Math.cos(a) * s * 0.53, sy, Math.sin(a) * s * 0.53]}>
-                <sphereGeometry args={[s * 0.035, 6, 6]} />
-                <meshStandardMaterial color="#3c4147" roughness={0.4} metalness={0.7} />
-              </mesh>
-            );
-          })}
-        </group>
-      ))}
-    </group>
-  );
-}
-
 /** A warm point light with candle flicker (each keeps its own clock). */
 function FlickerLight({
   base,
@@ -410,13 +350,8 @@ function GreatDoor({ pos, yaw }: { pos: [number, number, number]; yaw: number })
   );
   return (
     <group position={pos} rotation={[0, yaw, 0]}>
-      {/* dark seam just proud of the wall face, so the leaf's bevelled edges
-          read as a real gap into the frame */}
-      <mesh position={[0, (JAMB_H + HALF) / 2, 0.15]}>
-        <planeGeometry args={[HALF * 2 + 4, JAMB_H + HALF + 4]} />
-        <meshStandardMaterial color="#0d0a08" roughness={1} />
-      </mesh>
-      {/* the leaf, planks upright */}
+      {/* the leaf, planks upright (flush against the wall face — no backing
+          plane, so nothing square peeks past the arched leaf) */}
       <mesh geometry={leafGeom} material={leafMats} position={[0, 0, 0]} castShadow receiveShadow />
       {/* three long strap hinges */}
       {strap(12, 34)}
@@ -453,112 +388,6 @@ function GreatDoor({ pos, yaw }: { pos: [number, number, number]; yaw: number })
   );
 }
 
-/** A standing wrought-iron candelabrum (~1.4 m) with three uneven candles. */
-function Candelabrum({ x, z, seed }: { x: number; z: number; seed: number }) {
-  const H = 44;
-  return (
-    <group position={[x, FLOOR_Y, z]}>
-      {/* tripod feet + stem with a twist collar */}
-      {[0, 2.1, 4.2].map((a) => (
-        <mesh key={a} position={[Math.cos(a) * 4, 1.2, Math.sin(a) * 4]} rotation={[0, -a, 0.5]} castShadow>
-          <cylinderGeometry args={[0.9, 1.1, 9, 8]} />
-          <meshStandardMaterial {...IRON} />
-        </mesh>
-      ))}
-      <mesh position={[0, H / 2, 0]} castShadow>
-        <cylinderGeometry args={[1.0, 1.5, H, 10]} />
-        <meshStandardMaterial {...IRON} roughness={0.5} />
-      </mesh>
-      <mesh position={[0, H * 0.55, 0]}>
-        <torusGeometry args={[1.5, 0.4, 6, 12]} />
-        <meshStandardMaterial {...IRON} />
-      </mesh>
-      {/* drip pan + three candles of different heights */}
-      <mesh position={[0, H, 0]} castShadow>
-        <cylinderGeometry args={[7, 5.5, 1.6, 12]} />
-        <meshStandardMaterial {...IRON} roughness={0.5} />
-      </mesh>
-      {[
-        [0, 6.8],
-        [2.1, 5.2],
-        [4.2, 4.0],
-      ].map(([a, ch]) => (
-        <group key={a} position={[Math.cos(a) * 3.6, H + 0.8 + ch / 2, Math.sin(a) * 3.6]}>
-          <Candle h={ch} r={1.05} />
-        </group>
-      ))}
-      <FlickerLight base={3.4} seed={seed} position={[0, H + 8, 0]} color="#ffb066" distance={70} decay={1.8} />
-    </group>
-  );
-}
-
-/**
- * Old iron ring chandeliers: forged hoops with eight dripping candles each,
- * hung by three chains from ceiling bosses. They hang over the open floor at
- * EITHER SIDE of the table (a pair along the hall's axis, like a real great
- * hall) — the board-locked camera can actually frame them when tilting up,
- * and they never cross the board's sightlines. `lit` adds the real flicker
- * light (one per pair keeps the light budget sane; the flames are emissive
- * on both regardless).
- */
-function Chandelier({ z, lit = false }: { z: number; lit?: boolean }) {
-  const RING_Y = 25;
-  const RING_R = 20;
-  return (
-    <group position={[0, 0, z]}>
-      {/* ceiling boss + drop chain */}
-      <mesh position={[0, CEIL_Y - 2.2, 0]}>
-        <cylinderGeometry args={[2.2, 1.4, 1.6, 10]} />
-        <meshStandardMaterial {...IRON} />
-      </mesh>
-      <mesh position={[0, (CEIL_Y - 2.2 + RING_Y + 4) / 2, 0]}>
-        <cylinderGeometry args={[0.5, 0.5, CEIL_Y - 2.2 - RING_Y - 4, 6]} />
-        <meshStandardMaterial {...IRON} />
-      </mesh>
-      {/* three splayed chains from the hub down to the ring */}
-      {[0, 2.1, 4.2].map((a) => (
-        <group key={a} rotation={[0, a, 0]}>
-          <mesh position={[RING_R / 2, RING_Y + 2.6, 0]} rotation={[0, 0, 1.25]}>
-            <cylinderGeometry args={[0.35, 0.35, RING_R * 1.12, 6]} />
-            <meshStandardMaterial {...IRON} />
-          </mesh>
-        </group>
-      ))}
-      {/* the forged hoop, with a slimmer decorative under-ring */}
-      <mesh position={[0, RING_Y, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-        <torusGeometry args={[RING_R, 1.1, 8, 36]} />
-        <meshStandardMaterial {...IRON} roughness={0.55} />
-      </mesh>
-      <mesh position={[0, RING_Y - 2.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[RING_R - 1.6, 0.4, 6, 30]} />
-        <meshStandardMaterial {...IRON} />
-      </mesh>
-      {/* eight candles on drip pans around the hoop */}
-      {Array.from({ length: 8 }, (_, i) => {
-        const a = (i / 8) * Math.PI * 2;
-        const x = Math.cos(a) * RING_R;
-        const z = Math.sin(a) * RING_R;
-        const h = 4 + (i % 3) * 0.8; // uneven burn
-        return (
-          <group key={i} position={[x, RING_Y, z]}>
-            <mesh position={[0, 1, 0]}>
-              <cylinderGeometry args={[1.7, 1.3, 0.7, 10]} />
-              <meshStandardMaterial {...IRON} roughness={0.5} />
-            </mesh>
-            <group position={[0, 1.5 + h / 2, 0]}>
-              <Candle h={h} r={0.85} />
-            </group>
-          </group>
-        );
-      })}
-      {/* one warm glow at the hoop — washes the beams above and the floor below */}
-      {lit && (
-        <FlickerLight base={4.5} seed={17.3} position={[0, RING_Y + 2, 0]} color="#ffb066" distance={90} decay={1.9} />
-      )}
-    </group>
-  );
-}
-
 /** Iron wall sconce with a single dripping candle on a forged bracket. */
 function Sconce({ pos, yaw, seed }: { pos: [number, number, number]; yaw: number; seed: number }) {
   return (
@@ -578,7 +407,7 @@ function Sconce({ pos, yaw, seed }: { pos: [number, number, number]; yaw: number
       <group position={[0, 1.4, 2]}>
         <Candle h={5.4} r={0.95} />
       </group>
-      <FlickerLight base={2} seed={seed} position={[0, 6, 4]} color="#ffa562" distance={46} decay={1.9} />
+      <FlickerLight base={2.8} seed={seed} position={[0, 6, 4]} color="#ffa562" distance={62} decay={1.9} />
     </group>
   );
 }
@@ -696,12 +525,9 @@ function RoomShading() {
     { pos: [71.6, midY, 76], yaw: -Math.PI / 2, flip: true },
   ];
   // contact-shadow strips on the floor along each wall, dark edge at the wall
-  const strips: { pos: [number, number, number]; rz: number; len: number }[] = [
-    { pos: [0, FLOOR_Y + 0.08, -83], rz: -Math.PI / 2, len: 148 },
-    { pos: [0, FLOOR_Y + 0.08, 83], rz: Math.PI / 2, len: 148 },
-    { pos: [-67, FLOOR_Y + 0.08, 0], rz: 0, len: 176 },
-    { pos: [67, FLOOR_Y + 0.08, 0], rz: Math.PI, len: 176 },
-  ];
+  // (the old wall/floor contact strips are gone — the scanned stone dado and
+  // the uneven scanned floor meet with real geometry now)
+  const strips: { pos: [number, number, number]; rz: number; len: number }[] = [];
   return (
     <group>
       {corners.map((c2, i) => (
@@ -818,70 +644,8 @@ export function SmithyRoom() {
       {/* ---- the great oak door (east wall, south of the banner zone) ---- */}
       <GreatDoor pos={[WALL_X - 2, FLOOR_Y, 52]} yaw={-Math.PI / 2} />
 
-      {/* ---- furnishings (all at real scale) ---- */}
-      {/* pottery shelves on the east wall */}
-      <group position={[68, FLOOR_Y, -46]}>
-        {[40, 56].map((sy) => (
-          <group key={sy}>
-            <mesh geometry={rbox(10, 2.6, 44)} position={[0, sy, 0]} castShadow>
-              <WoodMat tint="#8a6a44" rx={1.1} ry={0.3} />
-            </mesh>
-            {/* forged iron brackets */}
-            {[-16, 16].map((bz) => (
-              <mesh key={bz} geometry={rbox(6.5, 1.2, 1.2)} position={[2.4, sy - 3.2, bz]} rotation={[0, 0, 0.78]}>
-                <meshStandardMaterial {...IRON} />
-              </mesh>
-            ))}
-          </group>
-        ))}
-        {/* pottery, old books and a pair of scrolls */}
-        <Pot x={0} z={-14} y={44.3} r={3.4} h={7} glaze="#96603e" />
-        <Pot x={0} z={-4} y={43.8} r={4.2} h={6} glaze="#5d6e52" />
-        {[
-          [6, '#5a3030', 7, 0],
-          [8.4, '#2f4a3a', 6.2, 0],
-          [10.8, '#3a3a5c', 7.4, 0],
-          [13.8, '#6b5a2c', 6.6, -0.24],
-        ].map(([bz, col, bh, lean], i) => (
-          <mesh
-            key={i}
-            geometry={rbox(5.4, bh as number, 1.9)}
-            position={[0, 41.3 + (bh as number) / 2, bz as number]}
-            rotation={[Number(lean), 0, 0]}
-            castShadow
-          >
-            <meshStandardMaterial color={col as string} roughness={0.85} />
-          </mesh>
-        ))}
-        <Pot x={0} z={-12} y={59.6} r={3.6} h={6.5} glaze="#4f5d6e" />
-        <Pot x={0} z={-1} y={60} r={3} h={7.5} glaze="#8a6a3e" />
-        {/* rolled parchments */}
-        {[
-          [8, 57.6, 0],
-          [9.2, 59.4, 0.35],
-          [13, 57.6, -0.2],
-        ].map(([sz2, sy2, ry2], i) => (
-          <group key={i} position={[0, sy2 as number, sz2 as number]} rotation={[0, ry2 as number, Math.PI / 2]}>
-            <mesh castShadow>
-              <cylinderGeometry args={[0.9, 0.9, 7.5, 8]} />
-              <meshStandardMaterial color="#d8c9a3" roughness={0.8} />
-            </mesh>
-            <mesh>
-              <cylinderGeometry args={[1.0, 1.0, 1.6, 8]} />
-              <meshStandardMaterial color="#7a2a24" roughness={0.8} />
-            </mesh>
-          </group>
-        ))}
-      </group>
-      {/* crates in the south-west corner */}
-      {[
-        [-46, 70, 22, 0.2],
-        [-26, 76, 18, 0.7],
-        [-42, 66, 16, 0.45],
-      ].map(([cx, cz, s, ry], i) => (
-        <PlankCrate key={i} x={cx} z={cz} s={s} ry={ry} lift={i === 2 ? 22 : 0} />
-      ))}
-
+      {/* (furniture now comes exclusively from the user's supplied files —
+          see three/Scans.tsx) */}
       {/* ---- dusty cobwebs in the high corners ---- */}
       {[
         { pos: [WALL_X - 3, CEIL_Y - 4, -WALL_Z + 3] as [number, number, number], yaw: -Math.PI * 0.75 },
@@ -899,16 +663,11 @@ export function SmithyRoom() {
         </mesh>
       ))}
 
-      {/* ---- lights: chandelier pair + candelabra ring + wall sconces ---- */}
-      <Chandelier z={-58} lit />
-      <Chandelier z={58} />
-      <Candelabrum x={-34} z={-34} seed={1.9} />
-      <Candelabrum x={34} z={-34} seed={3.8} />
-      <Candelabrum x={-34} z={34} seed={5.7} />
-      <Candelabrum x={34} z={34} seed={7.6} />
+      {/* ---- lights: candles on the walls only (sconces carry the room) ---- */}
       <Sconce pos={[-30, FLOOR_Y + 55, WALL_Z - 3]} yaw={Math.PI} seed={9.5} />
       <Sconce pos={[64, FLOOR_Y + 55, WALL_Z - 3]} yaw={Math.PI} seed={11.4} />
       <Sconce pos={[-WALL_X + 3, FLOOR_Y + 55, 44]} yaw={Math.PI / 2} seed={13.3} />
+      <Sconce pos={[-WALL_X + 3, FLOOR_Y + 55, -50]} yaw={Math.PI / 2} seed={15.2} />
     </group>
   );
 }
@@ -971,22 +730,14 @@ function drapedCloth(): THREE.PlaneGeometry {
   return g;
 }
 
-// Lateral slide along the wall per SEAT, so hangings clear wall furniture
-// (the west wall's centre now carries the arcane bookcase).
-const BANNER_SLIDE: Record<number, number> = { 3: -44 };
-
 function WallBanner({ color, seat }: { color: PlayerColor; seat: number }) {
   const tex = useBannerTexture(color);
   const cloth = useMemo(() => drapedCloth(), []);
   const [dx, dz] = SEAT_DIR[seat] ?? SEAT_DIR[0];
-  const dist = (dx !== 0 ? WALL_X : WALL_Z) - 4.5; // just off the wall face
-  const slide = BANNER_SLIDE[seat] ?? 0;
+  const dist = (dx !== 0 ? WALL_X : WALL_Z) - 11; // clear of the stone dado cladding
   const yaw = Math.atan2(-dx, -dz);
   return (
-    <group
-      position={[dx * dist + (dz !== 0 ? slide : 0), FLOOR_Y + 54, dz * dist + (dx !== 0 ? slide : 0)]}
-      rotation={[0, yaw, 0]}
-    >
+    <group position={[dx * dist, FLOOR_Y + 54, dz * dist]} rotation={[0, yaw, 0]}>
       {/* soft contact shadow on the wall behind the cloth */}
       <mesh position={[0, -2, -1.6]}>
         <planeGeometry args={[44, 68]} />

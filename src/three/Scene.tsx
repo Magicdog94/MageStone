@@ -5,10 +5,10 @@ import { ContactShadows, Environment, Lightformer, OrbitControls } from '@react-
 import { Board } from './Board';
 import { DiceLayer } from './Dice';
 import { BoardTokens, ClashEffect, DeathAnimations, Units } from './Pieces';
-import { arenaCircleTexture, groundBumpTexture, hazyFogTexture, stoneFloorTexture } from './textures';
+import { hazyFogTexture } from './textures';
 import { SmithyRoom, TeamBanners } from './Decor';
 import { ExteriorWorld } from './Exterior';
-import { FantasyProps } from './Props';
+import { ScanEnvironment } from './Scans';
 import { panState } from './pan';
 import { FLOOR_Y } from './coords';
 import { useGame } from '../store';
@@ -54,26 +54,12 @@ function StudioEnv() {
 // The lanterns, team banners and medieval props now live in ./Decor.
 
 /**
- * The arena the table stands in: a flagstone plaza with a grand gold summoning
- * circle inlaid around the stand, a ring of rune-capped obelisks fading into
- * the mist, and slow-drifting gold motes — so the board reads as the centre-
- * piece of a larger duelling ground rather than a floating tabletop.
+ * The arena the table stands in. The visible floor is now the user's scanned
+ * castle stone (Scans.tsx::CastleFloor); underneath it sits only a plain dark
+ * backstop plane (so any dip in the scan shows shadow, never void), plus the
+ * slow-drifting gold motes.
  */
 function ArenaEnvironment() {
-  const floorMap = useMemo(() => {
-    const t = stoneFloorTexture();
-    t.repeat.set(6, 6); // GRAND slabs — ~half-metre dressed courses
-    return t;
-  }, []);
-  const floorBump = useMemo(() => {
-    // Clone: the board tiles share this texture at repeat 1.
-    const t = groundBumpTexture().clone();
-    t.repeat.set(6, 6);
-    t.needsUpdate = true;
-    return t;
-  }, []);
-  const circle = useMemo(() => arenaCircleTexture(), []);
-
   // Gold motes drifting around the table (seeded LCG — pure & stable per render).
   const motePositions = useMemo(() => {
     let seed = 987654321;
@@ -99,23 +85,10 @@ function ArenaEnvironment() {
 
   return (
     <group>
-      {/* flagstone floor — square so it runs wall-to-wall under the smithy */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y, 0]} receiveShadow>
-        <planeGeometry args={[200, 200]} />
-        <meshStandardMaterial
-          map={floorMap}
-          bumpMap={floorBump}
-          bumpScale={0.04}
-          color="#cfc6b3"
-          roughness={0.9}
-          metalness={0}
-          envMapIntensity={0.35}
-        />
-      </mesh>
-      {/* gold summoning circle inlaid around the stand */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y + 0.02, 0]}>
-        <planeGeometry args={[30, 30]} />
-        <meshBasicMaterial map={circle} transparent opacity={0.85} depthWrite={false} />
+      {/* dark backstop beneath the scanned stone floor */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y - 6, 0]}>
+        <planeGeometry args={[220, 220]} />
+        <meshStandardMaterial color="#221d17" roughness={1} metalness={0} />
       </mesh>
       {/* slow-drifting gold motes */}
       <points ref={motes}>
@@ -216,7 +189,7 @@ export function Scene() {
       shadows="percentage"
       dpr={[1, 2]}
       camera={{ position: [0, 20, 21], fov: 38 }}
-      gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.16 }}
+      gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.16, localClippingEnabled: true }}
       onPointerMissed={() => clearSelection(null)}
     >
       {/* light interior haze — smoke off the forge, not outdoor fog */}
@@ -228,7 +201,7 @@ export function Scene() {
       <Suspense fallback={null}>
         <SmithyRoom />
         <ExteriorWorld />
-        <FantasyProps />
+        <ScanEnvironment />
         <TeamBanners />
       </Suspense>
       {/* daylight fill — the open windows pour real sun into the chamber, so

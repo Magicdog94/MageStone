@@ -1665,6 +1665,100 @@ export function stoneFloorTexture(): THREE.Texture {
   return finish(c, 'stoneFloor', true);
 }
 
+// ---- Old Tudor oak floor (tiling) -------------------------------------------
+
+/**
+ * Old Tudor floorboards: six wide oak boards per repeat, running along x, with
+ * staggered butt joints, wandering grain, nail pairs at the joints, centuries
+ * of tone drift between boards and a soft foot-polish down the middle of each.
+ * Tiles seamlessly on both axes (rows fit exactly; joints/grain draw wrapped).
+ */
+export function tudorFloorTexture(): THREE.Texture {
+  const hit = cache.get('tudorFloor');
+  if (hit) return hit;
+  const S = 1024;
+  const [c, ctx] = canvas(S);
+  const rows = 6;
+  const rh = S / rows;
+  const tones = ['#6b4e30', '#755837', '#5e452a', '#7d5f3c', '#684c2e', '#715431'];
+  for (let r = 0; r < rows; r++) {
+    const y = r * rh;
+    // board face
+    const base = tones[r % tones.length];
+    ctx.fillStyle = base;
+    ctx.fillRect(0, y, S, rh);
+    // wandering grain lines along the board
+    for (let i = 0; i < 34; i++) {
+      const dark = Math.random() < 0.55;
+      ctx.strokeStyle = dark
+        ? `rgba(38,26,14,${0.1 + Math.random() * 0.16})`
+        : `rgba(148,116,74,${0.08 + Math.random() * 0.12})`;
+      ctx.lineWidth = 0.8 + Math.random() * 1.4;
+      let gy = y + 4 + Math.random() * (rh - 8);
+      ctx.beginPath();
+      ctx.moveTo(0, gy);
+      for (let x = 0; x <= S; x += 32) {
+        gy += (Math.random() - 0.5) * 2.2;
+        gy = Math.min(y + rh - 3, Math.max(y + 3, gy));
+        ctx.lineTo(x, gy);
+      }
+      ctx.stroke();
+    }
+    // the odd knot
+    if (Math.random() < 0.8) {
+      const kx = Math.random() * S;
+      const ky = y + rh * (0.3 + Math.random() * 0.4);
+      for (const ox of [0, -S, S]) {
+        const kg = ctx.createRadialGradient(kx + ox, ky, 0, kx + ox, ky, 7 + Math.random() * 6);
+        kg.addColorStop(0, 'rgba(30,20,10,0.85)');
+        kg.addColorStop(0.55, 'rgba(66,46,26,0.4)');
+        kg.addColorStop(1, 'rgba(66,46,26,0)');
+        ctx.fillStyle = kg;
+        ctx.beginPath();
+        ctx.arc(kx + ox, ky, 13, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    // foot-polish sheen along the middle of the board
+    const sheen = ctx.createLinearGradient(0, y, 0, y + rh);
+    sheen.addColorStop(0, 'rgba(0,0,0,0.16)');
+    sheen.addColorStop(0.45, 'rgba(236,214,170,0.07)');
+    sheen.addColorStop(1, 'rgba(0,0,0,0.2)');
+    ctx.fillStyle = sheen;
+    ctx.fillRect(0, y, S, rh);
+    // staggered butt joint + nail pairs
+    const jx = ((r * 0.37 + 0.13) % 1) * S + Math.random() * 90;
+    for (const ox of [0, -S, S]) {
+      ctx.fillStyle = 'rgba(20,13,7,0.9)';
+      ctx.fillRect(jx + ox - 1.5, y + 1, 3, rh - 2);
+      for (const ny of [y + rh * 0.28, y + rh * 0.72]) {
+        for (const nx of [jx + ox - 9, jx + ox + 9]) {
+          ctx.fillStyle = '#181310';
+          ctx.beginPath();
+          ctx.arc(nx, ny, 2.4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = 'rgba(220,200,160,0.35)';
+          ctx.beginPath();
+          ctx.arc(nx - 0.8, ny - 0.8, 0.9, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+    // dark seam between boards (both edges so it tiles on y)
+    ctx.fillStyle = 'rgba(18,12,6,0.95)';
+    ctx.fillRect(0, y - 1.2, S, 2.4);
+  }
+  ctx.fillStyle = 'rgba(18,12,6,0.95)';
+  ctx.fillRect(0, S - 1.2, S, 1.2);
+  // fine dust + wear speckle
+  for (let i = 0; i < 9000; i++) {
+    const v = Math.random();
+    ctx.fillStyle = v < 0.5 ? 'rgba(30,20,10,0.12)' : 'rgba(190,160,110,0.08)';
+    ctx.fillRect(Math.random() * S, Math.random() * S, 1, 1);
+  }
+  return finish(c, 'tudorFloor', true);
+}
+
 // ---- Arena summoning circle (floor decal) ----------------------------------
 
 /** A grand gold summoning circle inlaid in the plaza around the table's stand:

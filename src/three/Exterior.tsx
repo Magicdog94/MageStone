@@ -23,6 +23,7 @@ import { useMemo } from 'react';
 import * as THREE from 'three';
 import { useGLTF, useTexture } from '@react-three/drei';
 import { exteriorBackdropTexture, exteriorGroundTexture } from './textures';
+import { ScanGround } from './Scans';
 
 const EXT = '/models/exterior/';
 
@@ -289,6 +290,8 @@ function NorthDiorama() {
   return (
     <group position={[0, GROUND_Y, 0]}>
       <GroundPlane pos={[0, 0, -250]} w={720} d={320} />
+      {/* the user's scanned stone ground, laid through the courtyard */}
+      <ScanGround pos={[0, 22.1, -220]} ry={Math.PI / 2} s={6} />
       {/* town band (forced perspective) */}
       <group scale={S_TOWN}>
         {/* left-window scenery: rooftop row + courtyard clutter (the left
@@ -325,6 +328,8 @@ function SouthDiorama() {
   return (
     <group position={[0, GROUND_Y, 0]}>
       <GroundPlane pos={[0, 0, 250]} w={720} d={320} />
+      {/* the user's scanned stone ground on this side of the complex too */}
+      <ScanGround pos={[0, 22.1, 220]} ry={-Math.PI / 2} s={6} />
       <group scale={S_TOWN}>
         {/* the keep: a heavier square stone tower, half-caught at the window's
             left edge so its masonry side reads without filling the view */}

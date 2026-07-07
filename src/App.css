@@ -120,6 +120,27 @@
   transform: translateY(-1px);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55), 0 0 14px rgba(120, 230, 175, 0.25);
 }
+/* iPhone hint: pages can't go fullscreen there — point at Add to Home Screen */
+.fs-hint {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 56px);
+  transform: translateX(-50%);
+  z-index: 60;
+  max-width: min(420px, 86vw);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gold-line);
+  background: linear-gradient(180deg, var(--panel-1), var(--panel-2));
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  text-align: center;
+  box-shadow: var(--shadow-panel);
+  animation: elim-in 0.25s ease-out;
+  pointer-events: none;
+}
 
 /* ---------------- brand ---------------- */
 .brand {
@@ -2332,16 +2353,28 @@ body.ui-mobile .turn-timer-top {
   height: 4px;
 }
 
-/* ---- top-right: gear, with the round + gravestone chips beside it ---- */
+/* ---- top-right: the gear; the round + gravestone chips sit top-CENTRE,
+        between the player cards and the gear, aligned as one tidy row ---- */
 body.ui-mobile .gear {
   top: 6px;
   right: calc(env(safe-area-inset-right, 0px) + 8px);
 }
 body.ui-mobile .top-chips {
-  top: 6px;
-  right: calc(env(safe-area-inset-right, 0px) + 46px);
-  left: auto;
-  transform: none;
+  top: 42px; /* second row — clear of the player cards even in 4-player */
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  gap: 6px;
+}
+body.ui-mobile .top-chips .turn-chip,
+body.ui-mobile .top-chips .grave-bank {
+  height: var(--control-md);
+  padding: 0 10px;
+  font-size: var(--text-sm);
+}
+body.ui-mobile .grave-token {
+  width: 16px;
+  height: 16px;
 }
 body.ui-mobile .leave-btn {
   top: 44px;

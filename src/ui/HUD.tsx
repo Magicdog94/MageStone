@@ -100,7 +100,7 @@ export function HUD() {
       ? 'Roll 5 dice — one Mage, one Priest, three Warrior.'
       : phase === 'discard'
         ? `${discardLabel}. Click a die in the tray or on the board.`
-        : 'Move up to 3 units (each die moves its matching unit), then act: attack, ritual, activate or resurrect.';
+        : 'Click a unit to move it — it takes its highest matching die automatically (or pick a die yourself first). Then act: attack, ritual, activate or resurrect.';
 
   return (
     <div className="hud">

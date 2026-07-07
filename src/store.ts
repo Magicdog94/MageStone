@@ -262,8 +262,18 @@ export const useGame = create<UIState>((set) => ({
       const unit = unitById(s.game, unitId);
       if (!unit || unit.owner !== s.game.current) return {};
       const die = s.game.dice.find((d) => d.id === s.selectedDieId);
-      const keepDie = die && canDieMoveUnit(die, unit, s.game) ? s.selectedDieId : null;
-      return { selectedUnitId: unitId, selectedDieId: keepDie };
+      let dieId = die && canDieMoveUnit(die, unit, s.game) ? s.selectedDieId : null;
+      // Unit-first flow: clicking a unit with no (matching) die selected
+      // auto-assigns the HIGHEST free die of its kind — so the first warrior
+      // gets the best warrior roll, the next the second best, and so on. A
+      // manually clicked die still wins (kept above); this only fills the gap.
+      if (!dieId && s.game.turnPhase === 'act') {
+        const best = s.game.dice
+          .filter((d) => !d.discarded && d.usedBy === null && canDieMoveUnit(d, unit, s.game))
+          .sort((a, b) => b.value - a.value)[0];
+        dieId = best?.id ?? null;
+      }
+      return { selectedUnitId: unitId, selectedDieId: dieId };
     }),
 
   selectDie: (dieId) =>
@@ -370,3 +380,7 @@ export function unitActions(game: GameState, unitId: string | null) {
   };
 }
 
+// Dev-only: expose the store so previews/tests can drive turns headlessly.
+if (import.meta.env.DEV) {
+  (window as unknown as { __game?: typeof useGame }).__game = useGame;
+}

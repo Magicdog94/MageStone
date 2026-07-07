@@ -1,0 +1,14 @@
+{
+  "name": "MageStone",
+  "short_name": "MageStone",
+  "description": "Magical chess with dice — a 3D fantasy strategy board game.",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#07120c",
+  "theme_color": "#0c2118",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

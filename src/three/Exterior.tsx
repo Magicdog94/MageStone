@@ -311,8 +311,10 @@ function NorthDiorama() {
         <RoundTower pos={[-27, 0, -44.4]} shaftM={8.5} />
         <RoundTower pos={[31, 0, -44.2]} shaftM={7.5} />
       </group>
-      <Scrim pos={[0, 30, -192]} w={580} h={130} opacity={0.08} />
-      <Scrim pos={[0, 40, -278]} w={680} h={170} opacity={0.13} />
+      {/* fog: a near bank in front of the town plus thicker distance scrims */}
+      <Scrim pos={[0, 24, -138]} w={560} h={110} opacity={0.14} />
+      <Scrim pos={[0, 30, -192]} w={580} h={130} opacity={0.18} />
+      <Scrim pos={[0, 40, -278]} w={680} h={170} opacity={0.3} />
       <Backdrop pos={[0, 60, -352]} />
     </group>
   );
@@ -346,8 +348,10 @@ function SouthDiorama() {
       <group scale={4.6}>
         <RoundTower pos={[-24, 0, 45.6]} shaftM={8} />
       </group>
-      <Scrim pos={[0, 30, 198]} w={580} h={130} opacity={0.08} />
-      <Scrim pos={[0, 40, 282]} w={680} h={170} opacity={0.13} />
+      {/* fog: same banks as the north side, so both views share the weather */}
+      <Scrim pos={[0, 24, 142]} w={560} h={110} opacity={0.14} />
+      <Scrim pos={[0, 30, 198]} w={580} h={130} opacity={0.18} />
+      <Scrim pos={[0, 40, 282]} w={680} h={170} opacity={0.3} />
       <Backdrop pos={[0, 60, 350]} ry={Math.PI} uvOffset={0.42} />
     </group>
   );

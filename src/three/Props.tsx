@@ -140,22 +140,11 @@ export function FantasyProps() {
         </>
       )}
 
-      {/* ---- stores corner (south-west): cauldron beside the crates ---- */}
-      <Prop name="Cauldron" pos={[-56, FLOOR_Y, 38]} ry={0.3} />
-      <ShadowBlob pos={[-56, 38]} w={40} d={40} />
-      <ShadowBlob pos={[-40, 70]} w={60} d={44} opacity={0.4} />
-
       {/* ---- benches under the north + south banners — a hall, not a shed ---- */}
       <Prop name="Bench" pos={[0, FLOOR_Y, -80]} s={26} />
       <ShadowBlob pos={[0, -80]} w={80} d={22} />
       <Prop name="Bench" pos={[0, FLOOR_Y, 80]} ry={Math.PI} s={26} />
       <ShadowBlob pos={[0, 80]} w={80} d={22} />
-
-      {/* ---- armoury rack under the east-wall shelves, by the door ---- */}
-      <Prop name="WeaponStand" pos={[56, FLOOR_Y, -44]} ry={-Math.PI / 2} />
-      <Prop name="Sword_Bronze" pos={[56, FLOOR_Y + 7, -50]} ry={-Math.PI / 2} rx={-0.2} />
-      <Prop name="Shield_Wooden" pos={[53, FLOOR_Y + 10, -30]} ry={-Math.PI / 2 - 0.5} rx={0.25} />
-      <ShadowBlob pos={[56, -44]} w={42} d={52} />
 
       {/* ---- wall torch in the north-east corner ---- */}
       <WallTorch pos={[56, FLOOR_Y + 52, -85.5]} ry={0} />
@@ -174,10 +163,6 @@ for (const n of [
   'Potion_1',
   'Potion_2',
   'SmallBottles_1',
-  'Cauldron',
-  'WeaponStand',
-  'Sword_Bronze',
-  'Shield_Wooden',
   'Torch_Metal',
 ]) {
   useGLTF.preload(KIT + n + '.gltf');

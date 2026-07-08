@@ -411,8 +411,8 @@
 
 /* ---------------- MageStone layout picker (New Game) ---------------- */
 .layout-picker {
-  /* 5-up keeps the nine presets to two short rows, so the New Game modal fits
-     a 1536×960-class laptop viewport at 100% zoom without scrolling. */
+  /* four presets + Random = exactly one row, so the New Game modal stays
+     fully visible without scrolling in both 2- and 4-player modes. */
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--space-1);

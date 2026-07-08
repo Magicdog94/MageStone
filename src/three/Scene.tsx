@@ -21,6 +21,52 @@ import { useGame } from '../store';
  */
 function FogBackdrop() {
   const scene = useThree((s) => s.scene);
+  const get = useThree((s) => s.get);
+  // TEMP DEV RIG: headless-preview helpers (camera teleport + canvas capture).
+  // Dev-only; remove before shipping visual work built on top of them.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const w = window as unknown as Record<string, unknown>;
+    w.__r3f = get;
+    w.__cam = (px: number, py: number, pz: number, tx = 0, ty = 0, tz = 0) => {
+      const st = get();
+      const controls = st.controls as unknown as {
+        target: THREE.Vector3;
+        update: () => void;
+        minDistance: number;
+        maxDistance: number;
+        minPolarAngle: number;
+        maxPolarAngle: number;
+      } | null;
+      st.camera.position.set(px, py, pz);
+      if (controls) {
+        controls.minDistance = 1;
+        controls.maxDistance = 600;
+        controls.minPolarAngle = 0;
+        controls.maxPolarAngle = Math.PI;
+        controls.target.set(tx, ty, tz);
+        controls.update();
+      } else st.camera.lookAt(tx, ty, tz);
+    };
+    w.__shot = (maxW = 640, quality = 0.72, frames = 3) => {
+      const st = get();
+      // Hidden headless windows never fire rAF, so useFrame callbacks (unit
+      // placement, glides) starve — pump the loop manually before capturing.
+      const adv = (st as unknown as { advance?: (t: number) => void }).advance;
+      for (let i = 0; i < frames; i++) {
+        if (typeof adv === 'function') adv(performance.now() + i * 16.7);
+        else st.gl.render(st.scene, st.camera);
+      }
+      st.gl.render(st.scene, st.camera); // fresh frame in the drawing buffer
+      const src = st.gl.domElement;
+      const scale = Math.min(1, maxW / src.width);
+      const c = document.createElement('canvas');
+      c.width = Math.round(src.width * scale);
+      c.height = Math.round(src.height * scale);
+      c.getContext('2d')!.drawImage(src, 0, 0, c.width, c.height);
+      return c.toDataURL('image/jpeg', quality);
+    };
+  }, [get]);
   useEffect(() => {
     const tex = hazyFogTexture();
     tex.mapping = THREE.EquirectangularReflectionMapping;
@@ -102,9 +148,10 @@ function ArenaEnvironment() {
           envMapIntensity={0.3}
         />
       </mesh>
-      {/* gold summoning circle inlaid around the stand */}
+      {/* gold summoning circle inlaid around the stand — 3× its old size so
+          the ring detail shows on the floor beyond the tabletop's shadow */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y + 0.02, 0]}>
-        <planeGeometry args={[30, 30]} />
+        <planeGeometry args={[90, 90]} />
         <meshBasicMaterial map={circle} transparent opacity={0.85} depthWrite={false} />
       </mesh>
       {/* slow-drifting gold motes */}
@@ -206,7 +253,12 @@ export function Scene() {
       shadows="percentage"
       dpr={[1, 2]}
       camera={{ position: [0, 20, 21], fov: 38 }}
-      gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.16 }}
+      gl={{
+        toneMapping: THREE.ACESFilmicToneMapping,
+        toneMappingExposure: 1.16,
+        // DEV only: lets the headless-preview __shot helper read the canvas
+        preserveDrawingBuffer: import.meta.env.DEV,
+      }}
       onPointerMissed={() => clearSelection(null)}
     >
       {/* light interior haze — smoke off the forge, not outdoor fog */}

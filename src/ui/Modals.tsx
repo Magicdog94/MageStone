@@ -144,7 +144,8 @@ function LayoutThumb({ layout }: { layout: StoneLayout }) {
   );
 }
 
-/** MageStone layout chooser — eight symmetric presets plus a Random option. */
+/** MageStone layout chooser — four symmetric presets plus a Random option
+ *  (one row, so the New Game modal never needs scrolling). */
 function LayoutPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
   const tile = (id: string, name: string, body: ReactNode) => (
     <button

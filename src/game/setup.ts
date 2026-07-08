@@ -84,14 +84,12 @@ export interface StoneLayout {
   seeds: Cell[]; // 4 seeds, each in rows/cols 4–7 (Nexus corner 7,7 excluded)
 }
 
+// Four distinct presets (+ Random in the picker) — they fit ONE row in the
+// New Game modal, keeping the whole dialog visible without scrolling.
 export const STONE_LAYOUTS: StoneLayout[] = [
   { id: 'diamond', name: 'Diamond', seeds: [{ r: 4, c: 7 }, { r: 7, c: 4 }, { r: 5, c: 6 }, { r: 6, c: 5 }] },
-  { id: 'inner', name: 'Inner Diamond', seeds: [{ r: 5, c: 7 }, { r: 7, c: 5 }, { r: 6, c: 7 }, { r: 7, c: 6 }] },
   { id: 'corners', name: 'Corner Boxes', seeds: [{ r: 4, c: 4 }, { r: 5, c: 5 }, { r: 4, c: 5 }, { r: 5, c: 4 }] },
-  { id: 'wide', name: 'Wide Box', seeds: [{ r: 4, c: 4 }, { r: 6, c: 6 }, { r: 4, c: 6 }, { r: 6, c: 4 }] },
   { id: 'cross', name: 'Cross', seeds: [{ r: 4, c: 7 }, { r: 7, c: 4 }, { r: 6, c: 7 }, { r: 7, c: 6 }] },
-  { id: 'star', name: 'Star', seeds: [{ r: 4, c: 6 }, { r: 6, c: 4 }, { r: 5, c: 7 }, { r: 7, c: 5 }] },
-  { id: 'pinwheel', name: 'Pinwheel', seeds: [{ r: 4, c: 5 }, { r: 5, c: 7 }, { r: 7, c: 6 }, { r: 6, c: 4 }] },
   { id: 'scatter', name: 'Scatter', seeds: [{ r: 4, c: 4 }, { r: 5, c: 6 }, { r: 6, c: 4 }, { r: 7, c: 5 }] },
 ];
 

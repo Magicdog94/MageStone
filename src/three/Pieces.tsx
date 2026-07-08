@@ -283,15 +283,21 @@ function paintedGeometry(src: THREE.BufferGeometry, kind: UnitKind, colorHex: st
       col.lerp(PAINT_LEATHER, 0.6 * (1 - height[i] / 0.14)); // leather boots band
     }
     const cv = conv[i];
-    if (cv > 0) {
-      col.lerp(PAINT_GOLD, 0.9 * smoothstep(0.12, 0.4, cv)); // gold edge trim
-    } else {
+    // The decimated priest sculpt is much smoother than the hand-modelled
+    // mage/warrior, so its convexity rarely reaches their gold threshold —
+    // it gets a more sensitive band so all three carry the same gold trim.
+    const goldLo = kind === 'priest' ? 0.075 : 0.12;
+    const goldHi = kind === 'priest' ? 0.3 : 0.4;
+    // (never gild the standing disc — it stays team-tinted like the others')
+    if (cv > 0 && !(kind === 'priest' && height[i] < 0.1)) {
+      col.lerp(PAINT_GOLD, 0.9 * smoothstep(goldLo, goldHi, cv)); // gold edge trim
+    } else if (cv <= 0) {
       col.multiplyScalar(1 - 0.6 * smoothstep(0.08, 0.35, -cv)); // shaded folds
     }
-    // The sculpt's own base (a taller rocky mound on the warrior, a thicker
-    // disc on the robed sculpts) is painted the SAME plain dark on every kind,
-    // so all units stand on identical-looking dark bases.
-    const baseBand = kind === 'warrior' ? 0.12 : 0.09;
+    // The very bottom of each sculpt keeps a plain dark rim; the priest's slim
+    // disc sits entirely inside the old band and went fully black while the
+    // others stayed team-tinted, so its band is much shorter.
+    const baseBand = kind === 'warrior' ? 0.12 : kind === 'priest' ? 0.025 : 0.09;
     if (height[i] < baseBand) col.lerp(dark, 0.92);
     const nz = (rand() - 0.5) * 0.05; // paint mottle
     arr[i * 3] = Math.min(1, Math.max(0, col.r + nz));

@@ -243,8 +243,8 @@ export function Scene() {
       />
       {/* softer bounce from the south window (no shadow — just fill) */}
       <directionalLight position={[-30, 40, 70]} intensity={0.55} color={'#d9e2e8'} />
-      {/* a soft pool over the table keeps the board readable */}
-      <spotLight position={[0, 34, 0]} angle={0.7} penumbra={1} intensity={2.5} color={'#ece5d2'} />
+      {/* (no spotlight over the table — its pool read as a light stain on the
+          tabletop; the ambient + window daylight carry the board instead) */}
 
       <Suspense fallback={null}>
         <Board />

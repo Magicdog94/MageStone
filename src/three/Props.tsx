@@ -119,6 +119,14 @@ export function FantasyProps() {
   // the library bookcase only appears in 2-player games (the wall is bare
   // of hangings there).
   const fourPlayers = useGame((s) => s.game.players.length === 4);
+  // One bench under EVERY hung banner — and only there. Selected as a joined
+  // string so the store subscription stays referentially stable.
+  const benchSeats = useGame((s) =>
+    s.game.players
+      .map((c) => s.game.seats[c])
+      .sort()
+      .join(',')
+  );
   return (
     <group>
       {/* ---- arcane library: the bookcase CENTRED on the west wall, stocked
@@ -127,24 +135,40 @@ export function FantasyProps() {
         <>
           <group position={[-65, FLOOR_Y, 0]}>
             <Prop name="Bookcase_2" pos={[0, 0, 0]} ry={Math.PI / 2} />
-            <Prop name="BookGroup_Medium_1" pos={[0, 19.5, 2]} ry={Math.PI / 2} />
-            <Prop name="BookGroup_Small_1" pos={[0, 19.5, -11]} ry={Math.PI / 2} />
-            <Prop name="SmallBottles_1" pos={[0, 19.5, 8]} ry={Math.PI / 2} />
-            <Prop name="BookGroup_Medium_2" pos={[0, 45.5, -1]} ry={Math.PI / 2} />
-            <Prop name="Chalice" pos={[0, 45.5, 11]} />
-            <Prop name="Book_Stack_1" pos={[0, 71.5, 4]} ry={Math.PI / 2 + 0.3} />
-            <Prop name="Potion_2" pos={[0, 71.5, -10]} />
-            <Prop name="Potion_1" pos={[0, 71.5, -15]} />
+            {/* shelf items ride ON the boards (raised clear of the shelf lips) */}
+            <Prop name="BookGroup_Medium_1" pos={[0, 22.5, 2]} ry={Math.PI / 2} />
+            <Prop name="BookGroup_Small_1" pos={[0, 22.5, -11]} ry={Math.PI / 2} />
+            <Prop name="SmallBottles_1" pos={[0, 22.5, 8]} ry={Math.PI / 2} />
+            <Prop name="BookGroup_Medium_2" pos={[0, 48.5, -1]} ry={Math.PI / 2} />
+            <Prop name="Chalice" pos={[0, 48.5, 11]} />
+            <Prop name="Book_Stack_1" pos={[0, 74.5, 4]} ry={Math.PI / 2 + 0.3} />
+            <Prop name="Potion_2" pos={[0, 74.5, -10]} />
+            <Prop name="Potion_1" pos={[0, 74.5, -15]} />
           </group>
           <ShadowBlob pos={[-64, 0]} w={34} d={58} />
         </>
       )}
 
-      {/* ---- benches under the north + south banners — a hall, not a shed ---- */}
-      <Prop name="Bench" pos={[0, FLOOR_Y, -80]} s={26} />
-      <ShadowBlob pos={[0, -80]} w={80} d={22} />
-      <Prop name="Bench" pos={[0, FLOOR_Y, 80]} ry={Math.PI} s={26} />
-      <ShadowBlob pos={[0, 80]} w={80} d={22} />
+      {/* ---- a bench under each hung banner (2 in 2-player, 4 in 4-player) ---- */}
+      {benchSeats.split(',').map((s) => {
+        // seat → wall: 0 north, 1 east, 2 south, 3 west (matches Decor's SEAT_DIR)
+        const seat = Number(s);
+        const [dx, dz] = [
+          [0, -1],
+          [1, 0],
+          [0, 1],
+          [-1, 0],
+        ][seat] ?? [0, -1];
+        const dist = dx !== 0 ? 64 : 80; // E/W walls sit closer than N/S
+        const x = dx * dist;
+        const z = dz * dist;
+        return (
+          <group key={seat}>
+            <Prop name="Bench" pos={[x, FLOOR_Y, z]} ry={Math.atan2(-dx, -dz)} s={26} />
+            <ShadowBlob pos={[x, z]} w={dx !== 0 ? 22 : 80} d={dx !== 0 ? 80 : 22} />
+          </group>
+        );
+      })}
 
       {/* ---- wall torch in the north-east corner ---- */}
       <WallTorch pos={[56, FLOOR_Y + 52, -85.5]} ry={0} />

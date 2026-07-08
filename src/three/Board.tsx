@@ -86,9 +86,10 @@ function Tabletop() {
         bumpMap={bump}
         bumpScale={0.14}
         color={TABLE_TINT}
-        roughness={0.8}
+        /* fully matte — no sheen or env glint pooling on the tabletop */
+        roughness={1}
         metalness={0}
-        envMapIntensity={0.35}
+        envMapIntensity={0}
       />
     </mesh>
   );
@@ -114,9 +115,10 @@ function TableStand() {
       bumpMap={bump}
       bumpScale={0.06}
       color={TABLE_TINT}
-      roughness={0.82}
+      /* fully matte, matching the slab */
+      roughness={1}
       metalness={0}
-      envMapIntensity={0.2}
+      envMapIntensity={0}
     />
   );
   const tableBottom = TABLE_TOP_Y - TABLE_H - 0.12; // slab underside incl. bevel

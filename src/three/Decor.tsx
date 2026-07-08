@@ -175,24 +175,34 @@ function MedievalWindow({ pos, yaw }: { pos: [number, number, number]; yaw: numb
   const glow = useMemo(() => flameGlowTexture(), []);
   // Spandrel infill: the wall opening is RECTANGULAR but the window is arched,
   // so without this the corners above the arch read as square openings to the
-  // sky. A flat shape fills everything above the springline outside the arch.
+  // sky. A SOLID block (extruded through the whole wall depth, double-sided)
+  // fills everything above the springline outside the arch — no angle can
+  // peek past it into the rectangular tunnel.
   const spandrel = useMemo(() => {
     const s = new THREE.Shape();
-    s.moveTo(-13.5, 6.3);
-    s.lineTo(-13.5, 20.5);
-    s.lineTo(13.5, 20.5);
-    s.lineTo(13.5, 6.3);
+    s.moveTo(-13.6, 6.3);
+    s.lineTo(-13.6, 20.6);
+    s.lineTo(13.6, 20.6);
+    s.lineTo(13.6, 6.3);
     s.lineTo(12.5, 6.3);
     s.absarc(0, 6.3, 12.5, 0, Math.PI, false); // arc back over the arch
     s.closePath();
-    return new THREE.ShapeGeometry(s, 24);
+    const g = new THREE.ExtrudeGeometry(s, { depth: 7, bevelEnabled: false, curveSegments: 24 });
+    g.translate(0, 0, -6.6); // spans the wall cut AND reaches the room-side arch stone
+    return g;
   }, []);
   const plaster = useMemo(() => plasterTexture(), []);
   return (
     <group position={pos} rotation={[0, yaw, 0]}>
-      {/* plaster spandrels masking the opening's square top corners */}
-      <mesh geometry={spandrel} position={[0, 0, -0.4]}>
-        <meshStandardMaterial map={plaster} color="#c0b5a4" roughness={0.97} metalness={0} />
+      {/* solid plaster spandrels masking the opening's square top corners */}
+      <mesh geometry={spandrel}>
+        <meshStandardMaterial
+          map={plaster}
+          color="#c0b5a4"
+          roughness={0.97}
+          metalness={0}
+          side={THREE.DoubleSide}
+        />
       </mesh>
       {/* stone surround: jambs + sill + arch + keystone (bevelled) */}
       {[-14.5, 14.5].map((jx) => (

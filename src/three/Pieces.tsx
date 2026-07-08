@@ -600,8 +600,10 @@ function UnitPiece({ unit }: { unit: Unit }) {
     [game, selectedUnitId, unit.id],
   );
   // Pre-attack chance of victory for the attack the selected unit would launch.
+  // (Hidden while a Bolt is pending — the Bolt has already hit unless the
+  // target is a Mage, so melee odds would mislead.)
   const winPct = useMemo(() => {
-    if (!isTarget || !selectedUnitId) return null;
+    if (!isTarget || !selectedUnitId || game.pendingBolt) return null;
     const ids = plannedAttackers(game, selectedUnitId, unit.id);
     if (ids.length === 0) return null;
     return Math.round(combatOdds(game, ids, unit.id).win * 100);

@@ -674,6 +674,182 @@ export function activate(state: GameState, unitId: string): GameState {
   });
 }
 
+// ---- Mage sorcery: Bolt & Nova (experimental rules) ------------------------
+// Bolt: burn 1 activated stone, roll the Mage's power die, then defeat one
+// enemy within that many squares (orthogonal OR diagonal — king distance).
+// An enemy Mage may contest with its own power die: equal-or-higher turns the
+// Bolt back and kills the caster.
+// Nova: burn 3 activated stones — every enemy Warrior/Priest within 1 square
+// (incl. diagonals) is defeated; enemy Mages within 1 contest power die vs
+// power die (equal-or-higher survives AND backfires the Nova onto the caster).
+// Both are Mage ACTIONS: they spend a mage die like any other action, and the
+// power-die tier is taken AT CAST — the burned stones are the fuel.
+
+export const BOLT_COST = 1;
+export const NOVA_COST = 3;
+
+/** King-move (Chebyshev) distance — orthogonals and diagonals both count 1. */
+function kingDistance(a: Cell, b: Cell): number {
+  return Math.max(Math.abs(a.r - b.r), Math.abs(a.c - b.c));
+}
+
+export function canBolt(state: GameState, unitId: string): boolean {
+  const u = unitById(state, unitId);
+  return (
+    !!u &&
+    u.kind === 'mage' &&
+    !state.pendingBolt &&
+    canAct(state, unitId) &&
+    u.activated >= BOLT_COST &&
+    state.units.some((t) => t.owner !== u.owner)
+  );
+}
+
+/** Enemy units the pending Bolt may strike (within the rolled range). */
+export function boltTargets(state: GameState): Unit[] {
+  const pb = state.pendingBolt;
+  if (!pb) return [];
+  const mage = unitById(state, pb.mageId);
+  if (!mage) return [];
+  return state.units.filter(
+    (u) => u.owner !== mage.owner && kingDistance(u.cell, mage.cell) <= pb.roll,
+  );
+}
+
+/** Burn a stone, spend the action die and roll the Bolt's range. If no enemy
+ *  is inside the rolled range the Bolt fizzles (the stone stays burned). */
+export function castBolt(state: GameState, unitId: string, rng: RNG = defaultRng): GameState {
+  if (state.turnPhase !== 'act' || state.winner) return state;
+  if (!canBolt(state, unitId)) return state;
+  const mage = unitById(state, unitId)!;
+  const dice = spendActionDie(state, unitId);
+  if (!dice) return state;
+  const faces = magePowerDie(mage.activated); // tier at cast — the stone is the fuel
+  const roll = dN(faces, rng);
+  let next: GameState = {
+    ...state,
+    dice,
+    units: state.units.map((u) =>
+      u.id === unitId ? { ...u, activated: u.activated - BOLT_COST } : u,
+    ),
+    unitsActedThisTurn: markActed(state, unitId),
+    pendingBolt: { mageId: unitId, roll, faces },
+    log: [
+      ...state.log,
+      `${mage.owner}'s Mage burns a MageStone and hurls a Bolt — range ${roll} (d${faces}).`,
+    ],
+  };
+  if (boltTargets(next).length === 0) {
+    next = {
+      ...next,
+      pendingBolt: null,
+      log: [...next.log, `The Bolt fizzles — no enemy within ${roll} squares.`],
+    };
+  }
+  return next;
+}
+
+/** Strike the chosen target with the pending Bolt. An enemy Mage first rolls
+ *  its power die: equal-or-higher deflects the Bolt back onto the caster. */
+export function resolveBolt(state: GameState, targetId: string, rng: RNG = defaultRng): GameState {
+  const pb = state.pendingBolt;
+  if (!pb) return state;
+  const mage = unitById(state, pb.mageId);
+  const target = unitById(state, targetId);
+  if (!mage || !target) return { ...state, pendingBolt: null };
+  if (!boltTargets(state).some((u) => u.id === targetId)) return state;
+
+  let next: GameState = { ...state, pendingBolt: null };
+  if (target.kind === 'mage') {
+    const defFaces = magePowerDie(target.activated);
+    const defenseRoll = dN(defFaces, rng);
+    if (defenseRoll >= pb.roll) {
+      next = {
+        ...next,
+        log: [
+          ...next.log,
+          `${target.owner}'s Mage (def ${defenseRoll}, d${defFaces}) turns the Bolt back — it consumes ${mage.owner}'s Mage!`,
+        ],
+      };
+      next = bumpKill(defeatUnit(next, mage.id), target.owner);
+      return checkVictory(resolveRespawns(next));
+    }
+    next = {
+      ...next,
+      log: [
+        ...next.log,
+        `${target.owner}'s Mage fails to deflect the Bolt (${defenseRoll} vs ${pb.roll}).`,
+      ],
+    };
+  }
+  next = { ...next, log: [...next.log, `The Bolt strikes down ${target.owner}'s ${target.kind}.`] };
+  next = bumpKill(defeatUnit(next, target.id), mage.owner);
+  return checkVictory(resolveRespawns(next));
+}
+
+export function canNova(state: GameState, unitId: string): boolean {
+  const u = unitById(state, unitId);
+  if (!u || u.kind !== 'mage' || state.pendingBolt) return false;
+  if (!canAct(state, unitId) || u.activated < NOVA_COST) return false;
+  return state.units.some((t) => t.owner !== u.owner && kingDistance(t.cell, u.cell) <= 1);
+}
+
+/** Burn 3 stones and blast everything adjacent (incl. diagonals): enemy
+ *  Warriors and Priests die outright; enemy Mages contest power die vs power
+ *  die — equal-or-higher survives and the Nova backfires onto the caster. */
+export function castNova(state: GameState, unitId: string, rng: RNG = defaultRng): GameState {
+  if (state.turnPhase !== 'act' || state.winner) return state;
+  if (!canNova(state, unitId)) return state;
+  const mage = unitById(state, unitId)!;
+  const dice = spendActionDie(state, unitId);
+  if (!dice) return state;
+  const atkFaces = magePowerDie(mage.activated); // tier at cast
+  let next: GameState = {
+    ...state,
+    dice,
+    units: state.units.map((u) =>
+      u.id === unitId ? { ...u, activated: u.activated - NOVA_COST } : u,
+    ),
+    unitsActedThisTurn: markActed(state, unitId),
+    log: [...state.log, `${mage.owner}'s Mage burns 3 MageStones — a Nova erupts!`],
+  };
+  const victims = next.units.filter(
+    (u) => u.owner !== mage.owner && kingDistance(u.cell, mage.cell) <= 1,
+  );
+  let backfireOwner: PlayerColor | null = null;
+  for (const v of victims) {
+    if (v.kind === 'mage') {
+      const atk = dN(atkFaces, rng);
+      const defFaces = magePowerDie(v.activated);
+      const def = dN(defFaces, rng);
+      if (def >= atk) {
+        backfireOwner = backfireOwner ?? v.owner;
+        next = {
+          ...next,
+          log: [
+            ...next.log,
+            `${v.owner}'s Mage (def ${def}, d${defFaces}) withstands the Nova (${atk}, d${atkFaces})!`,
+          ],
+        };
+        continue;
+      }
+      next = {
+        ...next,
+        log: [...next.log, `${v.owner}'s Mage fails to withstand the Nova (${def} vs ${atk}).`],
+      };
+    }
+    next = bumpKill(defeatUnit(next, v.id), mage.owner);
+  }
+  if (backfireOwner) {
+    next = {
+      ...next,
+      log: [...next.log, `The Nova backfires — ${mage.owner}'s Mage is consumed!`],
+    };
+    next = bumpKill(defeatUnit(next, mage.id), backfireOwner);
+  }
+  return checkVictory(resolveRespawns(next));
+}
+
 // ---- Priest actions: resurrect / ritual ----------------------------------
 
 export function canResurrect(state: GameState, unitId: string): boolean {
@@ -833,6 +1009,7 @@ export function endTurn(state: GameState): GameState {
     unitsMovedThisTurn: [],
     unitsActedThisTurn: [],
     lastCombat: null,
+    pendingBolt: null, // an unspent Bolt lapses with the turn
     log: [...state.log, `— ${next}'s turn. Roll the dice.`],
   });
 

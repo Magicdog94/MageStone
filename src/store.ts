@@ -4,11 +4,16 @@ import {
   activate,
   attackTargets,
   beginRitual,
+  boltTargets,
   canActivate,
+  canBolt,
   canCollect,
   canDieMoveUnit,
+  canNova,
   canResurrect,
   canRitual,
+  castBolt,
+  castNova,
   collect,
   discardDie,
   endTurn,
@@ -16,6 +21,7 @@ import {
   moveUnit,
   plannedAttackers,
   resolveAttack,
+  resolveBolt,
   resurrect,
   rollDice,
   setRolledValues,
@@ -136,6 +142,8 @@ interface UIState {
   activateStones: () => void;
   doResurrect: () => void;
   doRitual: () => void;
+  doBolt: () => void;
+  doNova: () => void;
 }
 
 /** In an online match a client may only act on its own colour's turn — except
@@ -302,7 +310,26 @@ export const useGame = create<UIState>((set) => ({
   attack: (targetId) =>
     set((s) => {
       const { game, selectedUnitId } = s;
-      if (!selectedUnitId || outOfTurn(s)) return {};
+      if (outOfTurn(s)) return {};
+      // A pending Bolt owns enemy clicks: the highlighted units are its
+      // targets, and picking one resolves the Bolt instead of a melee attack.
+      if (game.pendingBolt) {
+        const before = game.units;
+        const game2 = resolveBolt(game, targetId);
+        if (game2 === game) return {};
+        const out: Partial<UIState> = {
+          game: game2,
+          selectedUnitId: null,
+          selectedDieId: null,
+        };
+        const fallen = before.find((u) => !game2.units.some((v) => v.id === u.id));
+        if (fallen) {
+          out.lastDeath = { id: fallen.id, kind: fallen.kind, owner: fallen.owner, cell: fallen.cell };
+          out.deathNonce = s.deathNonce + 1;
+        }
+        return out;
+      }
+      if (!selectedUnitId) return {};
       const attackerIds = plannedAttackers(game, selectedUnitId, targetId);
       if (attackerIds.length === 0) return {};
       const game2 = resolveAttack(game, attackerIds, targetId);
@@ -353,6 +380,30 @@ export const useGame = create<UIState>((set) => ({
       const game = beginRitual(s.game, s.selectedUnitId);
       return game === s.game ? {} : { game };
     }),
+
+  doBolt: () =>
+    set((s) => {
+      if (!s.selectedUnitId || outOfTurn(s)) return {};
+      const game = castBolt(s.game, s.selectedUnitId);
+      // Keep the Mage selected: the player now picks a highlighted target.
+      return game === s.game ? {} : { game, selectedDieId: null };
+    }),
+
+  doNova: () =>
+    set((s) => {
+      if (!s.selectedUnitId || outOfTurn(s)) return {};
+      const before = s.game.units;
+      const game = castNova(s.game, s.selectedUnitId);
+      if (game === s.game) return {};
+      const out: Partial<UIState> = { game, selectedUnitId: null, selectedDieId: null };
+      // Animate one of the fallen (the rest vanish with the state update).
+      const fallen = before.find((u) => !game.units.some((v) => v.id === u.id));
+      if (fallen) {
+        out.lastDeath = { id: fallen.id, kind: fallen.kind, owner: fallen.owner, cell: fallen.cell };
+        out.deathNonce = s.deathNonce + 1;
+      }
+      return out;
+    }),
 }));
 
 // ---- Derived helpers used by the 3D view (pure; computed in components) ----
@@ -366,17 +417,23 @@ export function moveDestinations(game: GameState, unitId: string | null, dieId: 
 }
 
 export function attackTargetIds(game: GameState, unitId: string | null): Set<string> {
-  if (game.turnPhase !== 'act' || !unitId) return new Set();
+  if (game.turnPhase !== 'act') return new Set();
+  // A pending Bolt highlights ITS targets — enemy clicks resolve the Bolt.
+  if (game.pendingBolt) return new Set(boltTargets(game).map((u) => u.id));
+  if (!unitId) return new Set();
   return new Set(attackTargets(game, unitId).map((u) => u.id));
 }
 
 export function unitActions(game: GameState, unitId: string | null) {
-  if (!unitId) return { collect: false, activate: false, resurrect: false, ritual: false };
+  if (!unitId)
+    return { collect: false, activate: false, resurrect: false, ritual: false, bolt: false, nova: false };
   return {
     collect: canCollect(game, unitId),
     activate: canActivate(game, unitId),
     resurrect: canResurrect(game, unitId),
     ritual: canRitual(game, unitId),
+    bolt: canBolt(game, unitId),
+    nova: canNova(game, unitId),
   };
 }
 

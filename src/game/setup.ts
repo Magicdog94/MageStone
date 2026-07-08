@@ -165,6 +165,7 @@ function buildGame(players: PlayerColor[], layout: StoneLayout): GameState {
     unitsActedThisTurn: [],
     ritual: null,
     lastCombat: null,
+    pendingBolt: null,
     pendingRespawns: [],
     eliminated: [],
     kills: { red: 0, blue: 0, green: 0, yellow: 0 },

@@ -794,14 +794,24 @@ export function checkVictory(state: GameState): GameState {
   for (const player of s.players) {
     const mage = s.units.find((u) => u.kind === 'mage' && u.owner === player);
     if (mage && mage.activated >= STONES_TO_WIN && onOwnBase(s, mage)) {
-      return { ...s, winner: player, log: [...s.log, `${player} wins by MageStone power!`] };
+      return {
+        ...s,
+        winner: player,
+        winMethod: 'MageStone',
+        log: [...s.log, `${player} wins by MageStone power!`],
+      };
     }
   }
 
   // Conquest: only one player left standing.
   const alive = activePlayers(s);
   if (alive.length === 1 && s.players.length > 1) {
-    return { ...s, winner: alive[0], log: [...s.log, `${alive[0]} wins by conquest!`] };
+    return {
+      ...s,
+      winner: alive[0],
+      winMethod: 'Conquest',
+      log: [...s.log, `${alive[0]} wins by conquest!`],
+    };
   }
   return s;
 }
@@ -845,7 +855,12 @@ export function endTurn(state: GameState): GameState {
       inNexus(priest.cell.r, priest.cell.c) &&
       nexusClearOfEnemies(s, s.ritual.player);
     if (valid) {
-      return { ...s, winner: next, log: [...s.log, `${next} completes the Ritual and wins!`] };
+      return {
+        ...s,
+        winner: next,
+        winMethod: 'Ritual',
+        log: [...s.log, `${next} completes the Ritual and wins!`],
+      };
     }
     s = { ...s, ritual: null, log: [...s.log, `${next}'s Ritual was broken.`] };
   } else if (s.ritual) {

@@ -112,5 +112,7 @@ export interface GameState {
   /** Enemy units each player has defeated (kill counter). */
   kills: Record<PlayerColor, number>;
   winner: PlayerColor | null;
+  /** How the winner won — shown on the victory panel. */
+  winMethod: 'MageStone' | 'Ritual' | 'Conquest' | null;
   log: string[];
 }

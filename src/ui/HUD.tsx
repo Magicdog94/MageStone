@@ -28,7 +28,6 @@ export function HUD() {
   const game = useGame((s) => s.game);
   const selectedUnitId = useGame((s) => s.selectedUnitId);
   const selectedDieId = useGame((s) => s.selectedDieId);
-  const rolling = useGame((s) => s.rolling);
   const roll = useGame((s) => s.roll);
   const discard = useGame((s) => s.discard);
   const selectDie = useGame((s) => s.selectDie);
@@ -94,19 +93,14 @@ export function HUD() {
   const graveCap = gravestoneCapacity(game);
   const graveUrl = useTokenUrl('gravestone');
 
-  const phaseHint = rolling
-    ? 'Rolling the dice…'
-    : phase === 'roll'
-      ? 'Roll 5 dice — one Mage, one Priest, three Warrior.'
-      : phase === 'discard'
-        ? `${discardLabel}. Click a die in the tray or on the board.`
-        : 'Click a unit to move it — it takes its highest matching die automatically (or pick a die yourself first). Then act: attack, ritual, activate or resurrect.';
-
   return (
     <div className="hud">
       {game.winner && (
         <div className="winner" style={{ '--accent': COLORS[game.winner] } as CSSProperties}>
-          <span className="winner-eyebrow">Victory</span>
+          {/* name the METHOD of victory (MageStone / Ritual / Conquest) */}
+          <span className="winner-eyebrow">
+            {game.winMethod ? `${game.winMethod} Victory` : 'Victory'}
+          </span>
           <span className="winner-name">
             {online && game.winner === myColor ? 'You win' : `${cap(game.winner)} wins`}
           </span>
@@ -161,7 +155,7 @@ export function HUD() {
         <CombatRoll key={combatNonce} combat={combat} runId={combatNonce} />
       )}
 
-      {/* Bottom control frame — fixed width; right column: ritual · (i) · button */}
+      {/* Bottom control frame — fixed width; right column: ritual · button */}
       <div className="hud-bottom">
         <div className="tray">
           <div className="dice">
@@ -234,10 +228,6 @@ export function HUD() {
             Ritual · {game.ritual.player}
           </span>
         )}
-
-        <span className="info" tabIndex={0} aria-label={phaseHint}>
-          i<span className="tooltip">{phaseHint}</span>
-        </span>
 
         <div className="actions">
           {!myTurn ? (

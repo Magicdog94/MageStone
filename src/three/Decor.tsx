@@ -708,6 +708,8 @@ export function SmithyRoom() {
       <Sconce pos={[64, FLOOR_Y + 55, WALL_Z - 3]} yaw={Math.PI} seed={11.4} />
       <Sconce pos={[-WALL_X + 3, FLOOR_Y + 55, 44]} yaw={Math.PI / 2} seed={13.3} />
       <Sconce pos={[-WALL_X + 3, FLOOR_Y + 55, -50]} yaw={Math.PI / 2} seed={15.2} />
+      {/* NE corner: a candle sconce where the iron wall torch used to hang */}
+      <Sconce pos={[56, FLOOR_Y + 55, -WALL_Z + 3]} yaw={0} seed={17.1} />
     </group>
   );
 }

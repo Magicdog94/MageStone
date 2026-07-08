@@ -8,9 +8,9 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import { SkeletonUtils } from 'three-stdlib';
-import { Billboard, useGLTF } from '@react-three/drei';
+import { useGLTF } from '@react-three/drei';
 import { FLOOR_Y } from './coords';
-import { contactShadowTexture, flameGlowTexture } from './textures';
+import { contactShadowTexture } from './textures';
 import { useGame } from '../store';
 
 const KIT = '/models/exterior/';
@@ -78,30 +78,6 @@ function ShadowBlob({ pos, w, d, opacity = 0.45 }: { pos: [number, number]; w: n
   );
 }
 
-/** A lit wall torch: the kit's iron bracket plus an emissive flame and a warm
- *  glow sprite — no real light, so the lighting budget is untouched. */
-function WallTorch({ pos, ry }: { pos: [number, number, number]; ry: number }) {
-  const glow = useMemo(() => flameGlowTexture(), []);
-  return (
-    <group position={pos} rotation={[0, ry, 0]}>
-      <Prop name="Torch_Metal" pos={[0, 0, 0]} s={24} />
-      {/* flame above the basket (the basket sits ~0.37 m up, 0.39 m out) */}
-      <group position={[0, 10, 8.5]}>
-        <mesh scale={[1, 1.7, 1]}>
-          <sphereGeometry args={[1.5, 8, 8]} />
-          <meshStandardMaterial color="#ffd989" emissive="#ff9a3a" emissiveIntensity={3.4} />
-        </mesh>
-        <Billboard position={[0, 1.4, 0]}>
-          <mesh renderOrder={20}>
-            <planeGeometry args={[13, 13]} />
-            <meshBasicMaterial map={glow} transparent opacity={0.6} blending={THREE.AdditiveBlending} depthWrite={false} />
-          </mesh>
-        </Billboard>
-      </group>
-    </group>
-  );
-}
-
 /**
  * The dressed corners of the chamber:
  *  - a library nook on the west wall (bookcase, shelved books, a lectern with
@@ -149,8 +125,12 @@ export function FantasyProps() {
         </>
       )}
 
-      {/* ---- a bench under each hung banner (2 in 2-player, 4 in 4-player) ---- */}
-      {benchSeats.split(',').map((s) => {
+      {/* ---- a bench under each hung banner — EXCEPT the east wall (seat 1):
+              the great door lives there and a bench blocks it ---- */}
+      {benchSeats
+        .split(',')
+        .filter((s) => s !== '1')
+        .map((s) => {
         // seat → wall: 0 north, 1 east, 2 south, 3 west (matches Decor's SEAT_DIR)
         const seat = Number(s);
         const [dx, dz] = [
@@ -170,8 +150,7 @@ export function FantasyProps() {
         );
       })}
 
-      {/* ---- wall torch in the north-east corner ---- */}
-      <WallTorch pos={[56, FLOOR_Y + 52, -85.5]} ry={0} />
+      {/* (the NE wall torch became a candle sconce — see Decor's Sconce row) */}
     </group>
   );
 }
@@ -187,7 +166,6 @@ for (const n of [
   'Potion_1',
   'Potion_2',
   'SmallBottles_1',
-  'Torch_Metal',
 ]) {
   useGLTF.preload(KIT + n + '.gltf');
 }

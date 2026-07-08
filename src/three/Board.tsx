@@ -53,11 +53,44 @@ function tabletopGeometry(): THREE.ExtrudeGeometry {
 // as one continuous old oak table rather than an assembly of materials.
 const TABLE_TINT = '#4a3624';
 
-/** The shared table-wood photo, cloned per part so each sets its own repeat. */
+// The wood PHOTO carries baked-in varnish highlights; blown up across the
+// slab (repeat 0.1) they read as a light shining on the table no matter how
+// matte the material is. Flatten them once: everything brighter than the
+// photo's mean tone is compressed hard toward it.
+let flattenedWood: THREE.CanvasTexture | null = null;
+function flattenWoodHighlights(img: HTMLImageElement | ImageBitmap): THREE.CanvasTexture {
+  if (flattenedWood) return flattenedWood;
+  const c = document.createElement('canvas');
+  c.width = img.width;
+  c.height = img.height;
+  const ctx = c.getContext('2d')!;
+  ctx.drawImage(img, 0, 0);
+  const data = ctx.getImageData(0, 0, c.width, c.height);
+  const px = data.data;
+  let sum = 0;
+  for (let i = 0; i < px.length; i += 4) sum += px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
+  const mean = sum / (px.length / 4);
+  const cap = mean * 1.1;
+  for (let i = 0; i < px.length; i += 4) {
+    const l = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
+    if (l > cap) {
+      const scale = (cap + (l - cap) * 0.2) / l; // keep a fifth of the excess
+      px[i] *= scale;
+      px[i + 1] *= scale;
+      px[i + 2] *= scale;
+    }
+  }
+  ctx.putImageData(data, 0, 0);
+  flattenedWood = new THREE.CanvasTexture(c);
+  return flattenedWood;
+}
+
+/** The shared table-wood photo (highlight-flattened), cloned per part so each
+ *  sets its own repeat. */
 function useTableWood(rx: number, ry: number): THREE.Texture {
   const base = useTexture('/wood-texture.png') as THREE.Texture;
   return useMemo(() => {
-    const t = base.clone();
+    const t = flattenWoodHighlights(base.image as HTMLImageElement).clone();
     t.colorSpace = THREE.SRGBColorSpace;
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.repeat.set(rx, ry);

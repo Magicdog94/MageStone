@@ -66,59 +66,55 @@
   overflow: hidden;
 }
 
-/* ---------------- music toggle (persists across screens) ---------------- */
+/* ---------------- music + fullscreen toggles (persist across screens) ----------------
+   They live in the TOP-RIGHT corner, styled to match the settings gear:
+   [music] [fullscreen] [gear], right-aligned with an 8px rhythm. */
 .music-toggle {
   position: fixed;
-  left: var(--space-4);
-  bottom: var(--space-4);
+  top: var(--space-4);
+  right: calc(var(--space-4) + 2 * (var(--control-md) + 8px));
   z-index: 50;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: var(--radius-pill);
+  width: var(--control-md);
+  height: var(--control-md);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--gold-line);
-  background: linear-gradient(180deg, rgba(20, 44, 31, 0.9), rgba(7, 17, 11, 0.92));
+  background: linear-gradient(180deg, var(--panel-1), var(--panel-2));
   color: var(--gold-bright);
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
-  transition: color var(--ease), border-color var(--ease), box-shadow var(--ease), transform var(--ease);
+  transition: color var(--ease), border-color var(--ease);
 }
 .music-toggle:hover {
   color: #fff3d6;
   border-color: var(--gold);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55), 0 0 14px rgba(120, 230, 175, 0.25);
 }
 .music-toggle.off {
   color: var(--ink-dim);
 }
 
-/* full-screen toggle — sits just to the right of the music toggle */
+/* full-screen toggle — between the music toggle and the gear */
 .fs-toggle {
   position: fixed;
-  left: calc(var(--space-4) + 50px);
-  bottom: var(--space-4);
+  top: var(--space-4);
+  right: calc(var(--space-4) + var(--control-md) + 8px);
   z-index: 50;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: var(--radius-pill);
+  width: var(--control-md);
+  height: var(--control-md);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--gold-line);
-  background: linear-gradient(180deg, rgba(20, 44, 31, 0.9), rgba(7, 17, 11, 0.92));
+  background: linear-gradient(180deg, var(--panel-1), var(--panel-2));
   color: var(--gold-bright);
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
-  transition: color var(--ease), border-color var(--ease), box-shadow var(--ease), transform var(--ease);
+  transition: color var(--ease), border-color var(--ease);
 }
 .fs-toggle:hover {
   color: #fff3d6;
   border-color: var(--gold);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55), 0 0 14px rgba(120, 230, 175, 0.25);
 }
 /* iPhone hint: pages can't go fullscreen there — point at Add to Home Screen */
 .fs-hint {

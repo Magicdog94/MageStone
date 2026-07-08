@@ -189,15 +189,30 @@ function MedievalWindow({ pos, yaw }: { pos: [number, number, number]; yaw: numb
     s.closePath();
     const g = new THREE.ExtrudeGeometry(s, { depth: 7, bevelEnabled: false, curveSegments: 24 });
     g.translate(0, 0, -6.6); // spans the wall cut AND reaches the room-side arch stone
+    // Planar-remap the UVs to the WALL's texture scale (1 repeat ≈ 76×90 u),
+    // so the spandrel samples the same plaster at the same density and tone
+    // as the PlasterSegs around it — extrude UVs are garbage otherwise.
+    const posAttr = g.attributes.position as THREE.BufferAttribute;
+    const uvAttr = g.attributes.uv as THREE.BufferAttribute;
+    for (let i = 0; i < posAttr.count; i++) {
+      uvAttr.setXY(i, (posAttr.getX(i) + 40) / 76, (posAttr.getY(i) + 52) / 90);
+    }
+    uvAttr.needsUpdate = true;
     return g;
   }, []);
+  const plaster = useMemo(() => plasterTexture(), []);
   return (
     <group position={pos} rotation={[0, yaw, 0]}>
       {/* solid plaster spandrels masking the opening's square top corners —
-          plain smooth plaster: a texture map on the extruded shape gets
-          garbage UVs and reads as noise around the arch head */}
+          same map + tint as PlasterSeg so they colour-match the wall */}
       <mesh geometry={spandrel}>
-        <meshStandardMaterial color="#5e574c" roughness={0.97} metalness={0} side={THREE.DoubleSide} />
+        <meshStandardMaterial
+          map={plaster}
+          color="#c0b5a4"
+          roughness={0.97}
+          metalness={0}
+          side={THREE.DoubleSide}
+        />
       </mesh>
       {/* stone surround: jambs + sill + arch + keystone (bevelled) */}
       {[-14.5, 14.5].map((jx) => (

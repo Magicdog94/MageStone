@@ -165,7 +165,6 @@ export function HUD() {
       <div className="hud-bottom">
         <div className="tray">
           <div className="dice">
-            {game.dice.length === 0 && <span className="muted">roll to begin</span>}
             {game.dice.map((d) => {
               const state = d.discarded
                 ? 'discarded'
@@ -217,6 +216,12 @@ export function HUD() {
             </>
           ) : phase === 'discard' ? (
             <strong>{discardLabel}</strong>
+          ) : phase === 'roll' ? (
+            /* pre-roll: name whose turn it is right here, where the eyes are */
+            <>
+              <strong style={{ color: COLORS[game.current] }}>{cap(game.current)} to roll</strong>
+              <div className="muted">Roll to begin</div>
+            </>
           ) : (
             <span className="muted">No unit selected</span>
           )}

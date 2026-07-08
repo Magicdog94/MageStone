@@ -250,7 +250,14 @@ function SettingsModal() {
   const openModal = useGame((s) => s.openModal);
   const closeModal = useGame((s) => s.closeModal);
   const status = useNet((s) => s.status);
+  const leaveRoom = useNet((s) => s.leaveRoom);
+  const setScreen = useNet((s) => s.setScreen);
   const online = status === 'online';
+  const toMainMenu = () => {
+    leaveRoom(); // no-op for local play; leaves the online room otherwise
+    closeModal();
+    setScreen('landing');
+  };
 
   return (
     <Modal
@@ -258,6 +265,9 @@ function SettingsModal() {
       onClose={closeModal}
       footer={
         <>
+          <button className="ghost" onClick={toMainMenu}>
+            Main Menu
+          </button>
           <button className="ghost" onClick={() => openModal('newGame')}>
             New Game
           </button>

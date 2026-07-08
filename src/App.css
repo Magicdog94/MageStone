@@ -149,9 +149,9 @@
   left: var(--space-5);
   font-family: var(--display);
   font-weight: 700;
-  font-size: 26px;
+  font-size: 17px;
   line-height: 1;
-  letter-spacing: 1px;
+  letter-spacing: 0.8px;
   color: var(--gold-bright);
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
   pointer-events: none;
@@ -163,8 +163,8 @@
 .brand em {
   display: block;
   font-family: var(--serif);
-  font-size: var(--text-xs);
-  letter-spacing: 3px;
+  font-size: 9px;
+  letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--ink-dim);
   font-style: normal;

@@ -233,14 +233,15 @@ export function emeraldBoardTexture(): THREE.Texture {
   // deep emerald base
   ctx.fillStyle = '#15321f';
   ctx.fillRect(0, 0, S, S);
-  // broad marbling blotches in varied greens/teal
-  const greens = ['#0e2417', '#1d4b30', '#21563a', '#13352a', '#27613f'];
+  // broad marbling blotches — kept CLOSE to the base tone: pale washes here
+  // read as light reflections on the board, so the veining stays deep
+  const greens = ['#0e2417', '#173a25', '#1a422b', '#122e1e', '#1d4830'];
   for (let i = 0; i < 220; i++) {
     const x = Math.random() * S;
     const y = Math.random() * S;
     const r = 80 + Math.random() * 360;
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, greens[(Math.random() * greens.length) | 0] + 'cc');
+    g.addColorStop(0, greens[(Math.random() * greens.length) | 0] + '88');
     g.addColorStop(1, 'rgba(20,48,32,0)');
     ctx.fillStyle = g;
     ctx.beginPath();

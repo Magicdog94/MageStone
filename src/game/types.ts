@@ -53,17 +53,7 @@ export interface Die {
 
 export type TurnPhase = 'roll' | 'discard' | 'act' | 'end';
 
-export type ActionKind = 'attack' | 'collect' | 'activate' | 'resurrect' | 'ritual' | 'bolt' | 'nova';
-
-/** A Mage Bolt that has been cast (stone burned, die spent) and rolled its
- *  range — awaiting the target choice. */
-export interface PendingBolt {
-  mageId: string;
-  /** The rolled range (also the value a defending Mage must equal to deflect). */
-  roll: number;
-  /** Die size rolled (6/12/20) — for display. */
-  faces: number;
-}
+export type ActionKind = 'attack' | 'collect' | 'activate' | 'resurrect' | 'ritual';
 
 export interface CombatResult {
   attackerIds: string[];
@@ -115,8 +105,6 @@ export interface GameState {
   unitsActedThisTurn: string[];
   ritual: Ritual | null;
   lastCombat: CombatResult | null;
-  /** A cast Bolt awaiting its target (cleared on resolve/fizzle/turn end). */
-  pendingBolt: PendingBolt | null;
   pendingRespawns: PendingRespawn[];
   /** Players knocked out of the game: reduced to zero units on the board while
    *  their base was besieged. They take no turns and never respawn. */

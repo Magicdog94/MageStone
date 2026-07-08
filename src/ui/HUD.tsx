@@ -37,8 +37,6 @@ export function HUD() {
   const activateStones = useGame((s) => s.activateStones);
   const doResurrect = useGame((s) => s.doResurrect);
   const doRitual = useGame((s) => s.doRitual);
-  const doBolt = useGame((s) => s.doBolt);
-  const doNova = useGame((s) => s.doNova);
   const openModal = useGame((s) => s.openModal);
   const turnSeconds = useGame((s) => s.settings.turnSeconds);
   const mobile = useGame((s) => s.settings.layout === 'mobile');
@@ -214,28 +212,7 @@ export function HUD() {
                 {actions.activate && <button onClick={activateStones}>Activate</button>}
                 {actions.resurrect && <button onClick={doResurrect}>Resurrect</button>}
                 {actions.ritual && <button onClick={doRitual}>Begin Ritual</button>}
-                {actions.bolt && !game.pendingBolt && (
-                  <button
-                    onClick={doBolt}
-                    title="Burn 1 activated MageStone, roll the Mage die, then defeat one enemy within that many squares (any direction). An enemy Mage may deflect it back!"
-                  >
-                    Bolt · 1✦
-                  </button>
-                )}
-                {actions.nova && !game.pendingBolt && (
-                  <button
-                    onClick={doNova}
-                    title="Burn 3 activated MageStones: all adjacent enemy Warriors and Priests fall. Adjacent enemy Mages contest — and can turn the blast back on you!"
-                  >
-                    Nova · 3✦
-                  </button>
-                )}
               </div>
-              {game.pendingBolt && (
-                <div className="muted">
-                  Bolt range {game.pendingBolt.roll} — click a highlighted enemy to strike it.
-                </div>
-              )}
             </>
           ) : phase === 'discard' ? (
             <strong>{discardLabel}</strong>

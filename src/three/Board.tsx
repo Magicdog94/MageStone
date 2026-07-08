@@ -266,9 +266,11 @@ function Tile({
           // a neutral stone tint (or team/nexus tint). Home bases tint toward their
           // team colour so ownership reads at a glance; the Nexus is gilded.
           color={legal ? BOARD.highlight : baseTint}
-          envMapIntensity={0.5}
-          roughness={0.82}
-          metalness={0.05}
+          /* fully matte: no env reflections or specular sheen washing over
+             the marble — the board reads flat and even under every light */
+          envMapIntensity={0}
+          roughness={1}
+          metalness={0}
           emissive={legal ? BOARD.highlight : siege ? siege : baseColor ? baseColor : '#000000'}
           emissiveIntensity={legal ? 0.4 : siege ? 0.55 : baseColor ? 0.32 : 0}
         />

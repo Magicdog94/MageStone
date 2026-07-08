@@ -173,8 +173,27 @@ function MedievalWindow({ pos, yaw }: { pos: [number, number, number]; yaw: numb
   const lead = useMemo(() => windowLeadTexture(), []);
   const shaft = useMemo(() => lightShaftTexture(), []);
   const glow = useMemo(() => flameGlowTexture(), []);
+  // Spandrel infill: the wall opening is RECTANGULAR but the window is arched,
+  // so without this the corners above the arch read as square openings to the
+  // sky. A flat shape fills everything above the springline outside the arch.
+  const spandrel = useMemo(() => {
+    const s = new THREE.Shape();
+    s.moveTo(-13.5, 6.3);
+    s.lineTo(-13.5, 20.5);
+    s.lineTo(13.5, 20.5);
+    s.lineTo(13.5, 6.3);
+    s.lineTo(12.5, 6.3);
+    s.absarc(0, 6.3, 12.5, 0, Math.PI, false); // arc back over the arch
+    s.closePath();
+    return new THREE.ShapeGeometry(s, 24);
+  }, []);
+  const plaster = useMemo(() => plasterTexture(), []);
   return (
     <group position={pos} rotation={[0, yaw, 0]}>
+      {/* plaster spandrels masking the opening's square top corners */}
+      <mesh geometry={spandrel} position={[0, 0, -0.4]}>
+        <meshStandardMaterial map={plaster} color="#c0b5a4" roughness={0.97} metalness={0} />
+      </mesh>
       {/* stone surround: jambs + sill + arch + keystone (bevelled) */}
       {[-14.5, 14.5].map((jx) => (
         <mesh key={jx} geometry={rbox(4.5, 36, 4)} position={[jx, -3, 0.6]} castShadow receiveShadow>
@@ -622,8 +641,10 @@ export function SmithyRoom() {
           emissiveIntensity={0.55}
         />
       </mesh>
-      {/* ceiling beams (~60 cm apart) + kingpost beam */}
-      {[-72, -48, -24, 0, 24, 48, 72].map((bz, i) => (
+      {/* ceiling beams (~60 cm apart) — the middle of the ceiling stays clear:
+          no crossbeam at z=0 and no kingpost, so nothing spans the room's
+          centre over the table */}
+      {[-72, -48, -24, 24, 48, 72].map((bz, i) => (
         <mesh
           key={bz}
           geometry={rbox(150, 8, 9)}
@@ -634,9 +655,6 @@ export function SmithyRoom() {
           <WoodMat tint="#4a3826" rx={3} ry={0.3} rough={0.9} />
         </mesh>
       ))}
-      <mesh geometry={rbox(10, 9, 186)} position={[0, CEIL_Y - 9, 0]} castShadow>
-        <WoodMat tint="#41301f" rx={0.4} ry={3} rough={0.9} />
-      </mesh>
       {/* ---- leaded windows (north wall pair + one on the south) over real
               openings — the 3D castle-town exterior shows through the glass,
               a different angle of the same world at each window ---- */}

@@ -263,14 +263,8 @@ export function HUD() {
         </div>
       </div>
 
-      <div className="log">
-        {game.log.slice(-4).map((line, i, arr) => (
-          <div key={i} className={i === arr.length - 1 ? 'log-live' : ''}>
-            {line}
-          </div>
-        ))}
-      </div>
-
+      {/* (the running-commentary log box is gone — the engine still records
+          game.log for toasts/debugging, it just isn't rendered) */}
       <PadControls />
 
       <Modals />

@@ -1185,24 +1185,7 @@
   background: rgba(0, 0, 0, 0.25);
 }
 
-/* ---------------- log ---------------- */
-.log {
-  position: absolute;
-  bottom: var(--space-5);
-  left: var(--space-5);
-  font-family: var(--serif);
-  font-size: var(--text-sm);
-  font-style: italic;
-  color: var(--ink-dim);
-  max-width: 300px;
-  line-height: 1.55;
-  pointer-events: none;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
-}
-.log-live {
-  color: var(--gold-bright);
-  font-style: normal;
-}
+/* (the game-log commentary box is gone — HUD no longer renders it) */
 
 /* ============================================================
    Entry screens (landing / auth / lobby)
@@ -2311,8 +2294,7 @@ body.ui-mobile {
   --icon-lg: 20px;
 }
 
-body.ui-mobile .brand,
-body.ui-mobile .log {
+body.ui-mobile .brand {
   display: none;
 }
 

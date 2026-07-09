@@ -3,6 +3,7 @@ import { Scene } from './three/Scene';
 import { BotDriver } from './ui/BotDriver';
 import { HUD } from './ui/HUD';
 import { AlphaWelcome } from './ui/AlphaWelcome';
+import { CopyrightNotice } from './ui/CopyrightNotice';
 import { EntryScreens } from './ui/screens/Screens';
 import { MusicToggle } from './ui/MusicToggle';
 import { FullscreenToggle } from './ui/FullscreenToggle';
@@ -54,6 +55,9 @@ export default function App() {
       )}
       <MusicToggle />
       <FullscreenToggle />
+      {/* Blocking copyright / alpha notice — sits over everything on first load
+          (the front page) until acknowledged. */}
+      <CopyrightNotice />
     </>
   );
 }

@@ -1763,6 +1763,26 @@
   max-width: 42ch;
 }
 
+/* ---------------- copyright / alpha notice (front-page gate) ---------------- */
+.copyright-notice {
+  font-family: var(--serif);
+  font-size: var(--text-md);
+  line-height: 1.6;
+  color: var(--ink);
+  max-width: 56ch;
+}
+.copyright-notice p {
+  margin: 0 0 var(--space-4);
+}
+.copyright-notice p:first-child {
+  color: var(--ink);
+  font-weight: 600;
+}
+.copyright-notice p:last-child {
+  margin-bottom: 0;
+  color: var(--ink-dim);
+}
+
 /* ---------------- leaderboard (opened from the main-menu button) ---------------- */
 .lb-empty {
   font-family: var(--serif);

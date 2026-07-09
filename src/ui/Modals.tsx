@@ -273,12 +273,12 @@ function SettingsModal() {
       footer={
         <>
           {inGame && (
-            <button className="ghost" onClick={toMainMenu}>
+            <button className="primary" onClick={toMainMenu}>
               Main Menu
             </button>
           )}
           {inGame && (
-            <button className="ghost" onClick={() => openModal('newGame')}>
+            <button className="primary" onClick={() => openModal('newGame')}>
               New Game
             </button>
           )}

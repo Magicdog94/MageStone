@@ -1750,43 +1750,19 @@
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
 }
 
-/* ---------------- main-menu leaderboard ---------------- */
-.leaderboard {
-  position: fixed;
-  top: clamp(16px, 4vh, 46px);
-  right: clamp(16px, 3vw, 44px);
-  z-index: 4;
-  width: min(360px, 40vw);
-  max-height: 74vh;
-  overflow: auto;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--gold-line);
-  background: linear-gradient(180deg, rgba(12, 26, 18, 0.88), rgba(6, 15, 10, 0.92));
-  backdrop-filter: blur(8px);
-  box-shadow: var(--shadow-panel), inset 0 1px 0 rgba(255, 232, 175, 0.08);
-  color: var(--ink);
-}
-.lb-title {
-  font-family: var(--display);
-  font-size: var(--text-lg);
-  color: var(--gold-bright);
-  letter-spacing: 0.04em;
-  margin-bottom: var(--space-2);
-  text-align: center;
-}
+/* ---------------- leaderboard (opened from the main-menu button) ---------------- */
 .lb-empty {
   font-family: var(--serif);
   font-size: var(--text-sm);
   color: var(--ink-dim);
   line-height: 1.5;
   text-align: center;
-  padding: var(--space-2) 0;
+  padding: var(--space-3) 0;
 }
 .lb-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
   font-variant-numeric: tabular-nums;
 }
 .lb-table th {
@@ -1794,23 +1770,23 @@
   font-weight: 600;
   color: var(--ink-dim);
   text-align: right;
-  padding: 2px 6px;
+  padding: 4px 8px;
   border-bottom: 1px solid var(--gold-line);
 }
 .lb-table td {
   text-align: right;
-  padding: 3px 6px;
+  padding: 5px 8px;
   border-bottom: 1px solid rgba(201, 162, 74, 0.12);
 }
 .lb-rank {
   text-align: center;
-  width: 1.6em;
+  width: 1.8em;
   color: var(--ink-dim);
 }
 .lb-col-name {
   text-align: left;
   font-family: var(--serif);
-  max-width: 10em;
+  max-width: 12em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1821,14 +1797,6 @@
 }
 .lb-me-extra td {
   border-top: 1px solid var(--gold-line);
-}
-body.ui-mobile .leaderboard {
-  top: calc(env(safe-area-inset-top, 0px) + 8px);
-  right: calc(env(safe-area-inset-right, 0px) + 8px);
-  width: min(300px, 52vw);
-  max-height: 80vh;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-xs);
 }
 
 /* dueling-mages backdrop (recreated box cover) */

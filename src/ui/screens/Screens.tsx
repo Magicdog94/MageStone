@@ -6,6 +6,7 @@ import { BOT_LABEL, BOT_LEVELS } from '../../game/bot';
 import { COLORS } from '../../three/coords';
 import { Tutorial } from '../Tutorial';
 import { Modals } from '../Modals';
+import { Modal } from '../controls';
 
 /** A hooded mage casting toward the centre. Rendered as a glowing silhouette so
  *  it reads at any size; `flip` mirrors it for the opposing (right-hand) side. */
@@ -211,16 +212,16 @@ function Shell({ children, bare = false }: { children: React.ReactNode; bare?: b
   );
 }
 
-/** Win/loss leaderboard on the main menu. Public top-10; the signed-in user's
- *  own row is highlighted (and appended if they're outside the top). Results
- *  are recorded server-side for every finished online game — versus real
- *  players AND bots. */
-function Leaderboard() {
+/** Win/loss leaderboard, opened from the main-menu "Leaderboard" button. Public
+ *  top-10; the signed-in user's own row is highlighted (and appended if they're
+ *  outside the top). Results are recorded server-side for every finished online
+ *  game — versus real players AND bots. */
+function LeaderboardModal({ onClose }: { onClose: () => void }) {
   const status = useNet((s) => s.status);
   const username = useNet((s) => s.username);
   const leaderboard = useNet((s) => s.leaderboard);
   const fetchLeaderboard = useNet((s) => s.fetchLeaderboard);
-  // (Re)fetch on mount and whenever the connection or login changes, so the
+  // (Re)fetch on open and whenever the connection or login changes, so the
   // "you" row fills in once a saved session re-authenticates.
   useEffect(() => {
     fetchLeaderboard();
@@ -232,8 +233,15 @@ function Leaderboard() {
   const pct = (r: LbRow) => (r.played ? Math.round((r.won / r.played) * 100) : 0);
 
   return (
-    <aside className="leaderboard" aria-label="Leaderboard">
-      <div className="lb-title">Leaderboard</div>
+    <Modal
+      title="Leaderboard"
+      onClose={onClose}
+      footer={
+        <button className="primary" onClick={onClose}>
+          Done
+        </button>
+      }
+    >
       {rows.length === 0 ? (
         <div className="lb-empty">
           {status === 'online'
@@ -278,7 +286,7 @@ function Leaderboard() {
           </tbody>
         </table>
       )}
-    </aside>
+    </Modal>
   );
 }
 
@@ -287,6 +295,7 @@ function Landing() {
   const playLocal = useNet((s) => s.playLocal);
   const openSettings = useGame((s) => s.openModal);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
   return (
     <Shell bare>
       <nav className="entry-menu">
@@ -294,9 +303,10 @@ function Landing() {
         <button className="menu-item" onClick={() => goAuth('signup')}>Sign Up</button>
         <button className="menu-item" onClick={() => setShowTutorial(true)}>How to Play</button>
         <button className="menu-item" onClick={playLocal}>Hotseat</button>
+        <button className="menu-item" onClick={() => setShowLeaderboard(true)}>Leaderboard</button>
         <button className="menu-item" onClick={() => openSettings('settings')}>Settings</button>
       </nav>
-      <Leaderboard />
+      {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} />}
       {showTutorial && <Tutorial onClose={() => setShowTutorial(false)} />}
     </Shell>
   );

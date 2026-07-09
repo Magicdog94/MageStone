@@ -58,6 +58,9 @@ export type ActionKind = 'attack' | 'collect' | 'activate' | 'resurrect' | 'ritu
 export interface CombatResult {
   attackerIds: string[];
   defenderId: string;
+  /** Owners of each side — the 3D combat dice land on each roller's tray. */
+  attackerOwner: PlayerColor;
+  defenderOwner: PlayerColor;
   attackerKind: UnitKind;
   defenderKind: UnitKind; // for colouring the defender's die
   attackRoll: number;

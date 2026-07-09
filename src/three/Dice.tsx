@@ -390,6 +390,11 @@ interface CombatDieSpec {
   faces: number;
   kind: DiceKind;
   value: number;
+  /** Tray the die lands on — each side's dice roll on THEIR OWN edge. */
+  seat: number;
+  /** Position within its tray group (attacker dice line up together). */
+  slot: number;
+  slots: number;
 }
 
 const COMBAT_LINGER_MS = 2400; // how long the settled result stays on the table
@@ -403,7 +408,6 @@ let combatRunSeq = 0;
 
 function CombatDice() {
   const rolling = useGame((s) => s.rolling);
-  const seat = useGame((s) => s.game.seats[s.game.current] ?? 0);
 
   const [run, setRun] = useState<CombatRun | null>(null);
   const bodies = useRef<(RapierRigidBody | null)[]>([]);
@@ -424,15 +428,29 @@ function CombatDice() {
       liveFrames.current = 0;
       calmFrames.current = 0;
       window.clearTimeout(hideTimer.current);
+      // Each side's dice land on that side's OWN tray (seats captured now,
+      // so a turn change during the linger can't relocate them).
+      const atkSeat = s.game.seats[c.attackerOwner] ?? 0;
+      const defSeat = s.game.seats[c.defenderOwner] ?? 0;
       setRun({
         id: ++combatRunSeq,
         spec: [
-          ...c.attackDice.map((v) => ({
+          ...c.attackDice.map((v, i) => ({
             faces: c.attackFaces,
             kind: c.attackerKind as DiceKind,
             value: v,
+            seat: atkSeat,
+            slot: i,
+            slots: c.attackDice.length,
           })),
-          { faces: c.defenseFaces, kind: c.defenderKind as DiceKind, value: c.defenseRoll },
+          {
+            faces: c.defenseFaces,
+            kind: c.defenderKind as DiceKind,
+            value: c.defenseRoll,
+            seat: defSeat,
+            slot: 0,
+            slots: 1,
+          },
         ],
       });
     });
@@ -451,9 +469,10 @@ function CombatDice() {
       if (!active.every(Boolean)) return;
       active.forEach((b, i) => {
         if (!b) return;
+        const d = run.spec[i];
         const [x, z] = trayToWorld(
-          seat,
-          (i - (run.spec.length - 1) / 2) * 1.1 + rand(-0.12, 0.12),
+          d.seat,
+          (d.slot - (d.slots - 1) / 2) * 1.1 + rand(-0.12, 0.12),
           rand(-TRAY_RAD * 0.5, TRAY_RAD * 0.5),
         );
         b.setTranslation({ x, y: 3 + (i % 2) * 0.5, z }, true);
@@ -492,7 +511,7 @@ function CombatDice() {
             : polyDef(d.faces as 12 | 20).faces[d.value - 1].normal;
         const q = new THREE.Quaternion().setFromUnitVectors(normal, UP);
         q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, rand(0, Math.PI * 2)));
-        const [x, z] = trayToWorld(seat, (i - (run.spec.length - 1) / 2) * LANE, 0);
+        const [x, z] = trayToWorld(d.seat, (d.slot - (d.slots - 1) / 2) * LANE, 0);
         const rest = d.faces === 6 ? H : d.faces === 12 ? 0.42 : 0.47; // face-to-centre
         b.setTranslation({ x, y: TABLE_SURF + rest, z }, true);
         b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
@@ -536,24 +555,27 @@ function CombatDice() {
  *  seat so they hop with the turn). Left running (idle bodies auto-sleep) so a
  *  throw always steps cleanly. */
 export function DiceLayer() {
-  const seat = useGame((s) => s.game.seats[s.game.current] ?? 0);
-  const [dx, dz] = SEAT_OUT[seat] ?? SEAT_OUT[0];
-  // Rotate the wall frame so local +z points out of the roller's table edge
-  // (the walls are symmetric, so lateral mirroring doesn't matter).
-  const yaw = Math.atan2(dx, dz);
   return (
     /* Fixed timestep: wall-clock (vary) steps tunnel fast dice through the
        thin floor collider whenever a frame hiccups — 1/60 keeps them honest. */
     <Physics gravity={[0, -22, 0]} timeStep={1 / 60}>
       {/* floor: the whole wooden tabletop */}
       <CuboidCollider args={[TABLE_HALF, 0.15, TABLE_HALF]} position={[0, TABLE_SURF - 0.15, 0]} />
-      {/* containment walls around the active roll strip */}
-      <group key={seat} rotation={[0, yaw, 0]}>
-        <CuboidCollider args={[TRAY_LAT, 3, 0.2]} position={[0, TABLE_SURF + 3, TRAY_CENTER - TRAY_RAD]} />
-        <CuboidCollider args={[TRAY_LAT, 3, 0.2]} position={[0, TABLE_SURF + 3, TRAY_CENTER + TRAY_RAD]} />
-        <CuboidCollider args={[0.2, 3, TRAY_RAD]} position={[-TRAY_LAT, TABLE_SURF + 3, TRAY_CENTER]} />
-        <CuboidCollider args={[0.2, 3, TRAY_RAD]} position={[TRAY_LAT, TABLE_SURF + 3, TRAY_CENTER]} />
-      </group>
+      {/* containment walls around ALL FOUR roll strips — combat throws land
+          each side's dice on that side's own tray, so every tray needs its
+          fences up permanently (turn dice always use the current one). */}
+      {[0, 1, 2, 3].map((s) => {
+        const [dx, dz] = SEAT_OUT[s];
+        const yaw = Math.atan2(dx, dz);
+        return (
+          <group key={s} rotation={[0, yaw, 0]}>
+            <CuboidCollider args={[TRAY_LAT, 3, 0.2]} position={[0, TABLE_SURF + 3, TRAY_CENTER - TRAY_RAD]} />
+            <CuboidCollider args={[TRAY_LAT, 3, 0.2]} position={[0, TABLE_SURF + 3, TRAY_CENTER + TRAY_RAD]} />
+            <CuboidCollider args={[0.2, 3, TRAY_RAD]} position={[-TRAY_LAT, TABLE_SURF + 3, TRAY_CENTER]} />
+            <CuboidCollider args={[0.2, 3, TRAY_RAD]} position={[TRAY_LAT, TABLE_SURF + 3, TRAY_CENTER]} />
+          </group>
+        );
+      })}
       <DiceBodies />
       <CombatDice />
     </Physics>

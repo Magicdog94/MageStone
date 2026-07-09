@@ -530,6 +530,8 @@ export function resolveAttack(
   const combat: CombatResult = {
     attackerIds,
     defenderId: targetId,
+    attackerOwner: state.current,
+    defenderOwner: target.owner,
     attackerKind: attackers[0].kind,
     defenderKind: target.kind,
     attackRoll,

@@ -105,6 +105,15 @@ async function getStat(key) {
   }
   return statsMem[key] ? { key, ...statsMem[key] } : null;
 }
+/** Alpha metrics: how many accounts have played a game, and how many exist. */
+async function getTotals() {
+  if (pool) {
+    const p = await pool.query('SELECT count(*)::int AS n FROM stats');
+    const u = await pool.query('SELECT count(*)::int AS n FROM users');
+    return { players: p.rows[0].n, signups: u.rows[0].n };
+  }
+  return { players: Object.keys(statsMem).length, signups: Object.keys(users).length };
+}
 
 /** When a game ends, credit each HUMAN player: the winner's colour wins, the
  *  rest lose. Bots have no account, so they're skipped — but a human's result
@@ -333,14 +342,17 @@ async function handle(ws, s, m) {
       return broadcast(g, { t: 'state', state: m.state }, ws);
     }
     case 'leaderboard': {
-      // Public: the top table plus (if signed in) the requester's own row.
+      // Public: the top table, alpha totals, plus (if signed in) the requester's own row.
       const top = await topStats(10);
       const me = s.username ? await getStat(s.username) : null;
+      const totals = await getTotals();
       const row = (r) => ({ username: r.display, played: r.played, won: r.won, lost: r.lost });
       return send(ws, {
         t: 'leaderboard',
         top: top.map(row),
         me: me ? row(me) : null,
+        players: totals.players,
+        signups: totals.signups,
       });
     }
     case 'leaveGame':

@@ -42,8 +42,8 @@ interface NetState {
   myColor: PlayerColor | null;
   joinError: string | null;
   notice: string | null;
-  /** Main-menu leaderboard: the top table + (if signed in) the user's own row. */
-  leaderboard: { top: LbRow[]; me: LbRow | null } | null;
+  /** Main-menu leaderboard: the top table, alpha totals, + the user's own row. */
+  leaderboard: { top: LbRow[]; me: LbRow | null; players: number; signups: number } | null;
 
   init: () => void;
   fetchLeaderboard: () => void;
@@ -174,6 +174,8 @@ export const useNet = create<NetState>((set, get) => {
           leaderboard: {
             top: (m.top as LbRow[]) ?? [],
             me: (m.me as LbRow | null) ?? null,
+            players: (m.players as number) ?? 0,
+            signups: (m.signups as number) ?? 0,
           },
         });
         break;

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Scene } from './three/Scene';
 import { BotDriver } from './ui/BotDriver';
 import { HUD } from './ui/HUD';
+import { AlphaWelcome } from './ui/AlphaWelcome';
 import { EntryScreens } from './ui/screens/Screens';
 import { MusicToggle } from './ui/MusicToggle';
 import { FullscreenToggle } from './ui/FullscreenToggle';
@@ -45,6 +46,7 @@ export default function App() {
           <Scene />
           <HUD />
           <BotDriver />
+          <AlphaWelcome />
           <div className="brand">
             Mage<span>Stone</span> <em>prototype</em>
           </div>

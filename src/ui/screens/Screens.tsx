@@ -231,6 +231,8 @@ function LeaderboardModal({ onClose }: { onClose: () => void }) {
   const me = leaderboard?.me ?? null;
   const meInTop = !!me && rows.some((r) => r.username === me.username);
   const pct = (r: LbRow) => (r.played ? Math.round((r.won / r.played) * 100) : 0);
+  const players = leaderboard?.players ?? 0;
+  const signups = leaderboard?.signups ?? 0;
 
   return (
     <Modal
@@ -285,6 +287,11 @@ function LeaderboardModal({ onClose }: { onClose: () => void }) {
             )}
           </tbody>
         </table>
+      )}
+      {leaderboard && (
+        <div className="lb-totals">
+          {players} {players === 1 ? 'player has' : 'players have'} played · {signups} signed up
+        </div>
       )}
     </Modal>
   );

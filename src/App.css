@@ -967,12 +967,15 @@
    field on settle), so the numbers reveal with the dice for tension. */
 .combat-announce {
   position: absolute;
-  top: calc(var(--space-4) + var(--control-md) + var(--space-6) + var(--control-md) + 10px);
+  /* just above the bottom action bar — well clear of the top status UI, and
+     near the table where the dice are thrown */
+  bottom: calc(var(--space-5) + 84px);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  z-index: 8;
   padding: var(--space-2) var(--space-5);
   border-radius: var(--radius-pill);
   border: 1px solid var(--gold-line);
@@ -1750,6 +1753,16 @@
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
 }
 
+/* ---------------- alpha welcome ---------------- */
+.alpha-welcome-text {
+  font-family: var(--serif);
+  font-size: var(--text-lg);
+  line-height: 1.6;
+  color: var(--ink);
+  margin: 0;
+  max-width: 42ch;
+}
+
 /* ---------------- leaderboard (opened from the main-menu button) ---------------- */
 .lb-empty {
   font-family: var(--serif);
@@ -1797,6 +1810,13 @@
 }
 .lb-me-extra td {
   border-top: 1px solid var(--gold-line);
+}
+.lb-totals {
+  margin-top: var(--space-3);
+  text-align: center;
+  font-family: var(--serif);
+  font-size: var(--text-sm);
+  color: var(--ink-dim);
 }
 
 /* dueling-mages backdrop (recreated box cover) */
@@ -2198,9 +2218,11 @@
 /* online: turn banner + leave button */
 .turn-banner {
   position: absolute;
-  top: calc(var(--space-4) + var(--control-md) + var(--space-6) + 40px);
+  /* its own row, clearly BELOW the Turn/gravestone chips (never over them) */
+  top: calc(var(--space-4) + var(--control-md) + var(--space-6) + 50px);
   left: 50%;
   transform: translateX(-50%);
+  z-index: 6;
   font-family: var(--display);
   font-size: var(--text-md);
   letter-spacing: 0.05em;
@@ -2220,9 +2242,9 @@
 /* siege alert — enemy standing on a player's base (respawns are blocked) */
 .siege-alert {
   position: absolute;
-  /* tucked directly under the Turn + gravestone chips, compact enough that it
-     never reaches down over the board */
-  top: calc(var(--space-4) + var(--control-md) + var(--space-6) + var(--control-md) + 12px);
+  /* stacked BELOW the turn banner (its own row), so the top status UI — player
+     cards, Turn/gravestone chips and the corner buttons — is never covered */
+  top: calc(var(--space-4) + var(--control-md) + var(--space-6) + 86px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 6;
@@ -2392,17 +2414,25 @@ body.ui-mobile .leave-btn {
 }
 
 /* centre-top banners ride lower fixed offsets on the small screen */
+/* Stacked rows BELOW the centred Turn/gravestone chips (top ~42, ends ~66),
+   so the top status UI is never covered on phones either. */
+body.ui-mobile .turn-banner {
+  top: 70px;
+}
 body.ui-mobile .siege-alert {
-  top: 78px; /* directly under the centred Turn + gravestone chips */
+  top: 96px;
 }
 body.ui-mobile .elim-toasts {
-  top: 92px;
+  top: 122px;
 }
 body.ui-mobile .combat-toast {
   top: 44px;
 }
-body.ui-mobile .turn-banner {
-  top: 40px;
+/* the roll announcement sits above the slim mobile action bar (centred; the
+   arrow pad is far-right, so they don't collide) */
+body.ui-mobile .combat-announce {
+  top: auto;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 50px);
 }
 
 /* ---- bottom: one slim action bar spanning the width ---- */

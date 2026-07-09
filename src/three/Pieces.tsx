@@ -899,14 +899,23 @@ export function BoardTokens() {
   return <group>{disks}</group>;
 }
 
+// The doomed unit stands where it fell for this long before toppling, so the
+// combat dice have landed and shown their value before anything is eliminated.
+// Tuned to sit just after the physics dice settle (see Dice.tsx::CombatDice).
+const DEATH_HOLD_MS = 1900;
+
 /** A defeated unit toppling to the ground then sinking away, played at the square
  *  where it fell (the engine has already removed the real unit). */
 function DyingUnit({ ev, onDone }: { ev: DeathEvent & { nonce: number }; onDone: (n: number) => void }) {
   const seat = useGame((s) => s.game.seats[ev.owner]);
   const inner = useRef<THREE.Group>(null);
+  const mount = useRef(0);
   const start = useRef(0);
   const done = useRef(false);
-  const deathAnim = useRef<UnitAnim>('death');
+  // Stand as a live unit during the hold ('idle'), then play the death clip.
+  // A ref so the swap never triggers a React re-render (rigged models poll it).
+  const anim = useRef<UnitAnim>('idle');
+  const dying = useRef(false);
   const pos = cellToWorld(ev.cell, TILE_SURFACE);
   // With a rigged 'death' clip the clip poses the fall; we only need to hold the
   // ghost on screen, then fade it. Without clips, procedurally topple + sink.
@@ -914,7 +923,15 @@ function DyingUnit({ ev, onDone }: { ev: DeathEvent & { nonce: number }; onDone:
   useFrame(() => {
     const g = inner.current;
     if (!g || done.current) return;
-    if (!start.current) start.current = performance.now();
+    if (!mount.current) mount.current = performance.now();
+    // Hold: keep the unit standing on its square while the combat dice roll,
+    // so the result is on the table before anything is eliminated.
+    if (!dying.current) {
+      if (performance.now() - mount.current < DEATH_HOLD_MS) return;
+      dying.current = true;
+      anim.current = 'death';
+      start.current = performance.now();
+    }
     const t = Math.min(1, (performance.now() - start.current) / 950);
     if (!hasClips) {
       const topple = Math.min(1, t / 0.6); // fall over during the first 60%
@@ -933,7 +950,7 @@ function DyingUnit({ ev, onDone }: { ev: DeathEvent & { nonce: number }; onDone:
   });
   return (
     <group position={pos} rotation={[0, seatYaw(seat), 0]}>
-      <group ref={inner}>{MESH[ev.kind]({ color: COLORS[ev.owner], carried: 0, anim: deathAnim })}</group>
+      <group ref={inner}>{MESH[ev.kind]({ color: COLORS[ev.owner], carried: 0, anim })}</group>
     </group>
   );
 }

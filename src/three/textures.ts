@@ -1924,13 +1924,15 @@ export function diceFaceTextures(kind: DiceKind): THREE.Texture[] {
   return FACE_VALUES.map((v) => pipFace(v, kind));
 }
 
-/** Flat body colour for a polyhedral (d12/d20) die of `kind` — the same stone
- *  blue/green/red family as the d6 pip faces. */
-export function dieBodyColor(kind: DiceKind): string {
-  return DIE_STYLE[kind].c1;
+/** Flat body colour for a polyhedral (d12/d20) die — a deep near-black (with a
+ *  whisper of warmth so it sits with the board's dark ink tones, not flat pure
+ *  black). White numbers + a thin gilt keyline keep it on-theme. */
+export function dieBodyColor(): string {
+  return '#14130f';
 }
 
-/** A gold number on a transparent tile — glued to one face of a d12/d20. */
+/** A white number (thin gilt keyline) on a transparent tile — glued to one face
+ *  of a black d12/d20. */
 export function dieNumberTexture(value: number, kind: DiceKind): THREE.Texture {
   const key = `dienum-${kind}-${value}`;
   const hit = cache.get(key);
@@ -1941,18 +1943,23 @@ export function dieNumberTexture(value: number, kind: DiceKind): THREE.Texture {
   ctx.font = `700 ${S * 0.62}px Cinzel, Georgia, serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  // dark socket behind the glyph so it reads on the marbled body
-  ctx.lineWidth = S * 0.09;
-  ctx.strokeStyle = 'rgba(10,14,26,0.9)';
-  ctx.strokeText(String(value), S / 2, S * 0.56);
-  const g = ctx.createLinearGradient(0, S * 0.2, 0, S * 0.8);
-  g.addColorStop(0, GOLD_HI);
-  g.addColorStop(0.55, GOLD_MID);
-  g.addColorStop(1, GOLD_LO);
-  ctx.fillStyle = g;
-  ctx.fillText(String(value), S / 2, S * 0.56);
-  // underline distinguishes 6/9 style ambiguity on spinning solids
+  const label = String(value);
+  const x = S / 2;
+  const y = S * 0.56;
+  // dark socket so the glyph carves cleanly out of the black body
+  ctx.lineWidth = S * 0.11;
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+  ctx.strokeText(label, x, y);
+  // white number
+  ctx.fillStyle = '#f4f2ea';
+  ctx.fillText(label, x, y);
+  // thin gilt keyline ties the die to the board's gold trim
+  ctx.lineWidth = S * 0.016;
+  ctx.strokeStyle = GOLD_MID;
+  ctx.strokeText(label, x, y);
+  // underline distinguishes 6/9 ambiguity on spinning solids
   if (value === 6 || value === 9) {
+    ctx.fillStyle = '#f4f2ea';
     ctx.fillRect(S * 0.3, S * 0.87, S * 0.4, S * 0.05);
   }
   return finish(c, key);

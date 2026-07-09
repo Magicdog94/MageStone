@@ -174,11 +174,11 @@ function PolyDieMesh({ faces, kind }: { faces: 12 | 20; kind: DiceKind }) {
   const bodyMat = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: dieBodyColor(kind),
+        color: dieBodyColor(),
         roughness: 0.4,
         metalness: 0.15,
       }),
-    [kind],
+    [],
   );
   const labelGeo = useMemo(() => new THREE.PlaneGeometry(def.labelSize, def.labelSize), [def]);
   return (

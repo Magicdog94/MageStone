@@ -12,7 +12,6 @@ import {
 } from '../game/rules';
 import { useTokenUrl } from '../three/tokens';
 import { PipDie } from './Die';
-import { CombatRoll } from './CombatRoll';
 import { EliminationToast } from './EliminationToast';
 import { PadControls } from './PadControls';
 import { PlayerStrip } from './PlayerStrip';
@@ -39,7 +38,6 @@ export function HUD() {
   const openModal = useGame((s) => s.openModal);
   const turnSeconds = useGame((s) => s.settings.turnSeconds);
   const mobile = useGame((s) => s.settings.layout === 'mobile');
-  const combatNonce = useGame((s) => s.combatNonce);
   const online = useGame((s) => s.online);
   const myColor = useGame((s) => s.myColor);
   const bots = useGame((s) => s.bots);
@@ -84,7 +82,6 @@ export function HUD() {
   const selectedUnit = selectedUnitId ? unitById(game, selectedUnitId) : undefined;
   const actions = unitActions(game, selectedUnitId);
   const phase = game.turnPhase;
-  const combat = game.lastCombat;
 
   const dleft = phase === 'discard' ? discardsLeft(game) : 0;
   const discardLabel = `Discard ${dleft} ${dleft === 1 ? 'die' : 'dice'}`;
@@ -151,9 +148,8 @@ export function HUD() {
         </button>
       )}
 
-      {combat && combatNonce > 0 && (
-        <CombatRoll key={combatNonce} combat={combat} runId={combatNonce} />
-      )}
+      {/* (attacks now roll REAL physics dice on the table — see Dice.tsx
+          CombatDice — instead of a pop-up box) */}
 
       {/* Bottom control frame — fixed width; right column: ritual · button */}
       <div className="hud-bottom">

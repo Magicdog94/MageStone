@@ -1,9 +1,15 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { CuboidCollider, Physics, RigidBody, type RapierRigidBody } from '@react-three/rapier';
 import { RoundedBoxGeometry } from 'three-stdlib';
-import { FACE_VALUES, diceFaceTextures, type DiceKind } from './textures';
+import {
+  FACE_VALUES,
+  diceFaceTextures,
+  dieBodyColor,
+  dieNumberTexture,
+  type DiceKind,
+} from './textures';
 import { TABLE_HALF } from './coords';
 import { useGame } from '../store';
 
@@ -110,6 +116,94 @@ function DieMesh({
   );
 }
 
+// ---- Polyhedral dice (d12 / d20) for combat throws -------------------------
+// True solids: a dodecahedron / icosahedron whose faces carry gold numbers.
+// Face i is worth i+1; reading and snapping both go through the face normals.
+
+interface PolyFace {
+  normal: THREE.Vector3;
+  center: THREE.Vector3;
+}
+interface PolyDef {
+  geo: THREE.BufferGeometry;
+  faces: PolyFace[]; // faces[value - 1]
+  labelSize: number;
+}
+
+const POLY_DEFS = new Map<number, PolyDef>();
+function polyDef(faceCount: 12 | 20): PolyDef {
+  const hit = POLY_DEFS.get(faceCount);
+  if (hit) return hit;
+  const geo =
+    faceCount === 12 ? new THREE.DodecahedronGeometry(0.5) : new THREE.IcosahedronGeometry(0.55);
+  // Group the triangle soup into flat faces by (rounded) normal direction.
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+  const groups = new Map<string, { normal: THREE.Vector3; sum: THREE.Vector3; n: number }>();
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const ab = new THREE.Vector3();
+  const ac = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i += 3) {
+    a.fromBufferAttribute(pos, i);
+    b.fromBufferAttribute(pos, i + 1);
+    c.fromBufferAttribute(pos, i + 2);
+    const n = ab.subVectors(b, a).cross(ac.subVectors(c, a)).normalize();
+    const key = `${n.x.toFixed(2)},${n.y.toFixed(2)},${n.z.toFixed(2)}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = { normal: n.clone(), sum: new THREE.Vector3(), n: 0 };
+      groups.set(key, g);
+    }
+    g.sum.add(a).add(b).add(c);
+    g.n += 3;
+  }
+  const faces: PolyFace[] = [...groups.values()].map((g) => ({
+    normal: g.normal,
+    center: g.sum.divideScalar(g.n),
+  }));
+  const def: PolyDef = { geo, faces, labelSize: faceCount === 12 ? 0.34 : 0.27 };
+  POLY_DEFS.set(faceCount, def);
+  return def;
+}
+
+const Z_AXIS = new THREE.Vector3(0, 0, 1);
+
+function PolyDieMesh({ faces, kind }: { faces: 12 | 20; kind: DiceKind }) {
+  const def = polyDef(faces);
+  const bodyMat = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: dieBodyColor(kind),
+        roughness: 0.4,
+        metalness: 0.15,
+      }),
+    [kind],
+  );
+  const labelGeo = useMemo(() => new THREE.PlaneGeometry(def.labelSize, def.labelSize), [def]);
+  return (
+    <group>
+      <mesh castShadow geometry={def.geo} material={bodyMat} />
+      {def.faces.map((f, i) => (
+        <mesh
+          key={i}
+          geometry={labelGeo}
+          position={f.center.clone().addScaledVector(f.normal, 0.008)}
+          quaternion={new THREE.Quaternion().setFromUnitVectors(Z_AXIS, f.normal)}
+        >
+          <meshStandardMaterial
+            map={dieNumberTexture(i + 1, kind)}
+            transparent
+            depthWrite={false}
+            roughness={0.4}
+            metalness={0.3}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 // Fixed kind order matching the engine's roll (1 mage, 1 priest, 3 warrior).
 const DIE_KINDS: DiceKind[] = ['mage', 'priest', 'warrior', 'warrior', 'warrior'];
 
@@ -152,6 +246,7 @@ function DiceBodies() {
         (i - 2) * 0.9 + rand(-0.15, 0.15),
         rand(-TRAY_RAD * 0.55, TRAY_RAD * 0.55),
       );
+      b.setGravityScale(1, true); // un-park (hidden dice wait weightless below)
       b.setTranslation({ x, y: 2.8 + (i % 2) * 0.5, z }, true);
       const e = new THREE.Euler(rand(0, 6.28), rand(0, 6.28), rand(0, 6.28));
       const q = new THREE.Quaternion().setFromEuler(e);
@@ -209,6 +304,7 @@ function DiceBodies() {
     remoteSig.current = sig;
     bodies.current.forEach((b, i) => {
       if (!b) return;
+      b.setGravityScale(1, true);
       const v = dice[i]?.value ?? 1;
       const faceIdx = FACE_VALUES.indexOf(v);
       const q = new THREE.Quaternion().setFromUnitVectors(NORMALS[faceIdx], UP);
@@ -220,6 +316,20 @@ function DiceBodies() {
       b.setAngvel({ x: 0, y: 0, z: 0 }, true);
     });
   });
+
+  // Park hidden dice below the table (weightless) so their invisible bodies
+  // never collide with the combat dice thrown onto the tray during act phase;
+  // both throw paths restore gravity when they reposition the dice.
+  useEffect(() => {
+    if (show) return;
+    bodies.current.forEach((b, i) => {
+      if (!b) return;
+      b.setGravityScale(0, true);
+      b.setTranslation({ x: (i - 2) * 1.2, y: -2.5, z: 0 }, true);
+      b.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    });
+  }, [show]);
 
   // During the discard phase the player can click a die to discard it directly
   // (mirrors clicking the 2D tray). Only the current player may discard.
@@ -268,6 +378,159 @@ function DiceBodies() {
   );
 }
 
+// ---- Combat dice: real physical throws for every attack ---------------------
+// When an attack resolves, the attacker's dice (n×d6, or the Mage's d12/d20)
+// and the defender's die tumble onto the current player's tray for real, then
+// settle showing the values the engine rolled (the same read-then-tidy snap the
+// turn dice use — the throw is the presentation, the engine stays the referee).
+// Every client throws its own cosmetic dice off the broadcast CombatResult, so
+// online spectators see the same drama and the same final faces.
+
+interface CombatDieSpec {
+  faces: number;
+  kind: DiceKind;
+  value: number;
+}
+
+const COMBAT_LINGER_MS = 2400; // how long the settled result stays on the table
+
+interface CombatRun {
+  id: number;
+  spec: CombatDieSpec[];
+}
+
+let combatRunSeq = 0;
+
+function CombatDice() {
+  const rolling = useGame((s) => s.rolling);
+  const seat = useGame((s) => s.game.seats[s.game.current] ?? 0);
+
+  const [run, setRun] = useState<CombatRun | null>(null);
+  const bodies = useRef<(RapierRigidBody | null)[]>([]);
+  const thrown = useRef(false);
+  const settled = useRef(false);
+  const liveFrames = useRef(0);
+  const calmFrames = useRef(0);
+  const hideTimer = useRef<number | undefined>(undefined);
+
+  // Subscribe to the store: a NEW CombatResult (by identity) arms a fresh
+  // throw on every client — actor and online spectators alike.
+  useEffect(() => {
+    const unsub = useGame.subscribe((s, prev) => {
+      const c = s.game.lastCombat;
+      if (!c || c === prev.game.lastCombat) return;
+      thrown.current = false;
+      settled.current = false;
+      liveFrames.current = 0;
+      calmFrames.current = 0;
+      window.clearTimeout(hideTimer.current);
+      setRun({
+        id: ++combatRunSeq,
+        spec: [
+          ...c.attackDice.map((v) => ({
+            faces: c.attackFaces,
+            kind: c.attackerKind as DiceKind,
+            value: v,
+          })),
+          { faces: c.defenseFaces, kind: c.defenderKind as DiceKind, value: c.defenseRoll },
+        ],
+      });
+    });
+    return () => {
+      unsub();
+      window.clearTimeout(hideTimer.current);
+    };
+  }, []);
+
+  useFrame(() => {
+    if (!run || settled.current) return;
+    // Throw on the first physics frame where every body is registered — this
+    // never races React commit order or StrictMode double-mounts.
+    if (!thrown.current) {
+      const active = bodies.current.slice(0, run.spec.length);
+      if (!active.every(Boolean)) return;
+      active.forEach((b, i) => {
+        if (!b) return;
+        const [x, z] = trayToWorld(
+          seat,
+          (i - (run.spec.length - 1) / 2) * 1.1 + rand(-0.12, 0.12),
+          rand(-TRAY_RAD * 0.5, TRAY_RAD * 0.5),
+        );
+        b.setTranslation({ x, y: 3 + (i % 2) * 0.5, z }, true);
+        const e = new THREE.Euler(rand(0, 6.28), rand(0, 6.28), rand(0, 6.28));
+        const q = new THREE.Quaternion().setFromEuler(e);
+        b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+        b.setLinvel({ x: rand(-1, 1), y: 1, z: rand(-1.2, 1.2) }, true);
+        b.setAngvel({ x: rand(-14, 14), y: rand(-14, 14), z: rand(-14, 14) }, true);
+      });
+      thrown.current = true;
+      return;
+    }
+    liveFrames.current++;
+    let calm = true;
+    for (const b of bodies.current.slice(0, run.spec.length)) {
+      if (!b) return;
+      const lv = b.linvel();
+      const av = b.angvel();
+      if (Math.hypot(lv.x, lv.y, lv.z) > 0.18 || Math.hypot(av.x, av.y, av.z) > 0.25) {
+        calm = false;
+        break;
+      }
+    }
+    calmFrames.current = calm ? calmFrames.current + 1 : 0;
+    const timedOut = liveFrames.current > 280; // ~4.5 s safety net
+    if ((liveFrames.current > 20 && calmFrames.current > 10) || timedOut) {
+      settled.current = true;
+      // Lay each die flat in a row showing the ENGINE's value (the same
+      // value-face-up snap the turn dice perform after reading).
+      bodies.current.slice(0, run.spec.length).forEach((b, i) => {
+        if (!b) return;
+        const d = run.spec[i];
+        const normal =
+          d.faces === 6
+            ? NORMALS[FACE_VALUES.indexOf(d.value)]
+            : polyDef(d.faces as 12 | 20).faces[d.value - 1].normal;
+        const q = new THREE.Quaternion().setFromUnitVectors(normal, UP);
+        q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, rand(0, Math.PI * 2)));
+        const [x, z] = trayToWorld(seat, (i - (run.spec.length - 1) / 2) * LANE, 0);
+        const rest = d.faces === 6 ? H : d.faces === 12 ? 0.42 : 0.47; // face-to-centre
+        b.setTranslation({ x, y: TABLE_SURF + rest, z }, true);
+        b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+        b.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      });
+      hideTimer.current = window.setTimeout(() => setRun(null), COMBAT_LINGER_MS);
+    }
+  });
+
+  // The next turn's roll sweeps lingering combat dice off the tray.
+  if (!run || rolling) return null;
+  return (
+    <group>
+      {run.spec.map((d, i) => (
+        <RigidBody
+          key={`${run.id}-${i}`}
+          ref={(r) => {
+            bodies.current[i] = r;
+          }}
+          colliders={d.faces === 6 ? 'cuboid' : 'hull'}
+          restitution={0.3}
+          friction={0.9}
+          angularDamping={0.55}
+          linearDamping={0.3}
+          position={[0, -4 - i, 0]}
+        >
+          {d.faces === 6 ? (
+            <DieMesh kind={d.kind} />
+          ) : (
+            <PolyDieMesh faces={d.faces as 12 | 20} kind={d.kind} />
+          )}
+        </RigidBody>
+      ))}
+    </group>
+  );
+}
+
 /** Isolated physics world: the dice, a floor spanning the whole square table,
  *  and invisible containment walls around the CURRENT roller's strip (keyed by
  *  seat so they hop with the turn). Left running (idle bodies auto-sleep) so a
@@ -279,7 +542,9 @@ export function DiceLayer() {
   // (the walls are symmetric, so lateral mirroring doesn't matter).
   const yaw = Math.atan2(dx, dz);
   return (
-    <Physics gravity={[0, -22, 0]}>
+    /* Fixed timestep: wall-clock (vary) steps tunnel fast dice through the
+       thin floor collider whenever a frame hiccups — 1/60 keeps them honest. */
+    <Physics gravity={[0, -22, 0]} timeStep={1 / 60}>
       {/* floor: the whole wooden tabletop */}
       <CuboidCollider args={[TABLE_HALF, 0.15, TABLE_HALF]} position={[0, TABLE_SURF - 0.15, 0]} />
       {/* containment walls around the active roll strip */}
@@ -290,6 +555,7 @@ export function DiceLayer() {
         <CuboidCollider args={[0.2, 3, TRAY_RAD]} position={[TRAY_LAT, TABLE_SURF + 3, TRAY_CENTER]} />
       </group>
       <DiceBodies />
+      <CombatDice />
     </Physics>
   );
 }

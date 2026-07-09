@@ -1923,3 +1923,37 @@ function pipFace(value: number, kind: DiceKind): THREE.Texture {
 export function diceFaceTextures(kind: DiceKind): THREE.Texture[] {
   return FACE_VALUES.map((v) => pipFace(v, kind));
 }
+
+/** Flat body colour for a polyhedral (d12/d20) die of `kind` — the same stone
+ *  blue/green/red family as the d6 pip faces. */
+export function dieBodyColor(kind: DiceKind): string {
+  return DIE_STYLE[kind].c1;
+}
+
+/** A gold number on a transparent tile — glued to one face of a d12/d20. */
+export function dieNumberTexture(value: number, kind: DiceKind): THREE.Texture {
+  const key = `dienum-${kind}-${value}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const S = 128;
+  const [c, ctx] = canvas(S);
+  ctx.clearRect(0, 0, S, S);
+  ctx.font = `700 ${S * 0.62}px Cinzel, Georgia, serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // dark socket behind the glyph so it reads on the marbled body
+  ctx.lineWidth = S * 0.09;
+  ctx.strokeStyle = 'rgba(10,14,26,0.9)';
+  ctx.strokeText(String(value), S / 2, S * 0.56);
+  const g = ctx.createLinearGradient(0, S * 0.2, 0, S * 0.8);
+  g.addColorStop(0, GOLD_HI);
+  g.addColorStop(0.55, GOLD_MID);
+  g.addColorStop(1, GOLD_LO);
+  ctx.fillStyle = g;
+  ctx.fillText(String(value), S / 2, S * 0.56);
+  // underline distinguishes 6/9 style ambiguity on spinning solids
+  if (value === 6 || value === 9) {
+    ctx.fillRect(S * 0.3, S * 0.87, S * 0.4, S * 0.05);
+  }
+  return finish(c, key);
+}

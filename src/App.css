@@ -185,7 +185,6 @@
 .hud-top,
 .hud-bottom,
 .combat-toast,
-.combat-roll,
 .winner {
   position: absolute;
   background: linear-gradient(180deg, var(--panel-1), var(--panel-2));
@@ -197,7 +196,6 @@
 .hud-top::before,
 .hud-bottom::before,
 .combat-toast::before,
-.combat-roll::before,
 .winner::before {
   content: '';
   position: absolute;
@@ -961,73 +959,8 @@
   border-left-color: var(--gold);
 }
 
-/* ---------------- combat roll panel ---------------- */
-.combat-roll {
-  top: calc(var(--space-4) + var(--control-md) + var(--space-6));
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-5);
-  border-top: 3px solid var(--ink-dim);
-}
-.combat-roll.win {
-  border-top-color: #57e0a2;
-}
-.combat-roll.lose {
-  border-top-color: #ff6a5d;
-}
-.combat-roll.draw {
-  border-top-color: var(--gold);
-}
-.cr-side {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-1);
-}
-.cr-name {
-  font-size: var(--text-xs);
-  letter-spacing: 0.04em;
-  color: var(--ink-dim);
-  text-transform: uppercase;
-}
-.cr-dice {
-  display: flex;
-  gap: var(--space-1);
-}
-.cr-total {
-  font-family: var(--display);
-  font-size: var(--text-lg);
-  color: var(--gold-bright);
-  line-height: 1;
-  min-height: 1.1em;
-}
-.cr-vs {
-  font-family: var(--display);
-  font-size: var(--text-md);
-  color: var(--ink-dim);
-}
-.cr-result {
-  margin-left: var(--space-3);
-  padding-left: var(--space-3);
-  border-left: 1px solid var(--gold-line);
-  font-family: var(--display);
-  font-size: var(--text-md);
-  color: var(--ink);
-  white-space: nowrap;
-}
-.numdie {
-  display: grid;
-  place-items: center;
-  border-radius: 9px;
-  background: #2f5fb0;
-  border: 2px solid #84a6e0;
-  color: #eef4ff;
-  font-weight: 700;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
-}
+/* (the combat-roll pop-up is gone — attacks throw REAL physics dice on the
+   table now, see three/Dice.tsx::CombatDice) */
 
 /* ---------------- winner overlay ---------------- */
 .winner {
@@ -2369,8 +2302,7 @@ body.ui-mobile .siege-alert {
 body.ui-mobile .elim-toasts {
   top: 92px;
 }
-body.ui-mobile .combat-toast,
-body.ui-mobile .combat-roll {
+body.ui-mobile .combat-toast {
   top: 44px;
 }
 body.ui-mobile .turn-banner {

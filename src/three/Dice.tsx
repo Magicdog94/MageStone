@@ -12,6 +12,7 @@ import {
 } from './textures';
 import { TABLE_HALF } from './coords';
 import { useGame } from '../store';
+import type { PlayerColor } from '../game/types';
 
 const DIE = 0.7; // edge length
 const H = DIE / 2;
@@ -402,12 +403,21 @@ const COMBAT_LINGER_MS = 2400; // how long the settled result stays on the table
 interface CombatRun {
   id: number;
   spec: CombatDieSpec[];
+  /** Who rolled what — announced by the HUD only once the dice have settled. */
+  roll: {
+    attacker: PlayerColor;
+    attackRoll: number;
+    defender: PlayerColor;
+    defenseRoll: number;
+    outcome: 'win' | 'lose' | 'draw';
+  };
 }
 
 let combatRunSeq = 0;
 
 function CombatDice() {
   const rolling = useGame((s) => s.rolling);
+  const showCombatRoll = useGame((s) => s.showCombatRoll);
 
   const [run, setRun] = useState<CombatRun | null>(null);
   const bodies = useRef<(RapierRigidBody | null)[]>([]);
@@ -428,12 +438,20 @@ function CombatDice() {
       liveFrames.current = 0;
       calmFrames.current = 0;
       window.clearTimeout(hideTimer.current);
+      showCombatRoll(null); // hide any prior result until THESE dice settle
       // Each side's dice land on that side's OWN tray (seats captured now,
       // so a turn change during the linger can't relocate them).
       const atkSeat = s.game.seats[c.attackerOwner] ?? 0;
       const defSeat = s.game.seats[c.defenderOwner] ?? 0;
       setRun({
         id: ++combatRunSeq,
+        roll: {
+          attacker: c.attackerOwner,
+          attackRoll: c.attackRoll,
+          defender: c.defenderOwner,
+          defenseRoll: c.defenseRoll,
+          outcome: c.outcome,
+        },
         spec: [
           ...c.attackDice.map((v, i) => ({
             faces: c.attackFaces,
@@ -458,7 +476,7 @@ function CombatDice() {
       unsub();
       window.clearTimeout(hideTimer.current);
     };
-  }, []);
+  }, [showCombatRoll]);
 
   useFrame(() => {
     if (!run || settled.current) return;
@@ -518,9 +536,17 @@ function CombatDice() {
         b.setLinvel({ x: 0, y: 0, z: 0 }, true);
         b.setAngvel({ x: 0, y: 0, z: 0 }, true);
       });
+      // The dice are now face-up on the table — NOW announce the numbers.
+      showCombatRoll(run.roll);
       hideTimer.current = window.setTimeout(() => setRun(null), COMBAT_LINGER_MS);
     }
   });
+
+  // Clear the announcement whenever the dice leave the table (a new turn-roll
+  // sweeps them, or the linger elapses).
+  useEffect(() => {
+    if (!run || rolling) showCombatRoll(null);
+  }, [run, rolling, showCombatRoll]);
 
   // The next turn's roll sweeps lingering combat dice off the tray.
   if (!run || rolling) return null;

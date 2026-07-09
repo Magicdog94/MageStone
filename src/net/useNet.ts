@@ -23,6 +23,14 @@ export interface Room {
   players: RoomPlayer[];
 }
 
+/** One account's win/loss record for the main-menu leaderboard. */
+export interface LbRow {
+  username: string;
+  played: number;
+  won: number;
+  lost: number;
+}
+
 interface NetState {
   screen: Screen;
   status: 'offline' | 'connecting' | 'online';
@@ -34,8 +42,11 @@ interface NetState {
   myColor: PlayerColor | null;
   joinError: string | null;
   notice: string | null;
+  /** Main-menu leaderboard: the top table + (if signed in) the user's own row. */
+  leaderboard: { top: LbRow[]; me: LbRow | null } | null;
 
   init: () => void;
+  fetchLeaderboard: () => void;
   setScreen: (s: Screen) => void;
   goAuth: (mode: 'signin' | 'signup') => void;
   playLocal: () => void;
@@ -158,6 +169,15 @@ export const useNet = create<NetState>((set, get) => {
         applyingRemote = false;
         break;
       }
+      case 'leaderboard': {
+        set({
+          leaderboard: {
+            top: (m.top as LbRow[]) ?? [],
+            me: (m.me as LbRow | null) ?? null,
+          },
+        });
+        break;
+      }
       case 'error':
         set({ notice: m.message as string });
         break;
@@ -175,10 +195,15 @@ export const useNet = create<NetState>((set, get) => {
     myColor: null,
     joinError: null,
     notice: null,
+    leaderboard: null,
 
     init: () => {
       // Auto-resume a saved session on load (token → server re-auth → lobby).
       if (localStorage.getItem(TOKEN_KEY)) ensureSocket();
+    },
+    fetchLeaderboard: () => {
+      // Public data — connect if needed, then ask (re-auth on connect fills `me`).
+      ensureSocket(() => sendWs({ t: 'leaderboard' }));
     },
     setScreen: (screen) => set({ screen }),
     goAuth: (mode) => {

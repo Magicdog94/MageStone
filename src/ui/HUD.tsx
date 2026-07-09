@@ -23,6 +23,26 @@ import { CogIcon, GraveIcon } from './Icons';
 const KIND_LABEL = { warrior: 'Warrior', mage: 'Mage', priest: 'Priest' } as const;
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
+/** "Red rolls 15 · Green rolls 4" — shown only once the physical combat dice
+ *  have settled face-up (set by three/Dice.tsx::CombatDice on settle). */
+function CombatAnnounce() {
+  const roll = useGame((s) => s.combatRoll);
+  if (!roll) return null;
+  return (
+    <div className="combat-announce" key={roll.nonce} role="status">
+      <span className="ca-side" style={{ '--accent': COLORS[roll.attacker] } as CSSProperties}>
+        <span className="ca-name">{cap(roll.attacker)}</span> rolls{' '}
+        <span className="ca-roll">{roll.attackRoll}</span>
+      </span>
+      <span className="ca-dot">·</span>
+      <span className="ca-side" style={{ '--accent': COLORS[roll.defender] } as CSSProperties}>
+        <span className="ca-name">{cap(roll.defender)}</span> rolls{' '}
+        <span className="ca-roll">{roll.defenseRoll}</span>
+      </span>
+    </div>
+  );
+}
+
 export function HUD() {
   const game = useGame((s) => s.game);
   const selectedUnitId = useGame((s) => s.selectedUnitId);
@@ -148,8 +168,9 @@ export function HUD() {
         </button>
       )}
 
-      {/* (attacks now roll REAL physics dice on the table — see Dice.tsx
-          CombatDice — instead of a pop-up box) */}
+      {/* attacks roll REAL physics dice on the table (Dice.tsx::CombatDice);
+          the numbers are announced here only once those dice settle face-up */}
+      <CombatAnnounce />
 
       {/* Bottom control frame — fixed width; right column: ritual · button */}
       <div className="hud-bottom">

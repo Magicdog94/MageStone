@@ -251,9 +251,15 @@ function SettingsModal() {
   const openModal = useGame((s) => s.openModal);
   const closeModal = useGame((s) => s.closeModal);
   const status = useNet((s) => s.status);
+  const screen = useNet((s) => s.screen);
   const leaveRoom = useNet((s) => s.leaveRoom);
   const setScreen = useNet((s) => s.setScreen);
   const online = status === 'online';
+  // On the entry screens (landing/auth/lobby) the "New Game" and "Main Menu"
+  // actions are in-game-only — New Game would swap to a modal the entry shell
+  // doesn't render (a dead-end blank), and Main Menu is redundant. There we
+  // show just Done.
+  const inGame = screen === 'game';
   const toMainMenu = () => {
     leaveRoom(); // no-op for local play; leaves the online room otherwise
     closeModal();
@@ -266,12 +272,16 @@ function SettingsModal() {
       onClose={closeModal}
       footer={
         <>
-          <button className="ghost" onClick={toMainMenu}>
-            Main Menu
-          </button>
-          <button className="ghost" onClick={() => openModal('newGame')}>
-            New Game
-          </button>
+          {inGame && (
+            <button className="ghost" onClick={toMainMenu}>
+              Main Menu
+            </button>
+          )}
+          {inGame && (
+            <button className="ghost" onClick={() => openModal('newGame')}>
+              New Game
+            </button>
+          )}
           <button className="primary" onClick={closeModal}>
             Done
           </button>

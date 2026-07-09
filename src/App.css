@@ -962,6 +962,53 @@
 /* (the combat-roll pop-up is gone — attacks throw REAL physics dice on the
    table now, see three/Dice.tsx::CombatDice) */
 
+/* ---------------- combat roll announcement ----------------
+   Shown ONLY once the physical dice settle face-up (Dice.tsx sets the store
+   field on settle), so the numbers reveal with the dice for tension. */
+.combat-announce {
+  position: absolute;
+  top: calc(var(--space-4) + var(--control-md) + var(--space-6) + var(--control-md) + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--gold-line);
+  background: linear-gradient(180deg, var(--panel-1), var(--panel-2));
+  box-shadow: var(--shadow-panel), inset 0 1px 0 rgba(255, 232, 175, 0.1);
+  font-family: var(--serif);
+  font-size: var(--text-md);
+  color: var(--ink-dim);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 20;
+  animation: ca-in 0.3s ease-out;
+}
+@keyframes ca-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+.ca-name {
+  color: var(--accent);
+  font-weight: 600;
+}
+.ca-roll {
+  font-family: var(--display);
+  font-size: var(--text-lg);
+  color: var(--gold-bright);
+}
+.ca-dot {
+  color: var(--gold-line);
+}
+
 /* ---------------- winner overlay ---------------- */
 .winner {
   top: 50%;
@@ -1701,6 +1748,87 @@
 .entry-cover .entry-status {
   margin-top: var(--space-3);
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+
+/* ---------------- main-menu leaderboard ---------------- */
+.leaderboard {
+  position: fixed;
+  top: clamp(16px, 4vh, 46px);
+  right: clamp(16px, 3vw, 44px);
+  z-index: 4;
+  width: min(360px, 40vw);
+  max-height: 74vh;
+  overflow: auto;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gold-line);
+  background: linear-gradient(180deg, rgba(12, 26, 18, 0.88), rgba(6, 15, 10, 0.92));
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-panel), inset 0 1px 0 rgba(255, 232, 175, 0.08);
+  color: var(--ink);
+}
+.lb-title {
+  font-family: var(--display);
+  font-size: var(--text-lg);
+  color: var(--gold-bright);
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-2);
+  text-align: center;
+}
+.lb-empty {
+  font-family: var(--serif);
+  font-size: var(--text-sm);
+  color: var(--ink-dim);
+  line-height: 1.5;
+  text-align: center;
+  padding: var(--space-2) 0;
+}
+.lb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.lb-table th {
+  font-family: var(--serif);
+  font-weight: 600;
+  color: var(--ink-dim);
+  text-align: right;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--gold-line);
+}
+.lb-table td {
+  text-align: right;
+  padding: 3px 6px;
+  border-bottom: 1px solid rgba(201, 162, 74, 0.12);
+}
+.lb-rank {
+  text-align: center;
+  width: 1.6em;
+  color: var(--ink-dim);
+}
+.lb-col-name {
+  text-align: left;
+  font-family: var(--serif);
+  max-width: 10em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-me td {
+  color: var(--gold-bright);
+  font-weight: 600;
+}
+.lb-me-extra td {
+  border-top: 1px solid var(--gold-line);
+}
+body.ui-mobile .leaderboard {
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  right: calc(env(safe-area-inset-right, 0px) + 8px);
+  width: min(300px, 52vw);
+  max-height: 80vh;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
 }
 
 /* dueling-mages backdrop (recreated box cover) */

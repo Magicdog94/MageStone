@@ -26,6 +26,20 @@ if (existsSync(USERS_FILE)) {
 }
 const saveUsers = () => writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
 
+// Win/loss records per account, for the main-menu leaderboard. Persist to
+// Postgres in production, a JSON file in dev — same shape either way.
+const STATS_FILE = join(DATA_DIR, 'stats.json');
+/** key(lowercase) -> { display, played, won, lost } */
+let statsMem = {};
+if (existsSync(STATS_FILE)) {
+  try {
+    statsMem = JSON.parse(readFileSync(STATS_FILE, 'utf8'));
+  } catch {
+    statsMem = {};
+  }
+}
+const saveStats = () => writeFileSync(STATS_FILE, JSON.stringify(statsMem, null, 2));
+
 // Accounts persist to Postgres when DATABASE_URL is set (production), else to the
 // local JSON file (dev). Same tiny interface either way: getUser / putUser.
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -42,7 +56,64 @@ async function initStore() {
   await pool.query(
     'CREATE TABLE IF NOT EXISTS users (key text PRIMARY KEY, salt text NOT NULL, hash text NOT NULL, display text NOT NULL)',
   );
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS stats (key text PRIMARY KEY, display text NOT NULL, played int NOT NULL DEFAULT 0, won int NOT NULL DEFAULT 0, lost int NOT NULL DEFAULT 0)',
+  );
   console.log('Using Postgres for accounts.');
+}
+
+/** Record one finished game for an account: +1 played, +1 won or +1 lost. */
+async function bumpStats(key, display, won) {
+  if (pool) {
+    await pool.query(
+      `INSERT INTO stats(key, display, played, won, lost) VALUES($1, $2, 1, $3, $4)
+       ON CONFLICT (key) DO UPDATE SET
+         played = stats.played + 1,
+         won = stats.won + $3,
+         lost = stats.lost + $4,
+         display = EXCLUDED.display`,
+      [key, display, won ? 1 : 0, won ? 0 : 1],
+    );
+  } else {
+    const st = statsMem[key] || { display, played: 0, won: 0, lost: 0 };
+    st.display = display;
+    st.played += 1;
+    if (won) st.won += 1;
+    else st.lost += 1;
+    statsMem[key] = st;
+    saveStats();
+  }
+}
+async function topStats(limit) {
+  if (pool) {
+    const r = await pool.query(
+      'SELECT key, display, played, won, lost FROM stats ORDER BY won DESC, played DESC, display ASC LIMIT $1',
+      [limit],
+    );
+    return r.rows;
+  }
+  return Object.entries(statsMem)
+    .map(([key, v]) => ({ key, ...v }))
+    .sort((a, b) => b.won - a.won || b.played - a.played || a.display.localeCompare(b.display))
+    .slice(0, limit);
+}
+async function getStat(key) {
+  if (!key) return null;
+  if (pool) {
+    const r = await pool.query('SELECT key, display, played, won, lost FROM stats WHERE key = $1', [key]);
+    return r.rows[0] || null;
+  }
+  return statsMem[key] ? { key, ...statsMem[key] } : null;
+}
+
+/** When a game ends, credit each HUMAN player: the winner's colour wins, the
+ *  rest lose. Bots have no account, so they're skipped — but a human's result
+ *  counts whether the opponents were people or bots. */
+async function recordResult(g, winnerColor) {
+  for (const p of g.players) {
+    if (p.bot || !p.username || p.username.startsWith('bot:')) continue;
+    await bumpStats(p.username, p.display, p.color === winnerColor);
+  }
 }
 async function getUser(key) {
   if (pool) {
@@ -254,7 +325,23 @@ async function handle(ws, s, m) {
       if (!g || !g.started) return;
       if (!g.players.some((p) => p.username === s.username)) return;
       g.state = m.state; // keep latest for reconnects
+      // Record the result once, the first time a winner appears in the state.
+      if (m.state && m.state.winner && !g.recorded) {
+        g.recorded = true;
+        recordResult(g, m.state.winner).catch((e) => console.error('stats error:', e.message));
+      }
       return broadcast(g, { t: 'state', state: m.state }, ws);
+    }
+    case 'leaderboard': {
+      // Public: the top table plus (if signed in) the requester's own row.
+      const top = await topStats(10);
+      const me = s.username ? await getStat(s.username) : null;
+      const row = (r) => ({ username: r.display, played: r.played, won: r.won, lost: r.lost });
+      return send(ws, {
+        t: 'leaderboard',
+        top: top.map(row),
+        me: me ? row(me) : null,
+      });
     }
     case 'leaveGame':
       return leaveRoom(ws, s);

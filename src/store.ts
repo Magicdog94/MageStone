@@ -53,6 +53,17 @@ export interface DeathEvent {
   cell: Cell;
 }
 
+/** The result of an attack, announced ONLY once the physical combat dice have
+ *  settled face-up on the table (so the number reveal builds tension). */
+export interface CombatRollInfo {
+  attacker: PlayerColor;
+  attackRoll: number;
+  defender: PlayerColor;
+  defenseRoll: number;
+  outcome: 'win' | 'lose' | 'draw';
+  nonce: number;
+}
+
 export interface Settings {
   healthBars: HealthBarMode;
   /** Per-turn time limit in seconds, or null for no limit. */
@@ -81,6 +92,12 @@ interface UIState {
   deathNonce: number;
   /** Bumped on every attack so the HUD replays the combat dice roll. */
   combatNonce: number;
+  /** The rolled combat result to announce — set by the 3D dice layer the moment
+   *  the physical dice SETTLE (not when the attack resolves), so "X rolls N,
+   *  Y rolls M" appears only after the faces are shown. Cleared when the dice
+   *  sweep away. */
+  combatRoll: CombatRollInfo | null;
+  showCombatRoll: (info: Omit<CombatRollInfo, 'nonce'> | null) => void;
 
   playerCount: number;
   /** Team colours selected for the local game, in clockwise turn order. Each
@@ -153,6 +170,7 @@ export const useGame = create<UIState>((set) => ({
   lastDeath: null,
   deathNonce: 0,
   combatNonce: 0,
+  combatRoll: null,
   playerCount: 2,
   playerColors: playerSet(2),
   stoneLayoutId: 'diamond',
@@ -236,6 +254,9 @@ export const useGame = create<UIState>((set) => ({
     set((s) => ({ settings: { ...s.settings, layout } }));
   },
   setHovered: (unitId) => set({ hoveredUnitId: unitId }),
+
+  showCombatRoll: (info) =>
+    set((s) => ({ combatRoll: info ? { ...info, nonce: s.combatNonce + 1 } : null })),
 
   roll: () =>
     set((s) => {

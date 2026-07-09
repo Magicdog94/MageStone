@@ -1,6 +1,6 @@
 // Pre-game entry flow: landing → sign in/up → lobby (create or join a game).
-import { useState, type FormEvent } from 'react';
-import { useNet } from '../../net/useNet';
+import { useEffect, useState, type FormEvent } from 'react';
+import { useNet, type LbRow } from '../../net/useNet';
 import { useGame } from '../../store';
 import { BOT_LABEL, BOT_LEVELS } from '../../game/bot';
 import { COLORS } from '../../three/coords';
@@ -211,6 +211,77 @@ function Shell({ children, bare = false }: { children: React.ReactNode; bare?: b
   );
 }
 
+/** Win/loss leaderboard on the main menu. Public top-10; the signed-in user's
+ *  own row is highlighted (and appended if they're outside the top). Results
+ *  are recorded server-side for every finished online game — versus real
+ *  players AND bots. */
+function Leaderboard() {
+  const status = useNet((s) => s.status);
+  const username = useNet((s) => s.username);
+  const leaderboard = useNet((s) => s.leaderboard);
+  const fetchLeaderboard = useNet((s) => s.fetchLeaderboard);
+  // (Re)fetch on mount and whenever the connection or login changes, so the
+  // "you" row fills in once a saved session re-authenticates.
+  useEffect(() => {
+    fetchLeaderboard();
+  }, [fetchLeaderboard, status, username]);
+
+  const rows = leaderboard?.top ?? [];
+  const me = leaderboard?.me ?? null;
+  const meInTop = !!me && rows.some((r) => r.username === me.username);
+  const pct = (r: LbRow) => (r.played ? Math.round((r.won / r.played) * 100) : 0);
+
+  return (
+    <aside className="leaderboard" aria-label="Leaderboard">
+      <div className="lb-title">Leaderboard</div>
+      {rows.length === 0 ? (
+        <div className="lb-empty">
+          {status === 'online'
+            ? 'No games recorded yet — win an online match (or beat a bot) to get on the board.'
+            : status === 'connecting'
+              ? 'Connecting…'
+              : 'Offline — cannot reach the server.'}
+        </div>
+      ) : (
+        <table className="lb-table">
+          <thead>
+            <tr>
+              <th className="lb-rank">#</th>
+              <th className="lb-col-name">Player</th>
+              <th title="Played">P</th>
+              <th title="Won">W</th>
+              <th title="Lost">L</th>
+              <th title="Win rate">%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={r.username} className={username && r.username === username ? 'lb-me' : ''}>
+                <td className="lb-rank">{i + 1}</td>
+                <td className="lb-col-name">{r.username}</td>
+                <td>{r.played}</td>
+                <td>{r.won}</td>
+                <td>{r.lost}</td>
+                <td>{pct(r)}%</td>
+              </tr>
+            ))}
+            {me && !meInTop && (
+              <tr className="lb-me lb-me-extra">
+                <td className="lb-rank">·</td>
+                <td className="lb-col-name">{me.username}</td>
+                <td>{me.played}</td>
+                <td>{me.won}</td>
+                <td>{me.lost}</td>
+                <td>{pct(me)}%</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      )}
+    </aside>
+  );
+}
+
 function Landing() {
   const goAuth = useNet((s) => s.goAuth);
   const playLocal = useNet((s) => s.playLocal);
@@ -225,6 +296,7 @@ function Landing() {
         <button className="menu-item" onClick={playLocal}>Hotseat</button>
         <button className="menu-item" onClick={() => openSettings('settings')}>Settings</button>
       </nav>
+      <Leaderboard />
       {showTutorial && <Tutorial onClose={() => setShowTutorial(false)} />}
     </Shell>
   );

@@ -2011,6 +2011,25 @@
   background: rgba(255, 255, 255, 0.04);
   color: var(--ink);
 }
+/* Main-page (entry) Settings: give the segmented controls the same gold look
+   as the in-game ones — the SELECTED option reads gold like the Done button,
+   the rest are gold-outlined. (The base .seg.active gold didn't reach here, so
+   active/idle looked identical and nothing read as gold.) */
+.entry .modal .seg {
+  color: var(--ink-dim);
+  background: rgba(0, 0, 0, 0.25);
+  border-color: var(--gold-line);
+}
+.entry .modal .seg:hover {
+  color: var(--gold-bright);
+  border-color: var(--gold);
+}
+.entry .modal .seg.active {
+  color: #2a1c06;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold-dim));
+  border-color: #e7c878;
+  font-weight: 700;
+}
 .entry .primary:hover,
 .entry .ghost:hover {
   transform: translateY(-1px);
@@ -2448,11 +2467,11 @@ body.ui-mobile .elim-toasts {
 body.ui-mobile .combat-toast {
   top: 44px;
 }
-/* the roll announcement sits above the slim mobile action bar (centred; the
-   arrow pad is far-right, so they don't collide) */
+/* the roll announcement sits just below the Turn/gravestone chips — clear of
+   the bottom (dpad + action bar) and the top score cards */
 body.ui-mobile .combat-announce {
-  top: auto;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 50px);
+  top: 76px;
+  bottom: auto;
 }
 
 /* ---- bottom: one slim action bar spanning the width ---- */
@@ -2536,14 +2555,20 @@ body.ui-mobile .ritual-flag {
   grid-row: 2;
 }
 
-/* ---- bottom-left: music + fullscreen pills in the action-bar gutter ---- */
+/* ---- bottom-left: music + fullscreen pills in the action-bar gutter ----
+   (reset the desktop top/right anchoring, which otherwise pins them top-left
+   over the player-strip score cards). */
 body.ui-mobile .music-toggle {
+  top: auto;
+  right: auto;
   left: calc(env(safe-area-inset-left, 0px) + 8px);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
   width: 34px;
   height: 34px;
 }
 body.ui-mobile .fs-toggle {
+  top: auto;
+  right: auto;
   left: calc(env(safe-area-inset-left, 0px) + 48px);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
   width: 34px;

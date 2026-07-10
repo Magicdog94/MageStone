@@ -2011,23 +2011,24 @@
   background: rgba(255, 255, 255, 0.04);
   color: var(--ink);
 }
-/* Main-page (entry) Settings: give the segmented controls the same gold look
-   as the in-game ones — the SELECTED option reads gold like the Done button,
-   the rest are gold-outlined. (The base .seg.active gold didn't reach here, so
-   active/idle looked identical and nothing read as gold.) */
+/* Main-page (entry) Settings: match the in-game segmented look — ONLY the
+   `.segmented` container is bordered; the individual buttons are borderless
+   (border transparent, so there's no double/offset border inside the pill) and
+   the SELECTED option reads gold like the Done button. (The base .seg.active
+   gold gradient didn't reach the entry-scoped modal, and .entry .seg had added
+   a per-button border, which together looked like an offset border.) */
 .entry .modal .seg {
   color: var(--ink-dim);
-  background: rgba(0, 0, 0, 0.25);
-  border-color: var(--gold-line);
+  background: transparent;
+  border-color: transparent;
 }
 .entry .modal .seg:hover {
   color: var(--gold-bright);
-  border-color: var(--gold);
 }
 .entry .modal .seg.active {
   color: #2a1c06;
   background: linear-gradient(180deg, var(--gold-bright), var(--gold-dim));
-  border-color: #e7c878;
+  border-color: transparent;
   font-weight: 700;
 }
 .entry .primary:hover,

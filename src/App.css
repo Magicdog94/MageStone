@@ -116,6 +116,17 @@
   color: #fff3d6;
   border-color: var(--gold);
 }
+/* On the main menu (desktop) the ornate gold border now hugs the screen edge,
+   so pull the music / fullscreen toggles down and in from the top-right corner
+   so they don't touch it. In-game and mobile placement stay as-is. */
+body:not(.ui-mobile):has(.entry) .music-toggle {
+  top: calc(var(--space-4) + 26px);
+  right: calc(var(--space-4) + 20px + 2 * (var(--control-md) + 8px));
+}
+body:not(.ui-mobile):has(.entry) .fs-toggle {
+  top: calc(var(--space-4) + 26px);
+  right: calc(var(--space-4) + 20px + var(--control-md) + 8px);
+}
 /* iPhone hint: pages can't go fullscreen there — point at Add to Home Screen */
 .fs-hint {
   position: fixed;

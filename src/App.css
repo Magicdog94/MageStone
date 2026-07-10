@@ -1883,6 +1883,13 @@
      duel stay in frame. */
   object-fit: cover;
   object-position: 50% 50%;
+  /* The 1920×1080 cover art has a ~20-25px dark MARGIN baked around its gilt
+     border (measured per side). Overscan per-axis (clipped by the wrap's
+     overflow:hidden) so that margin is cropped and the ornate border reaches
+     the screen edge on all four sides — non-uniform because the equal-pixel
+     margins are a smaller % on the wide axis. The .entry--cover::after gold
+     frame backstops whichever axis object-fit:cover crops on non-16:9 screens. */
+  transform: scale(1.028, 1.046);
 }
 /* gentle scrim: keep the art bright, only darken the bottom for the controls */
 .entry-photo-wrap::after {

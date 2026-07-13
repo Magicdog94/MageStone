@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useRef, type CSSProperties } from 'react';
 import { useGame } from '../../store';
 import { useNet } from '../../net/useNet';
+import { OddsTable } from '../Tutorial';
 import { useTutorial, type Placement } from './useTutorial';
 import { runTutorial } from './tutorialScript';
 
@@ -110,17 +111,28 @@ export function TutorialCoach() {
     <div className="tut-root">
       {/* full-screen click blocker so the guided game isn't disturbed */}
       <div className="tut-blocker" />
-      <button className="tut-skip" onClick={skip}>
-        Skip tutorial
-      </button>
       {callout && (
         <>
           {spot && <div className="tut-spot" style={spot} />}
-          <div className={`tut-box tut-${placement}`} style={box} role="dialog" aria-live="polite">
+          <div
+            className={`tut-box tut-${placement}${callout.showOdds ? ' tut-wide' : ''}`}
+            style={box}
+            role="dialog"
+            aria-live="polite"
+          >
             {arrow && <span className="tut-arrow" style={arrow} />}
             {callout.title && <div className="tut-title">{callout.title}</div>}
             <div className="tut-body">{callout.body}</div>
+            {/* the Rule Book's win-% grid, for the combat lesson */}
+            {callout.showOdds && (
+              <div className="tut-odds">
+                <OddsTable />
+              </div>
+            )}
             <div className="tut-foot">
+              <button className="tut-skipbtn" onClick={skip}>
+                Skip tutorial
+              </button>
               <button className="primary tut-gotit" onClick={gotIt}>
                 {callout.gotItLabel ?? 'Got it'}
               </button>

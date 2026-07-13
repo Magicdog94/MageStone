@@ -163,7 +163,7 @@ const ODDS: { roll: string; vs: [number, number, number] }[] = [
 ];
 const oddsBand = (v: number) => (v >= 67 ? 'hi' : v >= 34 ? 'mid' : 'lo');
 
-function OddsTable() {
+export function OddsTable() {
   return (
     <div className="htp-table-wrap">
       <table className="htp-table">
@@ -537,7 +537,7 @@ export function Tutorial({ onClose }: { onClose: () => void }) {
         className="htp-panel"
         role="dialog"
         aria-modal="true"
-        aria-label="How to Play MageStone"
+        aria-label="MageStone Rule Book"
         onClick={(e) => e.stopPropagation()}
       >
         <button className="htp-close" onClick={onClose} aria-label="Close">
@@ -546,7 +546,7 @@ export function Tutorial({ onClose }: { onClose: () => void }) {
 
         <header className="htp-hero">
           <div className="htp-eyebrow">Fantasy Strategy · 2–4 Players</div>
-          <h1 className="htp-hero-title">How to Play MageStone</h1>
+          <h1 className="htp-hero-title">MageStone Rule Book</h1>
           <Divider />
         </header>
 

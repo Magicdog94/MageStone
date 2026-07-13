@@ -160,8 +160,9 @@ interface UIState {
 
   /** Attack `targetId` with the currently selected unit. `attackerIds` lets the
    *  action bar pick the coordination level (single/double/triple); omitted, the
-   *  board-click path auto-maximises coordination via `plannedAttackers`. */
-  attack: (targetId: string, attackerIds?: string[]) => void;
+   *  board-click path auto-maximises coordination via `plannedAttackers`. `rng`
+   *  overrides the dice randomness (the guided Tutorial scripts its combat). */
+  attack: (targetId: string, attackerIds?: string[], rng?: () => number) => void;
   collectStones: () => void;
   activateStones: () => void;
   doResurrect: () => void;
@@ -360,7 +361,7 @@ export const useGame = create<UIState>((set) => ({
       outOfTurn(s) ? {} : { game: endTurn(s.game), selectedUnitId: null, selectedDieId: null },
     ),
 
-  attack: (targetId, attackerIds) =>
+  attack: (targetId, attackerIds, rng) =>
     set((s) => {
       const { game, selectedUnitId } = s;
       if (!selectedUnitId || outOfTurn(s)) return {};
@@ -369,7 +370,7 @@ export const useGame = create<UIState>((set) => ({
           ? attackerIds
           : plannedAttackers(game, selectedUnitId, targetId);
       if (ids.length === 0) return {};
-      const game2 = resolveAttack(game, ids, targetId);
+      const game2 = resolveAttack(game, ids, targetId, rng);
       if (game2 === game) return {};
       const out: Partial<UIState> = {
         game: game2,

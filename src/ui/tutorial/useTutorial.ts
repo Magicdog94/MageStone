@@ -12,6 +12,8 @@ export interface Callout {
   anchor?: string;
   placement?: Placement;
   gotItLabel?: string;
+  /** Render the win-% odds grid (the Rule Book table) under the note text. */
+  showOdds?: boolean;
   /** Step n of m — shown as a small progress hint. */
   step?: number;
   total?: number;

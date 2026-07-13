@@ -309,7 +309,7 @@ function Landing() {
       <nav className="entry-menu">
         <button className="menu-item" onClick={() => goAuth('signin')}>Sign In</button>
         <button className="menu-item" onClick={() => goAuth('signup')}>Sign Up</button>
-        <button className="menu-item" onClick={() => setShowTutorial(true)}>How to Play</button>
+        <button className="menu-item" onClick={() => setShowTutorial(true)}>Rule Book</button>
         <button className="menu-item" onClick={playTutorial}>Tutorial</button>
         <button className="menu-item" onClick={playLocal}>Hotseat</button>
         <button className="menu-item" onClick={() => setShowLeaderboard(true)}>Leaderboard</button>

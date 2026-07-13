@@ -173,34 +173,81 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'attackbtns',
       title: 'Attack — and coordinate',
-      body: 'Adjacent enemies can be attacked from here. Warriors COORDINATE: 1 rolls 1 die, 2 roll 2 dice, 3 roll 3 dice (summed) — more attackers, better odds. Each button shows the win chance. We’ll launch a Triple Attack.',
+      body: 'Adjacent enemies can be attacked from here. Warriors COORDINATE: 1 Warrior rolls 1 die (50% to win), 2 roll 2 dice (90%), 3 roll 3 dice (99%) — every extra attacker stacks the odds. Each button shows your win chance.',
       anchor: '.unit-actions',
       placement: 'top',
     });
-    g().attack('blue-w1', ['red-w3', 'red-w1', 'red-w2']);
+    await note({
+      id: 'oddsgrid',
+      title: 'Know your odds',
+      body: 'Your roll (row) against the defender’s die (column). The defender rolls a d6 — unless it’s a Mage, which defends with its power die. Ties are always re-rolled, so a fight is never a stalemate.',
+      placement: 'center',
+      showOdds: true,
+    });
+    // Scripted dice (5+4+6 = 15 vs 2) so the lesson always ends in a win — the
+    // learner should see coordination pay off, not a 1-in-100 upset.
+    const rig = [0.7, 0.55, 0.99, 0.2];
+    let rigI = 0;
+    g().attack('blue-w1', ['red-w3', 'red-w1', 'red-w2'], () => rig[Math.min(rigI++, rig.length - 1)]);
     await until(() => g().combatRoll !== null, 5000);
     await wait(400);
     {
-      const lc = g().game.lastCombat;
-      const won = !!lc && lc.outcome === 'win';
+      const roll = g().combatRoll;
+      const a = roll?.attackRoll ?? 15;
+      const d = roll?.defenseRoll ?? 2;
       await note({
         id: 'combatresult',
-        title: 'Combat resolved',
-        body: won
-          ? 'Higher total wins, so the enemy is defeated and leaves a gravestone. The defender always rolls too, and ties are re-rolled — combat is never a stalemate.'
-          : 'The defender rolled higher this time, so one attacker falls. Combat is decided by dice — coordinating stacks the odds in your favour.',
+        title: 'Why Red won',
+        body: `Red rolled ${a} with its three dice; Blue’s defender rolled ${d}. ${a} beats ${d}, so Red wins this fight and the Blue Warrior is defeated.`,
         anchor: '.combat-announce',
         placement: 'bottom',
       });
     }
 
+    // ---- Gravestones -------------------------------------------------------
+    await note({
+      id: 'graverules',
+      title: 'A gravestone drops',
+      body: 'The fallen Warrior left a gravestone on its square — but only while this shared bank has stock (3 per player). And NEVER in the Nexus: a Warrior slain on the centre 2×2 leaves nothing.',
+      anchor: '.grave-bank',
+      placement: 'bottom',
+    });
+
+    // ---- Priest: resurrect + Ritual victory --------------------------------
+    await note({
+      id: 'priest',
+      title: 'The Priest',
+      body: 'Priests never attack — and if one WINS its defence it only repels the attacker (no one dies). Their power: stand a Priest on any gravestone to RESURRECT a Warrior there (up to 6 alive).',
+      placement: 'center',
+    });
+    await note({
+      id: 'ritual',
+      title: 'Ritual Victory',
+      body: 'The Priest can also win the game: move it into the Nexus — the 2×2 heart of the board — with no enemies on those 4 squares, begin a ritual, and survive one full round. That’s a Ritual Victory.',
+      placement: 'center',
+    });
+
+    // ---- Siege -------------------------------------------------------------
+    await note({
+      id: 'siege',
+      title: 'Under siege',
+      body: 'When an enemy stands on your base squares you are UNDER SIEGE: your fallen Mage and Priest cannot respawn until the base is cleared. A player whose last units are locked out this way is eliminated.',
+      placement: 'center',
+    });
+
     // ---- MageStones / winning (explained, pointing at the metric) ----------
     await note({
       id: 'stones',
       title: 'MageStones & winning',
-      body: 'Move your Mage onto a MageStone to collect it, then back to your base to ACTIVATE it. Activate 6 and stand on your base for a MageStone Victory — track it on this gold number.',
+      body: 'Move your Mage onto a MageStone to collect it, then back to your base to ACTIVATE it. Activated stones upgrade the Mage’s attack die — d6, d12 at 2, d20 at 4 — and 6 of them while standing on your base is a MageStone Victory.',
       anchor: '[data-tut="activated"]',
       placement: 'bottom',
+    });
+    await note({
+      id: 'conquest',
+      title: 'Conquest Victory',
+      body: 'The third way to win: wipe every rival out. Eliminate all enemy units (with their respawns besieged or spent) and the last player standing claims a Conquest Victory.',
+      placement: 'center',
     });
 
     // ---- End turn ----------------------------------------------------------
@@ -247,7 +294,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'wrap',
       title: 'You’ve got the basics!',
-      body: 'Win three ways: MageStone (activate 6), Ritual (hold the Nexus with your Priest for a full round), or Conquest (defeat everyone). That’s it — go play!',
+      body: 'Three roads to victory: MageStone (6 activated, on your base), Ritual (your Priest holds the Nexus a full round), Conquest (last one standing). That’s everything — go play!',
       placement: 'center',
       gotItLabel: 'Finish',
     });

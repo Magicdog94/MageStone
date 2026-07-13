@@ -1028,24 +1028,20 @@ body:not(.ui-mobile):has(.entry) .fs-toggle {
   inset: 0;
   pointer-events: auto;
 }
-.tut-skip {
-  position: absolute;
-  top: calc(env(safe-area-inset-top, 0px) + 10px);
-  right: calc(env(safe-area-inset-right, 0px) + 12px);
-  pointer-events: auto;
-  height: var(--control-sm);
+/* "Skip tutorial" lives INSIDE every note, left of the gold Got it button */
+.tut-skipbtn {
+  height: var(--control-md);
   padding: 0 var(--space-3);
   border: 1px solid var(--gold-line);
   border-radius: var(--radius-sm);
-  background: rgba(8, 12, 8, 0.7);
+  background: transparent;
   color: var(--ink-dim);
   font-family: var(--display);
   font-size: var(--text-xs);
   letter-spacing: 0.5px;
   cursor: pointer;
-  z-index: 3;
 }
-.tut-skip:hover {
+.tut-skipbtn:hover {
   color: var(--gold-bright);
   border-color: var(--gold);
 }
@@ -1105,12 +1101,46 @@ body:not(.ui-mobile):has(.entry) .fs-toggle {
 }
 .tut-foot {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
   margin-top: var(--space-3);
 }
+/* the coach sits outside .hud/.entry, so give its gold button explicit styling */
 .tut-gotit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: var(--control-md);
   padding: 0 var(--space-5);
+  border: 1px solid #f3d590;
+  border-radius: var(--radius-sm);
+  font-family: var(--display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #2a1c06;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold) 55%, var(--gold-dim));
+  box-shadow: 0 3px 0 #5e4715, 0 6px 14px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+.tut-gotit:hover {
+  filter: brightness(1.1);
+}
+.tut-gotit:active {
+  transform: translateY(2px);
+}
+/* the win-% grid borrowed from the Rule Book, sized for the note box */
+.tut-wide {
+  width: 420px;
+}
+.tut-odds {
+  margin-top: var(--space-3);
+}
+.tut-odds .htp-table {
+  width: 100%;
+  font-size: var(--text-xs);
 }
 /* the little arrow pointing from the box toward the spotlighted element */
 .tut-arrow {

@@ -2,12 +2,14 @@ import type { CSSProperties } from 'react';
 import { useGame } from '../store';
 import { COLORS } from '../three/coords';
 import { useTokenUrl } from '../three/tokens';
+import { usePlayerLabel } from './playerNames';
 import { StoneIcon, SwordIcon } from './Icons';
 
 /** Top status strip — per player: unactivated + activated MageStones and kills. */
 export function PlayerStrip() {
   const game = useGame((s) => s.game);
   const bots = useGame((s) => s.bots);
+  const label = usePlayerLabel();
   const silverUrl = useTokenUrl('unactivated');
   const goldUrl = useTokenUrl('activated');
 
@@ -28,7 +30,7 @@ export function PlayerStrip() {
             className={`pstat${active ? ' active' : ''}${out ? ' out' : ''}`}
             style={{ '--pc': COLORS[p] } as CSSProperties}
           >
-            <span className="pstat-name">{p}</span>
+            <span className="pstat-name">{label(p)}</span>
             {out ? (
               <span className="pstat-badge tip" data-tip="Eliminated — no units left">
                 OUT

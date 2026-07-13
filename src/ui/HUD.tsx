@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { unitActions, useGame } from '../store';
+import { attackOptions, unitActions, useGame } from '../store';
 import { useNet } from '../net/useNet';
+import { usePlayerLabel } from './playerNames';
 import { COLORS } from '../three/coords';
 import {
   discardsLeft,
@@ -21,22 +22,22 @@ import { Modals } from './Modals';
 import { CogIcon, GraveIcon } from './Icons';
 
 const KIND_LABEL = { warrior: 'Warrior', mage: 'Mage', priest: 'Priest' } as const;
-const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /** "Red rolls 15 · Green rolls 4" — shown only once the physical combat dice
  *  have settled face-up (set by three/Dice.tsx::CombatDice on settle). */
 function CombatAnnounce() {
   const roll = useGame((s) => s.combatRoll);
+  const label = usePlayerLabel();
   if (!roll) return null;
   return (
     <div className="combat-announce" key={roll.nonce} role="status">
       <span className="ca-side" style={{ '--accent': COLORS[roll.attacker] } as CSSProperties}>
-        <span className="ca-name">{cap(roll.attacker)}</span> rolls{' '}
+        <span className="ca-name">{label(roll.attacker)}</span> rolls{' '}
         <span className="ca-roll">{roll.attackRoll}</span>
       </span>
       <span className="ca-dot">·</span>
       <span className="ca-side" style={{ '--accent': COLORS[roll.defender] } as CSSProperties}>
-        <span className="ca-name">{cap(roll.defender)}</span> rolls{' '}
+        <span className="ca-name">{label(roll.defender)}</span> rolls{' '}
         <span className="ca-roll">{roll.defenseRoll}</span>
       </span>
     </div>
@@ -61,6 +62,8 @@ export function HUD() {
   const online = useGame((s) => s.online);
   const myColor = useGame((s) => s.myColor);
   const bots = useGame((s) => s.bots);
+  const attack = useGame((s) => s.attack);
+  const label = usePlayerLabel();
   // A bot's turn is never "my turn" — the BotDriver plays it; humans watch.
   const myTurn = !bots[game.current] && (!online || game.current === myColor);
   const exitToLobby = () => {
@@ -101,6 +104,7 @@ export function HUD() {
 
   const selectedUnit = selectedUnitId ? unitById(game, selectedUnitId) : undefined;
   const actions = unitActions(game, selectedUnitId);
+  const attackOpts = myTurn ? attackOptions(game, selectedUnitId) : [];
   const phase = game.turnPhase;
 
   const dleft = phase === 'discard' ? discardsLeft(game) : 0;
@@ -118,9 +122,7 @@ export function HUD() {
           <span className="winner-eyebrow">
             {game.winMethod ? `${game.winMethod} Victory` : 'Victory'}
           </span>
-          <span className="winner-name">
-            {online && game.winner === myColor ? 'You win' : `${cap(game.winner)} wins`}
-          </span>
+          <span className="winner-name">{`${label(game.winner)} wins`}</span>
           {online ? (
             <button className="primary" onClick={exitToLobby}>
               Back to Lobby
@@ -154,7 +156,7 @@ export function HUD() {
       </div>
       {online && (
         <div className={`turn-banner ${myTurn ? 'mine' : ''}`} style={{ '--accent': COLORS[game.current] } as CSSProperties}>
-          {myTurn ? 'Your turn' : `${cap(game.current)}'s turn`}
+          {myTurn ? 'Your turn' : `${label(game.current)}'s turn`}
         </div>
       )}
       <SiegeBanner />
@@ -219,6 +221,20 @@ export function HUD() {
                 </div>
               )}
               <div className="unit-actions">
+                {/* Attack from the bar — no need to click the enemy on the board.
+                    Warriors offer Single/Double/Triple (coordinated); a Mage a
+                    lone Attack with its power die. */}
+                {attackOpts.map((o) => (
+                  <button
+                    key={o.count}
+                    className="primary attack-btn"
+                    onClick={() => attack(o.targetId, o.attackerIds)}
+                    title={`Win chance ${Math.round(o.odds * 100)}%`}
+                  >
+                    {o.label}
+                    <small>{Math.round(o.odds * 100)}%</small>
+                  </button>
+                ))}
                 {actions.collect && <button onClick={collectStones}>Collect</button>}
                 {actions.activate && <button onClick={activateStones}>Activate</button>}
                 {actions.resurrect && <button onClick={doResurrect}>Resurrect</button>}
@@ -230,7 +246,7 @@ export function HUD() {
           ) : phase === 'roll' ? (
             /* pre-roll: name whose turn it is right here, where the eyes are */
             <>
-              <strong style={{ color: COLORS[game.current] }}>{cap(game.current)} to roll</strong>
+              <strong style={{ color: COLORS[game.current] }}>{label(game.current)} to roll</strong>
               <div className="muted">Roll to begin</div>
             </>
           ) : (
@@ -249,7 +265,7 @@ export function HUD() {
         <div className="actions">
           {!myTurn ? (
             <span className="muted">
-              {cap(game.current)}
+              {label(game.current)}
               {bots[game.current] ? ' (bot)' : ''} is playing…
             </span>
           ) : (

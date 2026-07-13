@@ -943,6 +943,77 @@ body:not(.ui-mobile):has(.entry) .fs-toggle {
   margin-top: var(--space-2);
   flex-wrap: wrap;
 }
+/* the action-bar attack buttons carry a small win-% badge after the label */
+.attack-btn small {
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0;
+  opacity: 0.85;
+}
+
+/* ---- full-screen gates: "Loading Game" + "Turn to Landscape" ---- */
+.loading-gate,
+.orient-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(120% 120% at 50% 40%, #16210f 0%, #0a1108 70%, #060a05 100%);
+  pointer-events: auto;
+}
+.loading-card,
+.orient-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-8);
+  text-align: center;
+}
+.loading-title,
+.orient-title {
+  font-family: var(--display);
+  font-size: var(--text-lg);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--gold-bright);
+}
+.loading-sub,
+.orient-sub {
+  font-family: var(--serif);
+  font-size: var(--text-md);
+  color: var(--ink-dim);
+}
+.loading-bar {
+  width: min(280px, 70vw);
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--gold-line);
+  background: rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+.loading-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold-dim), var(--gold-bright));
+  transition: width 0.25s ease;
+}
+.orient-icon {
+  color: var(--gold);
+  animation: orient-rock 1.8s ease-in-out infinite;
+}
+@keyframes orient-rock {
+  0%,
+  60%,
+  100% {
+    transform: rotate(0deg);
+  }
+  30% {
+    transform: rotate(-90deg);
+  }
+}
 .muted {
   color: var(--ink-dim);
 }
@@ -2426,8 +2497,8 @@ body.ui-mobile .brand {
 /* ---- top-left: player cards + the turn timer under them ---- */
 body.ui-mobile .player-strip {
   top: 6px;
-  left: calc(env(safe-area-inset-left, 0px) + 8px);
-  transform: none;
+  left: 50%;
+  transform: translateX(-50%);
   gap: 4px;
 }
 body.ui-mobile .pstat {
@@ -2452,8 +2523,8 @@ body.ui-mobile .pstat-badge {
 }
 body.ui-mobile .turn-timer-top {
   top: 40px;
-  left: calc(env(safe-area-inset-left, 0px) + 8px);
-  transform: none;
+  left: 50%;
+  transform: translateX(-50%);
   width: 180px !important; /* the inline measured width is a desktop concern */
   height: 4px;
 }
@@ -2465,7 +2536,7 @@ body.ui-mobile .gear {
   right: calc(env(safe-area-inset-right, 0px) + 8px);
 }
 body.ui-mobile .top-chips {
-  top: 42px; /* second row — clear of the player cards even in 4-player */
+  top: 48px; /* third row — below the centred cards + timer bar */
   left: 50%;
   right: auto;
   transform: translateX(-50%);
@@ -2491,13 +2562,13 @@ body.ui-mobile .leave-btn {
 /* Stacked rows BELOW the centred Turn/gravestone chips (top ~42, ends ~66),
    so the top status UI is never covered on phones either. */
 body.ui-mobile .turn-banner {
-  top: 70px;
+  top: 80px;
 }
 body.ui-mobile .siege-alert {
-  top: 96px;
+  top: 106px;
 }
 body.ui-mobile .elim-toasts {
-  top: 122px;
+  top: 132px;
 }
 body.ui-mobile .combat-toast {
   top: 44px;
@@ -2616,6 +2687,16 @@ body.ui-mobile .entry {
 }
 body.ui-mobile .entry-cover {
   padding-left: calc(env(safe-area-inset-left, 0px) + 40px);
+}
+/* Cover art on phones: a phone in landscape is far wider (≈2.16) than the 16:9
+   art, so object-fit:cover would crop a big band off the TOP and bottom — hiding
+   the gold star + "MageStone" wordmark the user wants visible. Anchor the art to
+   the TOP so the emblem, wordmark and top border always show (the extra height
+   is shed off the BOTTOM instead), and overscan only HORIZONTALLY so the side
+   dark margins are cropped and the gilt side borders still reach the edge. */
+body.ui-mobile .entry-photo {
+  object-position: 50% 0%;
+  transform: scale(1.028, 1);
 }
 body.ui-mobile .modal {
   max-height: min(96vh, 96dvh);

@@ -10,6 +10,7 @@ import {
   canResurrect,
   canRitual,
   collect,
+  combatOdds,
   discardDie,
   endTurn,
   legalMoves,
@@ -148,7 +149,10 @@ interface UIState {
   moveTo: (dest: Cell) => void;
   endTurn: () => void;
 
-  attack: (targetId: string) => void;
+  /** Attack `targetId` with the currently selected unit. `attackerIds` lets the
+   *  action bar pick the coordination level (single/double/triple); omitted, the
+   *  board-click path auto-maximises coordination via `plannedAttackers`. */
+  attack: (targetId: string, attackerIds?: string[]) => void;
   collectStones: () => void;
   activateStones: () => void;
   doResurrect: () => void;
@@ -320,13 +324,16 @@ export const useGame = create<UIState>((set) => ({
       outOfTurn(s) ? {} : { game: endTurn(s.game), selectedUnitId: null, selectedDieId: null },
     ),
 
-  attack: (targetId) =>
+  attack: (targetId, attackerIds) =>
     set((s) => {
       const { game, selectedUnitId } = s;
       if (!selectedUnitId || outOfTurn(s)) return {};
-      const attackerIds = plannedAttackers(game, selectedUnitId, targetId);
-      if (attackerIds.length === 0) return {};
-      const game2 = resolveAttack(game, attackerIds, targetId);
+      const ids =
+        attackerIds && attackerIds.length > 0
+          ? attackerIds
+          : plannedAttackers(game, selectedUnitId, targetId);
+      if (ids.length === 0) return {};
+      const game2 = resolveAttack(game, ids, targetId);
       if (game2 === game) return {};
       const out: Partial<UIState> = {
         game: game2,
@@ -389,6 +396,63 @@ export function moveDestinations(game: GameState, unitId: string | null, dieId: 
 export function attackTargetIds(game: GameState, unitId: string | null): Set<string> {
   if (game.turnPhase !== 'act' || !unitId) return new Set();
   return new Set(attackTargets(game, unitId).map((u) => u.id));
+}
+
+/** One selectable attack for the action bar: how many attackers coordinate, who
+ *  they are, the enemy targeted, and the win odds. */
+export interface AttackOption {
+  label: string;
+  count: number;
+  attackerIds: string[];
+  targetId: string;
+  odds: number;
+}
+
+/**
+ * Attack buttons to show on the action bar for the selected unit, so a player
+ * can attack from the HUD instead of clicking the enemy on the 3D board. Targets
+ * the best adjacent enemy (highest win odds, then most valuable kind) and offers
+ * Single / Double / Triple for a Warrior (as coordinating Warriors + free dice
+ * allow) or a lone Attack for a Mage (with its power die — Mages can't coordinate).
+ */
+export function attackOptions(game: GameState, unitId: string | null): AttackOption[] {
+  if (game.turnPhase !== 'act' || !unitId) return [];
+  const unit = unitById(game, unitId);
+  if (!unit || unit.kind === 'priest') return [];
+  const targets = attackTargets(game, unitId);
+  if (targets.length === 0) return [];
+  // Pick the single best target: highest win odds at full coordination, breaking
+  // ties toward the more valuable enemy (mage > priest > warrior).
+  const kindRank = { mage: 3, priest: 2, warrior: 1 } as const;
+  let best = targets[0];
+  let bestScore = -Infinity;
+  for (const t of targets) {
+    const planned = plannedAttackers(game, unitId, t.id);
+    const score = combatOdds(game, planned, t.id).win * 10 + kindRank[t.kind];
+    if (score > bestScore) {
+      bestScore = score;
+      best = t;
+    }
+  }
+  if (unit.kind === 'mage') {
+    return [
+      { label: 'Attack', count: 1, attackerIds: [unitId], targetId: best.id, odds: combatOdds(game, [unitId], best.id).win },
+    ];
+  }
+  const planned = plannedAttackers(game, unitId, best.id);
+  const labels = ['Single Attack', 'Double Attack', 'Triple Attack'];
+  const opts: AttackOption[] = [];
+  for (let n = 1; n <= Math.min(3, planned.length); n++) {
+    const attackerIds = planned.slice(0, n);
+    opts.push({
+      label: labels[n - 1],
+      count: n,
+      attackerIds,
+      targetId: best.id,
+      odds: combatOdds(game, attackerIds, best.id).win,
+    });
+  }
+  return opts;
 }
 
 export function unitActions(game: GameState, unitId: string | null) {

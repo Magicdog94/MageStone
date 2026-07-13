@@ -253,3 +253,8 @@ export const useNet = create<NetState>((set, get) => {
     },
   };
 });
+
+// Dev-only: expose the net store so previews/tests can drive screens headlessly.
+if (import.meta.env.DEV) {
+  (window as unknown as { __net?: typeof useNet }).__net = useNet;
+}

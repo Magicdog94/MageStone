@@ -4,6 +4,8 @@ import { BotDriver } from './ui/BotDriver';
 import { HUD } from './ui/HUD';
 import { AlphaWelcome } from './ui/AlphaWelcome';
 import { CopyrightNotice } from './ui/CopyrightNotice';
+import { LoadingGate } from './ui/LoadingGate';
+import { OrientationGate } from './ui/OrientationGate';
 import { EntryScreens } from './ui/screens/Screens';
 import { MusicToggle } from './ui/MusicToggle';
 import { FullscreenToggle } from './ui/FullscreenToggle';
@@ -48,6 +50,8 @@ export default function App() {
           <HUD />
           <BotDriver />
           <AlphaWelcome />
+          {/* Cover the board with "Loading Game" until the 3D assets are ready. */}
+          <LoadingGate />
           <div className="brand">
             Mage<span>Stone</span> <em>prototype</em>
           </div>
@@ -55,6 +59,8 @@ export default function App() {
       )}
       <MusicToggle />
       <FullscreenToggle />
+      {/* Mobile-only: prompt to rotate when the phone is held in portrait. */}
+      <OrientationGate />
       {/* Blocking copyright / alpha notice — sits over everything on first load
           (the front page) until acknowledged. */}
       <CopyrightNotice />

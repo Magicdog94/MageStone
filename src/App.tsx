@@ -6,6 +6,7 @@ import { AlphaWelcome } from './ui/AlphaWelcome';
 import { CopyrightNotice } from './ui/CopyrightNotice';
 import { LoadingGate } from './ui/LoadingGate';
 import { OrientationGate } from './ui/OrientationGate';
+import { TutorialCoach } from './ui/tutorial/TutorialCoach';
 import { EntryScreens } from './ui/screens/Screens';
 import { MusicToggle } from './ui/MusicToggle';
 import { FullscreenToggle } from './ui/FullscreenToggle';
@@ -52,6 +53,8 @@ export default function App() {
           <AlphaWelcome />
           {/* Cover the board with "Loading Game" until the 3D assets are ready. */}
           <LoadingGate />
+          {/* Guided tutorial: spotlights + notes that drive the game itself. */}
+          <TutorialCoach />
           <div className="brand">
             Mage<span>Stone</span> <em>prototype</em>
           </div>

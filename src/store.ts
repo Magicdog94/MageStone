@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { createGame, orderPlayers, playerSet } from './game/setup';
+import { createTutorialGame } from './game/tutorialSetup';
 import {
   activate,
   attackTargets,
@@ -111,6 +112,8 @@ interface UIState {
   /** False until the first game is started — the opening New Game modal is then
    *  mandatory (no Cancel/close) so the player must pick before the timer runs. */
   started: boolean;
+  /** True while the guided Tutorial mode is running (TutorialCoach drives play). */
+  tutorial: boolean;
 
   /** Online multiplayer: true for a networked match; `myColor` is the colour this
    *  client controls (null = local hot-seat, where every colour is controllable). */
@@ -128,6 +131,12 @@ interface UIState {
     isHost?: boolean,
   ) => void;
   setLocalMode: () => void;
+  /** Start the guided Tutorial: a pre-arranged 2-player board the TutorialCoach
+   *  plays automatically while narrating every rule. */
+  startTutorial: () => void;
+  /** Tutorial-only fixed roll: set the 5 dice to exact values with no physics
+   *  throw, so the guided script is deterministic (order: mage, priest, w, w, w). */
+  tutorialRoll: (values: number[]) => void;
 
   newGame: (
     players?: number | PlayerColor[],
@@ -183,6 +192,7 @@ export const useGame = create<UIState>((set) => ({
   // before the turn timer starts (the timer pauses while any modal is open).
   modal: 'newGame',
   started: false,
+  tutorial: false,
   online: false,
   myColor: null,
   bots: {},
@@ -196,6 +206,7 @@ export const useGame = create<UIState>((set) => ({
       bots,
       botController: isHost,
       started: true,
+      tutorial: false,
       modal: null,
       selectedUnitId: null,
       selectedDieId: null,
@@ -210,11 +221,35 @@ export const useGame = create<UIState>((set) => ({
       bots: {},
       botController: true,
       started: false,
+      tutorial: false,
       modal: 'newGame',
       game: createGame(s.playerColors, s.stoneLayoutId),
       selectedUnitId: null,
       selectedDieId: null,
       rolling: false,
+    })),
+
+  startTutorial: () =>
+    set({
+      online: false,
+      myColor: null,
+      bots: {},
+      botController: true,
+      started: true,
+      tutorial: true,
+      modal: null,
+      game: createTutorialGame(),
+      selectedUnitId: null,
+      selectedDieId: null,
+      rolling: false,
+    }),
+
+  tutorialRoll: (values) =>
+    set((s) => ({
+      game: setRolledValues(rollDice(s.game), values),
+      rolling: false,
+      selectedUnitId: null,
+      selectedDieId: null,
     })),
 
   newGame: (players, stoneLayoutId, bots) =>
@@ -241,6 +276,7 @@ export const useGame = create<UIState>((set) => ({
         rolling: false,
         modal: null,
         started: true,
+        tutorial: false,
       };
     }),
 

@@ -50,6 +50,7 @@ interface NetState {
   setScreen: (s: Screen) => void;
   goAuth: (mode: 'signin' | 'signup') => void;
   playLocal: () => void;
+  playTutorial: () => void;
   signup: (username: string, password: string) => void;
   signin: (username: string, password: string) => void;
   signout: () => void;
@@ -214,6 +215,10 @@ export const useNet = create<NetState>((set, get) => {
     },
     playLocal: () => {
       useGame.getState().setLocalMode();
+      set({ screen: 'game' });
+    },
+    playTutorial: () => {
+      useGame.getState().startTutorial();
       set({ screen: 'game' });
     },
     signup: (username, password) => {

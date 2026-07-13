@@ -9,6 +9,7 @@ const SEEN_KEY = 'ms-alpha-welcome';
 export function AlphaWelcome() {
   const started = useGame((s) => s.started);
   const modal = useGame((s) => s.modal);
+  const tutorial = useGame((s) => s.tutorial);
   const [dismissed, setDismissed] = useState(() => {
     try {
       return localStorage.getItem(SEEN_KEY) === '1';
@@ -17,8 +18,8 @@ export function AlphaWelcome() {
     }
   });
   // Wait until a game is actually running and no other modal is open, so it
-  // never stacks over the opening New Game selector.
-  if (dismissed || !started || modal) return null;
+  // never stacks over the opening New Game selector. Never during the tutorial.
+  if (dismissed || !started || modal || tutorial) return null;
 
   const ok = () => {
     try {

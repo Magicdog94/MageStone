@@ -300,6 +300,7 @@ function LeaderboardModal({ onClose }: { onClose: () => void }) {
 function Landing() {
   const goAuth = useNet((s) => s.goAuth);
   const playLocal = useNet((s) => s.playLocal);
+  const playTutorial = useNet((s) => s.playTutorial);
   const openSettings = useGame((s) => s.openModal);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -309,6 +310,7 @@ function Landing() {
         <button className="menu-item" onClick={() => goAuth('signin')}>Sign In</button>
         <button className="menu-item" onClick={() => goAuth('signup')}>Sign Up</button>
         <button className="menu-item" onClick={() => setShowTutorial(true)}>How to Play</button>
+        <button className="menu-item" onClick={playTutorial}>Tutorial</button>
         <button className="menu-item" onClick={playLocal}>Hotseat</button>
         <button className="menu-item" onClick={() => setShowLeaderboard(true)}>Leaderboard</button>
         <button className="menu-item" onClick={() => openSettings('settings')}>Settings</button>

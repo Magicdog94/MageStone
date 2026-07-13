@@ -30,7 +30,7 @@ export function PlayerStrip() {
             className={`pstat${active ? ' active' : ''}${out ? ' out' : ''}`}
             style={{ '--pc': COLORS[p] } as CSSProperties}
           >
-            <span className="pstat-name">{label(p)}</span>
+            <span className="pstat-name" data-tut="pname">{label(p)}</span>
             {out ? (
               <span className="pstat-badge tip" data-tip="Eliminated — no units left">
                 OUT
@@ -42,7 +42,7 @@ export function PlayerStrip() {
                 </span>
               )
             )}
-            <span className="pstat-metric tip" data-tip="Unactivated MageStones (carried)">
+            <span className="pstat-metric tip" data-tut="carried" data-tip="Unactivated MageStones (carried)">
               {silverUrl ? (
                 <img className="pstat-token" src={silverUrl} alt="" width={20} height={20} />
               ) : (
@@ -50,7 +50,7 @@ export function PlayerStrip() {
               )}
               {carried}
             </span>
-            <span className="pstat-metric tip" data-tip="Activated MageStones">
+            <span className="pstat-metric tip" data-tut="activated" data-tip="Activated MageStones">
               {goldUrl ? (
                 <img className="pstat-token" src={goldUrl} alt="" width={20} height={20} />
               ) : (
@@ -58,7 +58,7 @@ export function PlayerStrip() {
               )}
               {activated}
             </span>
-            <span className="pstat-metric tip" data-tip="Enemies defeated">
+            <span className="pstat-metric tip" data-tut="kills" data-tip="Enemies defeated">
               <SwordIcon size={20} />
               {kills}
             </span>

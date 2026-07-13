@@ -1014,6 +1014,139 @@ body:not(.ui-mobile):has(.entry) .fs-toggle {
     transform: rotate(-90deg);
   }
 }
+
+/* ---- guided tutorial coach: spotlight + callout ---- */
+.tut-root {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  pointer-events: none;
+}
+/* transparent full-screen catcher so the guided game isn't disturbed by clicks */
+.tut-blocker {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+}
+.tut-skip {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 10px);
+  right: calc(env(safe-area-inset-right, 0px) + 12px);
+  pointer-events: auto;
+  height: var(--control-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--gold-line);
+  border-radius: var(--radius-sm);
+  background: rgba(8, 12, 8, 0.7);
+  color: var(--ink-dim);
+  font-family: var(--display);
+  font-size: var(--text-xs);
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  z-index: 3;
+}
+.tut-skip:hover {
+  color: var(--gold-bright);
+  border-color: var(--gold);
+}
+/* the highlight ring; its huge box-shadow dims everything else on screen */
+.tut-spot {
+  position: absolute;
+  border: 2px solid var(--gold-bright);
+  border-radius: var(--radius-md);
+  box-shadow:
+    0 0 0 3px rgba(236, 203, 120, 0.35),
+    0 0 0 9999px rgba(4, 8, 5, 0.62);
+  pointer-events: none;
+  transition:
+    top 0.18s ease,
+    left 0.18s ease,
+    width 0.18s ease,
+    height 0.18s ease;
+  animation: tut-pulse 1.8s ease-in-out infinite;
+}
+@keyframes tut-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 3px rgba(236, 203, 120, 0.3),
+      0 0 0 9999px rgba(4, 8, 5, 0.62);
+  }
+  50% {
+    box-shadow:
+      0 0 0 5px rgba(236, 203, 120, 0.55),
+      0 0 0 9999px rgba(4, 8, 5, 0.62);
+  }
+}
+.tut-box {
+  position: absolute;
+  width: var(--tut-box-w, 320px);
+  max-width: calc(100vw - 16px);
+  pointer-events: auto;
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border: 1px solid var(--gold);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, #1c2712, #10180d);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  z-index: 2;
+}
+.tut-title {
+  font-family: var(--display);
+  font-size: var(--text-lg);
+  color: var(--gold-bright);
+  letter-spacing: 0.5px;
+  margin-bottom: var(--space-2);
+}
+.tut-body {
+  font-family: var(--serif);
+  font-size: var(--text-md);
+  line-height: 1.4;
+  color: #f3ead2;
+}
+.tut-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-3);
+}
+.tut-gotit {
+  height: var(--control-md);
+  padding: 0 var(--space-5);
+}
+/* the little arrow pointing from the box toward the spotlighted element */
+.tut-arrow {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: #16210f;
+  border: 1px solid var(--gold);
+  transform: rotate(45deg);
+}
+.tut-bottom .tut-arrow {
+  border-right: none;
+  border-bottom: none;
+}
+.tut-top .tut-arrow {
+  border-left: none;
+  border-top: none;
+}
+.tut-right .tut-arrow {
+  border-top: none;
+  border-right: none;
+}
+.tut-left .tut-arrow {
+  border-bottom: none;
+  border-left: none;
+}
+body.ui-mobile .tut-box {
+  --tut-box-w: 260px;
+  padding: var(--space-3);
+}
+body.ui-mobile .tut-title {
+  font-size: var(--text-md);
+}
+body.ui-mobile .tut-body {
+  font-size: var(--text-sm);
+}
 .muted {
   color: var(--ink-dim);
 }

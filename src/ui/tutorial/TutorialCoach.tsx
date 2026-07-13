@@ -26,7 +26,11 @@ function measure(sel: string): Rect | null {
   return { top: r.top, left: r.left, right: r.right, bottom: r.bottom, cx: (r.left + r.right) / 2, cy: (r.top + r.bottom) / 2 };
 }
 
-/** Position for the text box + its little arrow, given the anchor rect. */
+/** Position for the text box + its little arrow, given the anchor rect. The box
+ *  must ALWAYS sit fully on screen (its buttons must stay pressable), so bottom/
+ *  top placements FLIP when the anchor is too close to that edge, and every
+ *  branch clamps against an estimated box height. */
+const EST_H = 230;
 function layout(rect: Rect | null, placement: Placement) {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -37,23 +41,33 @@ function layout(rect: Rect | null, placement: Placement) {
     };
   }
   const clampX = (cx: number) => clamp(cx - BOX_W / 2, 8, vw - BOX_W - 8);
-  if (placement === 'bottom' || placement === 'top') {
+  let place = placement;
+  // Flip when the requested side lacks room for the whole box.
+  if (place === 'bottom' && rect.bottom + GAP + EST_H > vh && rect.top - GAP - EST_H > 0) {
+    place = 'top';
+  } else if (place === 'top' && rect.top - GAP - EST_H < 0 && rect.bottom + GAP + EST_H < vh) {
+    place = 'bottom';
+  }
+  if (place === 'bottom' || place === 'top') {
     const left = clampX(rect.cx);
     const box: CSSProperties =
-      placement === 'bottom' ? { top: rect.bottom + GAP, left } : { bottom: vh - rect.top + GAP, left };
+      place === 'bottom'
+        ? { top: Math.min(rect.bottom + GAP, vh - EST_H - 8), left }
+        : // anchored by its bottom edge; cap it so the box top stays >= 8px
+          { bottom: Math.min(vh - rect.top + GAP, vh - EST_H - 8), left };
     const arrow: CSSProperties = {
       left: clamp(rect.cx - left, 18, BOX_W - 18),
-      [placement === 'bottom' ? 'top' : 'bottom']: -8,
+      [place === 'bottom' ? 'top' : 'bottom']: -8,
     };
     return { box, arrow };
   }
-  // left / right
-  const top = clamp(rect.cy - 40, 8, vh - 150);
+  // left / right — keep the whole box (buttons included) above the fold
+  const top = clamp(rect.cy - 40, 8, Math.max(8, vh - EST_H - 8));
   const box: CSSProperties =
-    placement === 'right' ? { left: rect.right + GAP, top } : { right: vw - rect.left + GAP, top };
+    place === 'right' ? { left: rect.right + GAP, top } : { right: vw - rect.left + GAP, top };
   const arrow: CSSProperties = {
     top: clamp(rect.cy - top, 18, 120),
-    [placement === 'right' ? 'left' : 'right']: -8,
+    [place === 'right' ? 'left' : 'right']: -8,
   };
   return { box, arrow };
 }

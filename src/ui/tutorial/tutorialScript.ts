@@ -336,7 +336,7 @@ export async function runTutorial(onDone: () => void) {
       title: 'MageStone Victory!',
       body: 'The winner panel names the method. Six golden stones, carried home and lit on the base — that’s the MageStone Victory.',
       anchor: '.winner',
-      placement: 'bottom',
+      placement: 'left',
     });
 
     // -- 2/3 Ritual victory ---------------------------------------------------
@@ -388,7 +388,7 @@ export async function runTutorial(onDone: () => void) {
       title: 'Ritual Victory!',
       body: 'Play returned to Red with the Priest still holding a clear Nexus — the ritual completes and Red wins.',
       anchor: '.winner',
-      placement: 'bottom',
+      placement: 'left',
     });
 
     // -- 3/3 Siege → Conquest victory ------------------------------------------
@@ -452,14 +452,14 @@ export async function runTutorial(onDone: () => void) {
       title: 'Conquest Victory!',
       body: 'Last player standing takes the game — that’s Conquest, the third road to victory.',
       anchor: '.winner',
-      placement: 'bottom',
+      placement: 'left',
     });
 
     // ---- Wrap up -----------------------------------------------------------
     await note({
       id: 'wrap',
       title: 'You’ve got the basics!',
-      body: 'You’ve now SEEN all three roads: MageStone (6 activated, on your base), Ritual (hold the Nexus a full round), Conquest (last one standing). Go play!',
+      body: 'You’ve now seen all three victory methods; MageStone, Ritual and Conquest. Go play!',
       placement: 'center',
       gotItLabel: 'Finish',
     });

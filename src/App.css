@@ -1116,10 +1116,12 @@ button:focus-visible {
 }
 .tut-box {
   position: absolute;
-  width: var(--tut-box-w, 320px);
+  /* wide enough that the whole footer (Skip · Back · Got it/Finish) always sits
+     comfortably INSIDE the box — the three buttons measure ~316px on their own */
+  width: var(--tut-box-w, 384px);
   max-width: calc(100vw - 16px);
   pointer-events: auto;
-  padding: var(--space-4) var(--space-4) var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-4);
   border: 1px solid var(--gold);
   border-radius: var(--radius-md);
   background: linear-gradient(180deg, #1c2712, #10180d);
@@ -1142,9 +1144,10 @@ button:focus-visible {
 .tut-foot {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin-top: var(--space-3);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
 }
 /* the coach sits outside .hud/.entry, so give its gold button explicit styling */
 .tut-gotit {
@@ -1209,7 +1212,7 @@ button:focus-visible {
   border-left: none;
 }
 body.ui-mobile .tut-box {
-  --tut-box-w: 260px;
+  --tut-box-w: 340px;
   padding: var(--space-3);
 }
 body.ui-mobile .tut-title {
@@ -1217,6 +1220,12 @@ body.ui-mobile .tut-title {
 }
 body.ui-mobile .tut-body {
   font-size: var(--text-sm);
+}
+/* tighter footer buttons so all three still fit inside the narrower phone box */
+body.ui-mobile .tut-skipbtn,
+body.ui-mobile .tut-gotit {
+  padding: 0 var(--space-2);
+  height: var(--control-sm);
 }
 .muted {
   color: var(--ink-dim);

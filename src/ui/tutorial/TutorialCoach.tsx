@@ -5,9 +5,12 @@ import { OddsTable } from '../Tutorial';
 import { useTutorial, type Placement } from './useTutorial';
 import { runTutorial } from './tutorialScript';
 
-const BOX_W = 320;
 const GAP = 14;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+// Must match the .tut-box widths in App.css (desktop / ui-mobile) so the
+// horizontal clamp + arrow keep the (wider) box fully on screen.
+const boxWidth = () =>
+  typeof document !== 'undefined' && document.body.classList.contains('ui-mobile') ? 340 : 384;
 
 interface Rect {
   top: number;
@@ -40,6 +43,7 @@ function layout(rect: Rect | null, placement: Placement) {
       arrow: null as CSSProperties | null,
     };
   }
+  const BOX_W = boxWidth();
   const clampX = (cx: number) => clamp(cx - BOX_W / 2, 8, vw - BOX_W - 8);
   let place = placement;
   // Flip when the requested side lacks room for the whole box.

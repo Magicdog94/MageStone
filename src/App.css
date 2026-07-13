@@ -254,6 +254,41 @@ body:not(.ui-mobile):has(.entry) .fs-toggle {
   outline: none;
   box-shadow: var(--focus-ring);
 }
+/* Gold primaries keep their 3D bevel when focused — the ring is ADDED, not a
+   replacement (swapping shadows made End Turn / Roll Dice look flattened and
+   mis-ringed after keyboard presses). */
+.hud .primary:focus-visible,
+.winner button:focus-visible {
+  box-shadow:
+    var(--focus-ring),
+    0 3px 0 #5e4715,
+    0 6px 14px rgba(0, 0, 0, 0.5);
+}
+/* every other control falls back to the themed gold ring, never the browser's
+   default white outline (it read as an off-colour ring around gold buttons) */
+button:focus-visible {
+  outline: none;
+}
+.gear:focus-visible,
+.leave-btn:focus-visible,
+.music-toggle:focus-visible,
+.fs-toggle:focus-visible,
+.dpad-btn:focus-visible,
+.entry .primary:focus-visible,
+.entry .ghost:focus-visible,
+.entry .seg:focus-visible,
+.entry-field input:focus-visible,
+.tut-skipbtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.tut-gotit:focus-visible {
+  outline: none;
+  box-shadow:
+    var(--focus-ring),
+    0 3px 0 #5e4715,
+    0 6px 14px rgba(0, 0, 0, 0.5);
+}
 
 /* All buttons share one height (control-md). Primary/winner read as emphasis
    via weight + uppercase, not size. */
@@ -1039,6 +1074,7 @@ body:not(.ui-mobile):has(.entry) .fs-toggle {
   font-family: var(--display);
   font-size: var(--text-xs);
   letter-spacing: 0.5px;
+  white-space: nowrap;
   cursor: pointer;
 }
 .tut-skipbtn:hover:not(:disabled) {
@@ -1122,6 +1158,7 @@ body:not(.ui-mobile):has(.entry) .fs-toggle {
   font-family: var(--display);
   font-size: var(--text-sm);
   font-weight: 700;
+  white-space: nowrap;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: #2a1c06;

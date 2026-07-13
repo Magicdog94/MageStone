@@ -2149,6 +2149,112 @@ body.ui-mobile .tut-gotit {
   font-size: var(--text-sm);
   color: var(--ink-dim);
 }
+/* Leaderboard tabs: Matches | ELO Rankings */
+.lb-tabs {
+  margin-bottom: var(--space-4);
+}
+.lb-elo-num {
+  font-weight: 700;
+  color: var(--gold-bright);
+}
+.lb-note {
+  margin-top: var(--space-2);
+  text-align: center;
+  font-family: var(--serif);
+  font-size: var(--text-sm);
+  color: var(--ink-dim);
+}
+
+/* ---- ELO tier badges (Bronze → Grandmaster over 1000–2400) ---- */
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid;
+  font-family: var(--display);
+  font-size: var(--text-xs);
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+.tier-bronze {
+  color: #d9a06b;
+  border-color: rgba(217, 160, 107, 0.5);
+  background: rgba(120, 72, 35, 0.25);
+}
+.tier-silver {
+  color: #cdd6dd;
+  border-color: rgba(205, 214, 221, 0.45);
+  background: rgba(130, 142, 152, 0.22);
+}
+.tier-gold {
+  color: var(--gold-bright);
+  border-color: rgba(236, 203, 120, 0.55);
+  background: rgba(160, 120, 40, 0.25);
+}
+.tier-master {
+  color: #c9a2ff;
+  border-color: rgba(201, 162, 255, 0.5);
+  background: rgba(96, 60, 160, 0.25);
+}
+.tier-grandmaster {
+  color: #ffd45e;
+  border-color: #ffd45e;
+  background: linear-gradient(180deg, rgba(160, 40, 40, 0.45), rgba(90, 20, 20, 0.45));
+  box-shadow: 0 0 8px rgba(255, 212, 94, 0.35);
+}
+.tier-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+/* ---- Ranked matchmaking card (online lobby) ---- */
+.ranked-card {
+  margin-bottom: var(--space-4);
+}
+.ranked-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-family: var(--serif);
+  color: var(--ink);
+  margin-bottom: var(--space-3);
+}
+.ranked-elo {
+  color: var(--gold-bright);
+  font-family: var(--display);
+}
+.ranked-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.ranked-searching {
+  color: var(--gold-bright);
+  font-family: var(--serif);
+  animation: ranked-pulse 1.4s ease-in-out infinite;
+}
+@keyframes ranked-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.ranked-note {
+  margin-top: var(--space-3);
+  text-align: center;
+  font-family: var(--serif);
+  font-size: var(--text-sm);
+  color: var(--ink-dim);
+}
 
 /* dueling-mages backdrop (recreated box cover) */
 .entry-art {

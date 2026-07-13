@@ -59,7 +59,29 @@ async function initStore() {
   await pool.query(
     'CREATE TABLE IF NOT EXISTS stats (key text PRIMARY KEY, display text NOT NULL, played int NOT NULL DEFAULT 0, won int NOT NULL DEFAULT 0, lost int NOT NULL DEFAULT 0)',
   );
+  // Ranked/ELO columns (added later — grow the existing table in place).
+  await pool.query('ALTER TABLE stats ADD COLUMN IF NOT EXISTS elo int');
+  await pool.query('ALTER TABLE stats ADD COLUMN IF NOT EXISTS rankedplayed int NOT NULL DEFAULT 0');
+  await pool.query('ALTER TABLE stats ADD COLUMN IF NOT EXISTS rankedwon int NOT NULL DEFAULT 0');
+  await pool.query('ALTER TABLE stats ADD COLUMN IF NOT EXISTS rankedlost int NOT NULL DEFAULT 0');
   console.log('Using Postgres for accounts.');
+}
+
+// ---- ELO (ranked play only) ------------------------------------------------
+// Ratings live on the 1000–2400 ladder and move ONLY for ranked matches — real
+// opponent vs real opponent, paired by the ranked queue. Casual and bot games
+// never touch them. New ranked players enter at 1200.
+const ELO_MIN = 1000;
+const ELO_MAX = 2400;
+const ELO_START = 1200;
+const ELO_K = 32;
+const clampElo = (v) => Math.max(ELO_MIN, Math.min(ELO_MAX, Math.round(v)));
+function eloPair(winnerElo, loserElo) {
+  const expWin = 1 / (1 + Math.pow(10, (loserElo - winnerElo) / 400));
+  return [
+    clampElo(winnerElo + ELO_K * (1 - expWin)),
+    clampElo(loserElo + ELO_K * (0 - (1 - expWin))),
+  ];
 }
 
 /** Record one finished game for an account: +1 played, +1 won or +1 lost. */
@@ -84,6 +106,53 @@ async function bumpStats(key, display, won) {
     saveStats();
   }
 }
+/** Write one ranked result: new ELO plus ranked played/won/lost counters. */
+async function bumpRanked(key, display, won, newElo) {
+  if (pool) {
+    await pool.query(
+      `INSERT INTO stats(key, display, played, won, lost, elo, rankedplayed, rankedwon, rankedlost)
+       VALUES($1, $2, 0, 0, 0, $3, 1, $4, $5)
+       ON CONFLICT (key) DO UPDATE SET
+         elo = $3,
+         rankedplayed = stats.rankedplayed + 1,
+         rankedwon = stats.rankedwon + $4,
+         rankedlost = stats.rankedlost + $5,
+         display = EXCLUDED.display`,
+      [key, display, newElo, won ? 1 : 0, won ? 0 : 1],
+    );
+  } else {
+    const st = statsMem[key] || { display, played: 0, won: 0, lost: 0 };
+    st.display = display;
+    st.elo = newElo;
+    st.rankedplayed = (st.rankedplayed || 0) + 1;
+    if (won) st.rankedwon = (st.rankedwon || 0) + 1;
+    else st.rankedlost = (st.rankedlost || 0) + 1;
+    statsMem[key] = st;
+    saveStats();
+  }
+}
+/** Top ranked players by ELO (only accounts that have played ranked). */
+async function topElo(limit) {
+  if (pool) {
+    const r = await pool.query(
+      `SELECT display, elo, rankedplayed AS "rankedPlayed", rankedwon AS "rankedWon", rankedlost AS "rankedLost"
+       FROM stats WHERE elo IS NOT NULL ORDER BY elo DESC, display ASC LIMIT $1`,
+      [limit],
+    );
+    return r.rows;
+  }
+  return Object.values(statsMem)
+    .filter((v) => v.elo != null)
+    .map((v) => ({
+      display: v.display,
+      elo: v.elo,
+      rankedPlayed: v.rankedplayed || 0,
+      rankedWon: v.rankedwon || 0,
+      rankedLost: v.rankedlost || 0,
+    }))
+    .sort((a, b) => b.elo - a.elo || a.display.localeCompare(b.display))
+    .slice(0, limit);
+}
 async function topStats(limit) {
   if (pool) {
     const r = await pool.query(
@@ -100,10 +169,23 @@ async function topStats(limit) {
 async function getStat(key) {
   if (!key) return null;
   if (pool) {
-    const r = await pool.query('SELECT key, display, played, won, lost FROM stats WHERE key = $1', [key]);
+    const r = await pool.query(
+      `SELECT key, display, played, won, lost, elo,
+              rankedplayed AS "rankedPlayed", rankedwon AS "rankedWon", rankedlost AS "rankedLost"
+       FROM stats WHERE key = $1`,
+      [key],
+    );
     return r.rows[0] || null;
   }
-  return statsMem[key] ? { key, ...statsMem[key] } : null;
+  if (!statsMem[key]) return null;
+  const v = statsMem[key];
+  return {
+    key,
+    ...v,
+    rankedPlayed: v.rankedplayed || 0,
+    rankedWon: v.rankedwon || 0,
+    rankedLost: v.rankedlost || 0,
+  };
 }
 /** Alpha metrics: how many accounts have played a game, and how many exist. */
 async function getTotals() {
@@ -117,12 +199,27 @@ async function getTotals() {
 
 /** When a game ends, credit each HUMAN player: the winner's colour wins, the
  *  rest lose. Bots have no account, so they're skipped — but a human's result
- *  counts whether the opponents were people or bots. */
+ *  counts whether the opponents were people or bots. Ranked rooms ALSO move
+ *  both players' ELO — only there, only human vs human. */
 async function recordResult(g, winnerColor) {
   for (const p of g.players) {
     if (p.bot || !p.username || p.username.startsWith('bot:')) continue;
     await bumpStats(p.username, p.display, p.color === winnerColor);
   }
+  if (!g.ranked) return;
+  const humans = g.players.filter((p) => !p.bot && p.username && !p.username.startsWith('bot:'));
+  if (humans.length !== 2) return; // ranked is strictly 1v1 between real accounts
+  const winner = humans.find((p) => p.color === winnerColor);
+  const loser = humans.find((p) => p.color !== winnerColor);
+  if (!winner || !loser) return;
+  const wStat = await getStat(winner.username);
+  const lStat = await getStat(loser.username);
+  const wElo = wStat?.elo ?? ELO_START;
+  const lElo = lStat?.elo ?? ELO_START;
+  const [wNew, lNew] = eloPair(wElo, lElo);
+  await bumpRanked(winner.username, winner.display, true, wNew);
+  await bumpRanked(loser.username, loser.display, false, lNew);
+  console.log(`ranked: ${winner.display} ${wElo}->${wNew}, ${loser.display} ${lElo}->${lNew}`);
 }
 async function getUser(key) {
   if (pool) {
@@ -182,6 +279,7 @@ const lobbyMsg = (g) => ({
   host: g.host,
   playerCount: g.playerCount,
   started: g.started,
+  ranked: !!g.ranked,
   players: g.players.map((p) => ({
     username: p.display,
     color: p.color,
@@ -231,6 +329,44 @@ function leaveRoom(ws, s) {
   // A room of only bots has nobody left to play (or host) it — tear it down.
   if (!g.players.some((p) => !p.bot)) games.delete(g.id);
   else broadcastLobby(g);
+}
+
+// ---- Ranked matchmaking ----------------------------------------------------
+// A simple FIFO queue of signed-in players. As soon as two DIFFERENT accounts
+// are waiting, the server creates a locked 1v1 room flagged `ranked` and seats
+// both; the first-queued player is host (their client then auto-starts it).
+const rankedQueue = []; // [{ ws, s }]
+function dropFromQueue(ws) {
+  const i = rankedQueue.findIndex((q) => q.ws === ws);
+  if (i >= 0) rankedQueue.splice(i, 1);
+}
+function tryPairRanked() {
+  while (rankedQueue.length >= 2) {
+    const a = rankedQueue.shift();
+    if (a.ws.readyState !== 1) continue; // socket gone — drop and keep pairing
+    const bi = rankedQueue.findIndex((q) => q.s.username !== a.s.username && q.ws.readyState === 1);
+    if (bi < 0) {
+      rankedQueue.unshift(a);
+      return;
+    }
+    const [b] = rankedQueue.splice(bi, 1);
+    const salt = randomBytes(12).toString('hex');
+    const g = {
+      id: genId(),
+      host: a.s.display,
+      passSalt: salt,
+      // random password nobody knows — ranked rooms can't be joined by ID
+      passHash: hashPw(randomBytes(16).toString('hex'), salt),
+      playerCount: 2,
+      players: [],
+      state: null,
+      started: false,
+      ranked: true,
+    };
+    games.set(g.id, g);
+    joinRoom(a.ws, a.s, g);
+    joinRoom(b.ws, b.s, g);
+  }
 }
 
 async function handle(ws, s, m) {
@@ -346,14 +482,43 @@ async function handle(ws, s, m) {
       const top = await topStats(10);
       const me = s.username ? await getStat(s.username) : null;
       const totals = await getTotals();
-      const row = (r) => ({ username: r.display, played: r.played, won: r.won, lost: r.lost });
+      const elo = await topElo(10);
+      const row = (r) => ({
+        username: r.display,
+        played: r.played,
+        won: r.won,
+        lost: r.lost,
+        elo: r.elo ?? null,
+        rankedPlayed: r.rankedPlayed || 0,
+        rankedWon: r.rankedWon || 0,
+        rankedLost: r.rankedLost || 0,
+      });
       return send(ws, {
         t: 'leaderboard',
         top: top.map(row),
+        eloTop: elo.map((r) => ({
+          username: r.display,
+          elo: r.elo,
+          rankedPlayed: r.rankedPlayed,
+          rankedWon: r.rankedWon,
+          rankedLost: r.rankedLost,
+        })),
         me: me ? row(me) : null,
         players: totals.players,
         signups: totals.signups,
       });
+    }
+    case 'findRanked': {
+      if (!s.username) return send(ws, { t: 'error', message: 'Sign in to play Ranked.' });
+      if (s.gameId) leaveRoom(ws, s); // a queued player can't sit in another room
+      dropFromQueue(ws);
+      rankedQueue.push({ ws, s });
+      send(ws, { t: 'rankedSearching' });
+      return tryPairRanked();
+    }
+    case 'cancelRanked': {
+      dropFromQueue(ws);
+      return send(ws, { t: 'rankedCancelled' });
     }
     case 'leaveGame':
       return leaveRoom(ws, s);
@@ -425,6 +590,7 @@ wss.on('connection', (ws) => {
     });
   });
   ws.on('close', () => {
+    dropFromQueue(ws); // a queued ranked searcher who disconnects stops waiting
     const s = sockets.get(ws);
     if (s?.gameId) {
       const g = games.get(s.gameId);

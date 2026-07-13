@@ -1,6 +1,6 @@
 // Pre-game entry flow: landing → sign in/up → lobby (create or join a game).
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNet, type LbRow } from '../../net/useNet';
+import { eloTier, useNet, type LbRow } from '../../net/useNet';
 import { useGame } from '../../store';
 import { BOT_LABEL, BOT_LEVELS } from '../../game/bot';
 import { COLORS } from '../../three/coords';
@@ -216,11 +216,18 @@ function Shell({ children, bare = false }: { children: React.ReactNode; bare?: b
  *  top-10; the signed-in user's own row is highlighted (and appended if they're
  *  outside the top). Results are recorded server-side for every finished online
  *  game — versus real players AND bots. */
+/** Small coloured pill naming an ELO tier (Bronze → Grandmaster). */
+function TierBadge({ elo }: { elo: number }) {
+  const tier = eloTier(elo);
+  return <span className={`tier-badge tier-${tier.toLowerCase()}`}>{tier}</span>;
+}
+
 function LeaderboardModal({ onClose }: { onClose: () => void }) {
   const status = useNet((s) => s.status);
   const username = useNet((s) => s.username);
   const leaderboard = useNet((s) => s.leaderboard);
   const fetchLeaderboard = useNet((s) => s.fetchLeaderboard);
+  const [tab, setTab] = useState<'stats' | 'elo'>('stats');
   // (Re)fetch on open and whenever the connection or login changes, so the
   // "you" row fills in once a saved session re-authenticates.
   useEffect(() => {
@@ -228,8 +235,10 @@ function LeaderboardModal({ onClose }: { onClose: () => void }) {
   }, [fetchLeaderboard, status, username]);
 
   const rows = leaderboard?.top ?? [];
+  const eloRows = leaderboard?.eloTop ?? [];
   const me = leaderboard?.me ?? null;
   const meInTop = !!me && rows.some((r) => r.username === me.username);
+  const meInElo = !!me && eloRows.some((r) => r.username === me.username);
   const pct = (r: LbRow) => (r.played ? Math.round((r.won / r.played) * 100) : 0);
   const players = leaderboard?.players ?? 0;
   const signups = leaderboard?.signups ?? 0;
@@ -244,51 +253,125 @@ function LeaderboardModal({ onClose }: { onClose: () => void }) {
         </button>
       }
     >
-      {rows.length === 0 ? (
-        <div className="lb-empty">
-          {status === 'online'
-            ? 'No games recorded yet — win an online match (or beat a bot) to get on the board.'
-            : status === 'connecting'
-              ? 'Connecting…'
-              : 'Offline — cannot reach the server.'}
-        </div>
+      <div className="segmented lb-tabs">
+        <button className={`seg ${tab === 'stats' ? 'active' : ''}`} onClick={() => setTab('stats')}>
+          Matches
+        </button>
+        <button className={`seg ${tab === 'elo' ? 'active' : ''}`} onClick={() => setTab('elo')}>
+          ELO Rankings
+        </button>
+      </div>
+
+      {tab === 'stats' ? (
+        rows.length === 0 ? (
+          <div className="lb-empty">
+            {status === 'online'
+              ? 'No games recorded yet — win an online match (or beat a bot) to get on the board.'
+              : status === 'connecting'
+                ? 'Connecting…'
+                : 'Offline — cannot reach the server.'}
+          </div>
+        ) : (
+          <table className="lb-table">
+            <thead>
+              <tr>
+                <th className="lb-rank">#</th>
+                <th className="lb-col-name">Player</th>
+                <th title="Played">P</th>
+                <th title="Won">W</th>
+                <th title="Lost">L</th>
+                <th title="Win rate">%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={r.username} className={username && r.username === username ? 'lb-me' : ''}>
+                  <td className="lb-rank">{i + 1}</td>
+                  <td className="lb-col-name">{r.username}</td>
+                  <td>{r.played}</td>
+                  <td>{r.won}</td>
+                  <td>{r.lost}</td>
+                  <td>{pct(r)}%</td>
+                </tr>
+              ))}
+              {me && !meInTop && (
+                <tr className="lb-me lb-me-extra">
+                  <td className="lb-rank">·</td>
+                  <td className="lb-col-name">{me.username}</td>
+                  <td>{me.played}</td>
+                  <td>{me.won}</td>
+                  <td>{me.lost}</td>
+                  <td>{pct(me)}%</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )
       ) : (
-        <table className="lb-table">
-          <thead>
-            <tr>
-              <th className="lb-rank">#</th>
-              <th className="lb-col-name">Player</th>
-              <th title="Played">P</th>
-              <th title="Won">W</th>
-              <th title="Lost">L</th>
-              <th title="Win rate">%</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={r.username} className={username && r.username === username ? 'lb-me' : ''}>
-                <td className="lb-rank">{i + 1}</td>
-                <td className="lb-col-name">{r.username}</td>
-                <td>{r.played}</td>
-                <td>{r.won}</td>
-                <td>{r.lost}</td>
-                <td>{pct(r)}%</td>
-              </tr>
-            ))}
-            {me && !meInTop && (
-              <tr className="lb-me lb-me-extra">
-                <td className="lb-rank">·</td>
-                <td className="lb-col-name">{me.username}</td>
-                <td>{me.played}</td>
-                <td>{me.won}</td>
-                <td>{me.lost}</td>
-                <td>{pct(me)}%</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <>
+          {eloRows.length === 0 && me?.elo == null ? (
+            <div className="lb-empty">
+              {status === 'online'
+                ? 'No ELO ratings yet — win a Ranked match to claim the first one. Ratings only move in Ranked play against a real opponent.'
+                : status === 'connecting'
+                  ? 'Connecting…'
+                  : 'Offline — cannot reach the server.'}
+            </div>
+          ) : (
+            <table className="lb-table lb-elo">
+              <thead>
+                <tr>
+                  <th className="lb-rank">#</th>
+                  <th className="lb-col-name">Player</th>
+                  <th>Tier</th>
+                  <th title="ELO rating">ELO</th>
+                  <th title="Ranked won">W</th>
+                  <th title="Ranked lost">L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {eloRows.map((r, i) => (
+                  <tr key={r.username} className={username && r.username === username ? 'lb-me' : ''}>
+                    <td className="lb-rank">{i + 1}</td>
+                    <td className="lb-col-name">{r.username}</td>
+                    <td>
+                      <TierBadge elo={r.elo} />
+                    </td>
+                    <td className="lb-elo-num">{r.elo}</td>
+                    <td>{r.rankedWon}</td>
+                    <td>{r.rankedLost}</td>
+                  </tr>
+                ))}
+                {me && me.elo != null && !meInElo && (
+                  <tr className="lb-me lb-me-extra">
+                    <td className="lb-rank">·</td>
+                    <td className="lb-col-name">{me.username}</td>
+                    <td>
+                      <TierBadge elo={me.elo} />
+                    </td>
+                    <td className="lb-elo-num">{me.elo}</td>
+                    <td>{me.rankedWon ?? 0}</td>
+                    <td>{me.rankedLost ?? 0}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+          {/* the ladder's five tiers, spanning the 1000–2400 rating range */}
+          <div className="tier-legend">
+            <span className="tier-badge tier-bronze">Bronze 1000–1299</span>
+            <span className="tier-badge tier-silver">Silver 1300–1599</span>
+            <span className="tier-badge tier-gold">Gold 1600–1899</span>
+            <span className="tier-badge tier-master">Master 1900–2199</span>
+            <span className="tier-badge tier-grandmaster">Grandmaster 2200–2400</span>
+          </div>
+          <div className="lb-note">
+            ELO moves only in Ranked matches — real opponent vs real opponent. New players start at
+            1200.
+          </div>
+        </>
       )}
-      {leaderboard && (
+      {leaderboard && tab === 'stats' && (
         <div className="lb-totals">
           {players} {players === 1 ? 'player has' : 'players have'} played · {signups} signed up
         </div>
@@ -389,6 +472,53 @@ function Auth() {
   );
 }
 
+/** Ranked matchmaking: search pairs you with another queued player for a 1v1
+ *  with ELO on the line. Shows your current rating + tier (or "Unrated"). */
+function RankedCard() {
+  const searching = useNet((s) => s.rankedSearching);
+  const findRanked = useNet((s) => s.findRanked);
+  const cancelRanked = useNet((s) => s.cancelRanked);
+  const leaderboard = useNet((s) => s.leaderboard);
+  const fetchLeaderboard = useNet((s) => s.fetchLeaderboard);
+  useEffect(() => {
+    fetchLeaderboard(); // fills `me` (my ELO) for the header line
+  }, [fetchLeaderboard]);
+  const me = leaderboard?.me ?? null;
+  const rated = me?.elo != null;
+
+  return (
+    <div className="entry-card wide ranked-card">
+      <div className="entry-card-title">Ranked match</div>
+      <div className="ranked-info">
+        {rated ? (
+          <>
+            <TierBadge elo={me!.elo!} />
+            <strong className="ranked-elo">{me!.elo}</strong> ELO · {me!.rankedWon ?? 0}W{' '}
+            {me!.rankedLost ?? 0}L
+          </>
+        ) : (
+          <>Unrated — your first Ranked match starts you at 1200 ELO.</>
+        )}
+      </div>
+      {searching ? (
+        <div className="ranked-row">
+          <span className="ranked-searching">Searching for an opponent…</span>
+          <button className="ghost" onClick={cancelRanked}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button className="primary lg" onClick={findRanked}>
+          Search Ranked
+        </button>
+      )}
+      <div className="ranked-note">
+        1v1 against a real player · ELO (1000–2400) moves only in Ranked
+      </div>
+    </div>
+  );
+}
+
 function CreateJoin() {
   const username = useNet((s) => s.username);
   const create = useNet((s) => s.createGame);
@@ -408,6 +538,7 @@ function CreateJoin() {
           Sign out
         </button>
       </div>
+      <RankedCard />
       <div className="lobby-grid">
         <div className="entry-card">
           <div className="entry-card-title">Create a game</div>
@@ -473,11 +604,17 @@ function Room() {
   return (
     <Shell>
       <div className="entry-card wide">
-        <div className="entry-card-title">Game lobby</div>
-        <div className="room-id">
-          Game ID <span className="room-code">{room.gameId}</span>
-          <span className="room-hint">share this + the password</span>
-        </div>
+        <div className="entry-card-title">{room.ranked ? 'Ranked match' : 'Game lobby'}</div>
+        {room.ranked ? (
+          <div className="room-id">
+            Opponent found — starting… <span className="room-hint">ELO is on the line</span>
+          </div>
+        ) : (
+          <div className="room-id">
+            Game ID <span className="room-code">{room.gameId}</span>
+            <span className="room-hint">share this + the password</span>
+          </div>
+        )}
         <div className="room-players">
           {Array.from({ length: room.playerCount }).map((_, i) => {
             const p = room.players[i];

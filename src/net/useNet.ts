@@ -20,6 +20,8 @@ export interface Room {
   host: string;
   playerCount: number;
   started: boolean;
+  /** True for queue-paired ranked 1v1 rooms (ELO on the line). */
+  ranked?: boolean;
   players: RoomPlayer[];
 }
 
@@ -29,6 +31,30 @@ export interface LbRow {
   played: number;
   won: number;
   lost: number;
+  /** ELO rating (1000–2400) — null until the account has played ranked. */
+  elo?: number | null;
+  rankedPlayed?: number;
+  rankedWon?: number;
+  rankedLost?: number;
+}
+
+/** One row of the ELO ladder (ranked play only). */
+export interface EloRow {
+  username: string;
+  elo: number;
+  rankedPlayed: number;
+  rankedWon: number;
+  rankedLost: number;
+}
+
+// ---- ELO tiers (mirrors the server's 1000–2400 ladder) ----
+export type EloTier = 'Bronze' | 'Silver' | 'Gold' | 'Master' | 'Grandmaster';
+export function eloTier(elo: number): EloTier {
+  if (elo >= 2200) return 'Grandmaster';
+  if (elo >= 1900) return 'Master';
+  if (elo >= 1600) return 'Gold';
+  if (elo >= 1300) return 'Silver';
+  return 'Bronze';
 }
 
 interface NetState {
@@ -42,11 +68,22 @@ interface NetState {
   myColor: PlayerColor | null;
   joinError: string | null;
   notice: string | null;
-  /** Main-menu leaderboard: the top table, alpha totals, + the user's own row. */
-  leaderboard: { top: LbRow[]; me: LbRow | null; players: number; signups: number } | null;
+  /** Main-menu leaderboard: the top table, ELO ladder, alpha totals, + the
+   *  user's own row. */
+  leaderboard: {
+    top: LbRow[];
+    eloTop: EloRow[];
+    me: LbRow | null;
+    players: number;
+    signups: number;
+  } | null;
+  /** True while waiting in the ranked matchmaking queue. */
+  rankedSearching: boolean;
 
   init: () => void;
   fetchLeaderboard: () => void;
+  findRanked: () => void;
+  cancelRanked: () => void;
   setScreen: (s: Screen) => void;
   goAuth: (mode: 'signin' | 'signup') => void;
   playLocal: () => void;
@@ -73,6 +110,7 @@ const TOKEN_KEY = 'magestone.token';
 
 let ws: WebSocket | null = null;
 let applyingRemote = false; // guards the broadcast subscription against echo
+let rankedStartSent: string | null = null; // ranked room the host already auto-started
 
 const sendWs = (msg: unknown) => {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
@@ -107,7 +145,7 @@ export const useNet = create<NetState>((set, get) => {
       if (onReady) onReady();
     };
     ws.onclose = () => {
-      set({ status: 'offline' });
+      set({ status: 'offline', rankedSearching: false });
       if (get().screen !== 'landing') set({ notice: 'Disconnected from server.' });
     };
     ws.onerror = () => set({ status: 'offline', notice: 'Cannot reach the game server.' });
@@ -137,13 +175,26 @@ export const useNet = create<NetState>((set, get) => {
         break;
       }
       case 'joined': {
-        set({ myColor: m.myColor as PlayerColor, joinError: null });
+        // (a ranked pairing lands here too — the search is over)
+        set({ myColor: m.myColor as PlayerColor, joinError: null, rankedSearching: false });
         break;
       }
       case 'lobby': {
         const room = m as unknown as Room;
         set({ room, joinError: null });
         if (get().screen === 'auth' || get().screen === 'lobby') set({ screen: 'lobby' });
+        // Ranked rooms auto-start the moment both players are seated: the HOST's
+        // client builds the initial state (exactly like pressing Start Game).
+        if (
+          room.ranked &&
+          !room.started &&
+          room.host === get().username &&
+          room.players.length === room.playerCount &&
+          rankedStartSent !== room.gameId
+        ) {
+          rankedStartSent = room.gameId;
+          sendWs({ t: 'startGame', state: createGame(room.playerCount) });
+        }
         break;
       }
       case 'joinErr':
@@ -174,6 +225,7 @@ export const useNet = create<NetState>((set, get) => {
         set({
           leaderboard: {
             top: (m.top as LbRow[]) ?? [],
+            eloTop: (m.eloTop as EloRow[]) ?? [],
             me: (m.me as LbRow | null) ?? null,
             players: (m.players as number) ?? 0,
             signups: (m.signups as number) ?? 0,
@@ -181,6 +233,12 @@ export const useNet = create<NetState>((set, get) => {
         });
         break;
       }
+      case 'rankedSearching':
+        set({ rankedSearching: true });
+        break;
+      case 'rankedCancelled':
+        set({ rankedSearching: false });
+        break;
       case 'error':
         set({ notice: m.message as string });
         break;
@@ -199,6 +257,7 @@ export const useNet = create<NetState>((set, get) => {
     joinError: null,
     notice: null,
     leaderboard: null,
+    rankedSearching: false,
 
     init: () => {
       // Auto-resume a saved session on load (token → server re-auth → lobby).
@@ -207,6 +266,13 @@ export const useNet = create<NetState>((set, get) => {
     fetchLeaderboard: () => {
       // Public data — connect if needed, then ask (re-auth on connect fills `me`).
       ensureSocket(() => sendWs({ t: 'leaderboard' }));
+    },
+    findRanked: () => {
+      ensureSocket(() => sendWs({ t: 'findRanked' }));
+    },
+    cancelRanked: () => {
+      sendWs({ t: 'cancelRanked' });
+      set({ rankedSearching: false });
     },
     setScreen: (screen) => set({ screen }),
     goAuth: (mode) => {
@@ -231,8 +297,9 @@ export const useNet = create<NetState>((set, get) => {
     },
     signout: () => {
       localStorage.removeItem(TOKEN_KEY);
+      sendWs({ t: 'cancelRanked' });
       sendWs({ t: 'leaveGame' });
-      set({ username: null, room: null, myColor: null, screen: 'landing' });
+      set({ username: null, room: null, myColor: null, screen: 'landing', rankedSearching: false });
     },
     createGame: (playerCount, password) => {
       set({ joinError: null });

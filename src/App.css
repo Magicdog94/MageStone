@@ -328,6 +328,66 @@ button:focus-visible {
   transform: none;
 }
 
+/* Fallback styling for ANY .primary / .ghost button, wherever it mounts.
+   The Copyright and Alpha-Welcome modals live OUTSIDE .hud/.entry, so their
+   buttons fell through to browser defaults (grey, square). :where() keeps
+   this at ZERO specificity — every scoped rule above/below still wins. */
+:where(button.primary) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: var(--control-md);
+  padding: 0 var(--space-4);
+  border: 1px solid #f3d590;
+  border-radius: var(--radius-sm);
+  font-family: var(--display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  color: #2a1c06;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold) 55%, var(--gold-dim));
+  box-shadow: 0 3px 0 #5e4715, 0 6px 14px rgba(0, 0, 0, 0.5);
+}
+:where(button.primary):hover {
+  filter: brightness(1.1);
+}
+:where(button.primary):active {
+  transform: translateY(2px);
+}
+:where(button.ghost) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: var(--control-md);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--gold-line);
+  border-radius: var(--radius-sm);
+  font-family: var(--display);
+  font-size: var(--text-sm);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--gold-bright);
+  background: linear-gradient(180deg, rgba(60, 48, 26, 0.6), rgba(28, 22, 12, 0.7));
+}
+:where(button.ghost):hover {
+  color: #fff3d6;
+  border-color: var(--gold);
+}
+button.primary:focus-visible,
+button.ghost:focus-visible {
+  outline: none;
+  box-shadow:
+    var(--focus-ring),
+    0 3px 0 #5e4715,
+    0 6px 14px rgba(0, 0, 0, 0.5);
+}
+
 .hud .ghost,
 .unit-actions button {
   color: var(--gold-bright);
@@ -904,10 +964,10 @@ button:focus-visible {
   bottom: var(--space-5);
   left: 50%;
   transform: translateX(-50%);
-  /* Fixed width sized to the busiest state (Mage selected: info line + action
-     buttons + End Turn), so the frame never resizes. The internal spacer
-     absorbs slack when there's less content. */
-  width: 860px;
+  /* Fixed width sized to the busiest state (Warrior selected beside an enemy:
+     Single/Double/Triple attack buttons + End Turn), so the frame never
+     resizes. The internal spacer absorbs slack when there's less content. */
+  width: 950px;
   max-width: 96vw;
   display: flex;
   align-items: center;
@@ -978,9 +1038,15 @@ button:focus-visible {
   margin-top: var(--space-2);
   flex-wrap: wrap;
 }
-/* the action-bar attack buttons carry a small win-% badge after the label */
+/* the action-bar attack buttons carry a small win-% badge after the label;
+   compact metrics so Single/Double/Triple all sit on ONE row of the bar
+   (scoped under .hud to outrank the shared button metrics block) */
+.hud .attack-btn {
+  padding: 0 var(--space-3);
+  font-size: var(--text-xs);
+}
 .attack-btn small {
-  font-size: 0.72em;
+  font-size: 0.78em;
   font-weight: 700;
   letter-spacing: 0;
   opacity: 0.85;
@@ -2350,31 +2416,9 @@ body.ui-mobile .tut-gotit {
     inset 0 0 64px rgba(0, 0, 0, 0.6),
     0 24px 70px rgba(0, 0, 0, 0.7);
 }
-/* gilt corner flourishes (double-rule corners) */
-.entry-inner::before,
-.entry-inner::after {
-  content: '';
-  position: absolute;
-  width: 46px;
-  height: 46px;
-  border: 2px solid var(--gold);
-  opacity: 0.85;
-  pointer-events: none;
-}
-.entry-inner::before {
-  top: 8px;
-  left: 8px;
-  border-right: none;
-  border-bottom: none;
-  border-top-left-radius: 8px;
-}
-.entry-inner::after {
-  bottom: 8px;
-  right: 8px;
-  border-left: none;
-  border-top: none;
-  border-bottom-right-radius: 8px;
-}
+/* (the old top-left/bottom-right corner flourishes are gone: on screens where
+   .entry-inner outgrows the viewport only ONE corner showed, reading as a
+   stray mark — the cover art's own gilt frame decorates these screens now) */
 .entry-title {
   font-family: var(--display);
   font-weight: 700;

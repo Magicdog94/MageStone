@@ -20,10 +20,16 @@ export interface Callout {
 }
 
 interface TutorialState {
+  /** The LIVE callout the script is awaiting (null between notes). */
   callout: Callout | null;
-  /** Show a callout and resolve when the user presses "Got it". */
+  /** Every note shown so far this run — the live one last. Lets Back re-read. */
+  history: Callout[];
+  /** Which history entry is displayed (Back rewinds it; Got it advances). */
+  viewIndex: number;
+  /** Show a callout and resolve when the user presses "Got it" on it. */
   note: (c: Callout) => Promise<void>;
   gotIt: () => void;
+  back: () => void;
   /** Tear down any pending callout (used when the tutorial is skipped/ends). */
   finish: () => void;
 }
@@ -31,23 +37,32 @@ interface TutorialState {
 // Kept outside the store: the resolver for the currently-awaited note.
 let resolveGotIt: (() => void) | null = null;
 
-export const useTutorial = create<TutorialState>((set) => ({
+export const useTutorial = create<TutorialState>((set, get) => ({
   callout: null,
+  history: [],
+  viewIndex: 0,
   note: (c) =>
     new Promise<void>((resolve) => {
       resolveGotIt = resolve;
-      set({ callout: c });
+      set((s) => ({ callout: c, history: [...s.history, c], viewIndex: s.history.length }));
     }),
   gotIt: () => {
+    const { viewIndex, history } = get();
+    // Reviewing an earlier note — step forward through history, don't resolve.
+    if (viewIndex < history.length - 1) {
+      set({ viewIndex: viewIndex + 1 });
+      return;
+    }
     const r = resolveGotIt;
     resolveGotIt = null;
     set({ callout: null });
     r?.();
   },
+  back: () => set((s) => ({ viewIndex: Math.max(0, s.viewIndex - 1) })),
   finish: () => {
     const r = resolveGotIt;
     resolveGotIt = null;
-    set({ callout: null });
+    set({ callout: null, history: [], viewIndex: 0 });
     // Resolve any pending awaiter so the runner unwinds cleanly.
     r?.();
   },

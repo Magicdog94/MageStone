@@ -60,8 +60,11 @@ function layout(rect: Rect | null, placement: Placement) {
 
 export function TutorialCoach() {
   const tutorial = useGame((s) => s.tutorial);
-  const callout = useTutorial((s) => s.callout);
+  const callout = useTutorial((s) => s.history[s.viewIndex] ?? s.callout);
+  const live = useTutorial((s) => s.callout);
+  const viewIndex = useTutorial((s) => s.viewIndex);
   const gotIt = useTutorial((s) => s.gotIt);
+  const goBack = useTutorial((s) => s.back);
   const [, forceTick] = useReducer((x: number) => x + 1, 0);
   const started = useRef(false);
 
@@ -111,7 +114,7 @@ export function TutorialCoach() {
     <div className="tut-root">
       {/* full-screen click blocker so the guided game isn't disturbed */}
       <div className="tut-blocker" />
-      {callout && (
+      {live && callout && (
         <>
           {spot && <div className="tut-spot" style={spot} />}
           <div
@@ -132,6 +135,10 @@ export function TutorialCoach() {
             <div className="tut-foot">
               <button className="tut-skipbtn" onClick={skip}>
                 Skip tutorial
+              </button>
+              {/* re-read earlier notes; Got it walks forward again to the live one */}
+              <button className="tut-skipbtn tut-back" onClick={goBack} disabled={viewIndex === 0}>
+                Back
               </button>
               <button className="primary tut-gotit" onClick={gotIt}>
                 {callout.gotItLabel ?? 'Got it'}

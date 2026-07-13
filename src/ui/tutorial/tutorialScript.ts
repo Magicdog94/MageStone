@@ -1,6 +1,7 @@
 import { useGame } from '../../store';
 import { legalMoves, unitById } from '../../game/rules';
-import type { Cell } from '../../game/types';
+import { createGame } from '../../game/setup';
+import type { Cell, Die, DieKind, GameState } from '../../game/types';
 import { useTutorial } from './useTutorial';
 
 const g = () => useGame.getState();
@@ -23,6 +24,31 @@ async function until(pred: () => boolean, timeout = 5000, interval = 120) {
   }
 }
 const dist = (a: Cell, b: Cell) => Math.abs(a.r - b.r) + Math.abs(a.c - b.c);
+
+// ---- Victory-demo staging --------------------------------------------------
+// Each victory is demonstrated on a freshly-staged board ("even if we have to
+// rearrange the pieces") and then PLAYED OUT through the real engine, so the
+// learner watches the actual moves, banners and winner panel.
+
+let diceNonce = 0;
+function mkDice(kinds: DieKind[], values: number[]): Die[] {
+  return kinds.map((kind, i) => ({
+    id: `tut-die-${diceNonce++}`,
+    kind,
+    value: values[i],
+    discarded: false,
+    usedBy: null,
+  }));
+}
+
+/** Replace the game with a fresh red-vs-blue board, mutated by `build`, already
+ *  in red's action phase with hand-picked dice. */
+function stage(build: (st: GameState) => void): void {
+  const st = createGame(['red', 'blue'], 'diamond');
+  st.turnPhase = 'act';
+  build(st);
+  useGame.setState({ game: st, selectedUnitId: null, selectedDieId: null, rolling: false });
+}
 
 /** Move `unitId` as far toward `target` as this turn's matching die allows. */
 function stepToward(unitId: string, target: Cell): boolean {
@@ -220,34 +246,13 @@ export async function runTutorial(onDone: () => void) {
       body: 'Priests never attack — and if one WINS its defence it only repels the attacker (no one dies). Their power: stand a Priest on any gravestone to RESURRECT a Warrior there (up to 6 alive).',
       placement: 'center',
     });
-    await note({
-      id: 'ritual',
-      title: 'Ritual Victory',
-      body: 'The Priest can also win the game: move it into the Nexus — the 2×2 heart of the board — with no enemies on those 4 squares, begin a ritual, and survive one full round. That’s a Ritual Victory.',
-      placement: 'center',
-    });
-
-    // ---- Siege -------------------------------------------------------------
-    await note({
-      id: 'siege',
-      title: 'Under siege',
-      body: 'When an enemy stands on your base squares you are UNDER SIEGE: your fallen Mage and Priest cannot respawn until the base is cleared. A player whose last units are locked out this way is eliminated.',
-      placement: 'center',
-    });
-
-    // ---- MageStones / winning (explained, pointing at the metric) ----------
+    // ---- MageStones (explained here; the victory is DEMONSTRATED later) ----
     await note({
       id: 'stones',
-      title: 'MageStones & winning',
-      body: 'Move your Mage onto a MageStone to collect it, then back to your base to ACTIVATE it. Activated stones upgrade the Mage’s attack die — d6, d12 at 2, d20 at 4 — and 6 of them while standing on your base is a MageStone Victory.',
+      title: 'MageStones',
+      body: 'Move your Mage onto a MageStone to collect it, then back to your base to ACTIVATE it. Activated stones also upgrade the Mage’s attack die — d6, then d12 at 2, d20 at 4.',
       anchor: '[data-tut="activated"]',
       placement: 'bottom',
-    });
-    await note({
-      id: 'conquest',
-      title: 'Conquest Victory',
-      body: 'The third way to win: wipe every rival out. Eliminate all enemy units (with their respawns besieged or spent) and the last player standing claims a Conquest Victory.',
-      placement: 'center',
     });
 
     // ---- End turn ----------------------------------------------------------
@@ -290,11 +295,171 @@ export async function runTutorial(onDone: () => void) {
     g().endTurn();
     await wait(500);
 
+    // ---- The three victories, each STAGED and played out for real ----------
+    await note({
+      id: 'wins-intro',
+      title: 'The three ways to win',
+      body: 'Now watch each victory actually happen. We’ll rearrange the board for every demonstration and play it out with real moves.',
+      placement: 'center',
+    });
+
+    // -- 1/3 MageStone victory ------------------------------------------------
+    stage((st) => {
+      const mage = st.units.find((u) => u.id === 'red-m')!;
+      mage.cell = { r: 1, c: 8 };
+      mage.carried = 6;
+      st.dice = mkDice(['mage'], [2]);
+    });
+    await wait(700);
+    await note({
+      id: 'win1-stage',
+      title: 'Victory 1 of 3 — MageStone',
+      body: 'We’ve staged Red’s Mage one square from its base, carrying SIX MageStones — the silver 6 on Red’s card. Watch it march home.',
+      anchor: '[data-tut="carried"]',
+      placement: 'bottom',
+    });
+    g().selectUnit('red-m');
+    await wait(250);
+    g().moveTo({ r: 0, c: 8 });
+    await wait(800);
+    await note({
+      id: 'win1-activate',
+      title: 'Activate on the base',
+      body: 'The Mage stands on its own base, so it may ACTIVATE — silver turns gold. Six activated while standing on your base wins on the spot.',
+      anchor: '[data-tut="carried"]',
+      placement: 'bottom',
+    });
+    g().activateStones();
+    await wait(700);
+    await note({
+      id: 'win1-done',
+      title: 'MageStone Victory!',
+      body: 'The winner panel names the method. Six golden stones, carried home and lit on the base — that’s the MageStone Victory.',
+      anchor: '.winner',
+      placement: 'bottom',
+    });
+
+    // -- 2/3 Ritual victory ---------------------------------------------------
+    stage((st) => {
+      const priest = st.units.find((u) => u.id === 'red-p')!;
+      priest.cell = { r: 7, c: 5 };
+      st.dice = mkDice(['priest'], [2]);
+    });
+    await wait(700);
+    await note({
+      id: 'win2-stage',
+      title: 'Victory 2 of 3 — Ritual',
+      body: 'Fresh board. Red’s Priest stands two squares from the NEXUS — the 2×2 heart of the board. Watch it step in.',
+      placement: 'center',
+    });
+    g().selectUnit('red-p');
+    await wait(250);
+    g().moveTo({ r: 7, c: 7 });
+    await wait(800);
+    await note({
+      id: 'win2-begin',
+      title: 'Begin the ritual',
+      body: 'In the Nexus, with no enemies on its 4 squares, the Priest may BEGIN RITUAL.',
+      anchor: '.unit-actions',
+      placement: 'top',
+    });
+    g().doRitual();
+    await wait(500);
+    await note({
+      id: 'win2-flag',
+      title: 'The ritual is lit',
+      body: 'Now Red must survive one FULL ROUND. If the Priest is killed, the Priest leaves, or any enemy steps into the Nexus, the ritual breaks.',
+      anchor: '.ritual-flag',
+      placement: 'top',
+    });
+    g().endTurn();
+    await wait(500);
+    await note({
+      id: 'win2-blue',
+      title: 'Blue’s turn passes…',
+      body: 'Blue would need to reach the Nexus or the Priest this turn — its units are all the way back home. They can’t.',
+      anchor: '.player-strip',
+      placement: 'bottom',
+    });
+    g().endTurn();
+    await wait(700);
+    await note({
+      id: 'win2-done',
+      title: 'Ritual Victory!',
+      body: 'Play returned to Red with the Priest still holding a clear Nexus — the ritual completes and Red wins.',
+      anchor: '.winner',
+      placement: 'bottom',
+    });
+
+    // -- 3/3 Siege → Conquest victory ------------------------------------------
+    stage((st) => {
+      // Blue is down to a single Warrior; its Mage & Priest sit in the respawn
+      // queue. Red has a warrior poised beside Blue's base and two more
+      // flanking the last Blue unit.
+      st.units = st.units.filter((u) => u.owner !== 'blue' || u.id === 'blue-w1');
+      const bw = st.units.find((u) => u.id === 'blue-w1')!;
+      bw.cell = { r: 12, c: 8 };
+      st.units.find((u) => u.id === 'red-w1')!.cell = { r: 11, c: 8 };
+      st.units.find((u) => u.id === 'red-w2')!.cell = { r: 12, c: 7 };
+      st.units.find((u) => u.id === 'red-w4')!.cell = { r: 14, c: 5 };
+      st.pendingRespawns = [
+        { id: 'tut-pr-m', owner: 'blue', kind: 'mage', activated: 0 },
+        { id: 'tut-pr-p', owner: 'blue', kind: 'priest' },
+      ];
+      st.dice = mkDice(['warrior', 'warrior', 'warrior'], [3, 4, 2]);
+    });
+    await wait(700);
+    await note({
+      id: 'win3-stage',
+      title: 'Victory 3 of 3 — Conquest',
+      body: 'Blue is down to ONE Warrior; its fallen Mage and Priest are queued to respawn at home. First, Red seals that door shut.',
+      placement: 'center',
+    });
+    g().selectUnit('red-w4');
+    await wait(250);
+    g().moveTo({ r: 15, c: 5 });
+    await wait(800);
+    await note({
+      id: 'win3-siege',
+      title: 'Under siege',
+      body: 'Red now stands ON Blue’s base — Blue is UNDER SIEGE. While any enemy holds a base square, that player’s fallen Mage and Priest CANNOT respawn.',
+      anchor: '.siege-alert',
+      placement: 'bottom',
+    });
+    g().selectUnit('red-w1');
+    await wait(250);
+    {
+      const rig3 = [0.99, 0.99, 0];
+      let i3 = 0;
+      g().attack('blue-w1', ['red-w1', 'red-w2'], () => rig3[Math.min(i3++, rig3.length - 1)]);
+    }
+    await until(() => g().combatRoll !== null, 5000);
+    await wait(400);
+    {
+      const roll = g().combatRoll;
+      const a = roll?.attackRoll ?? 12;
+      const d = roll?.defenseRoll ?? 1;
+      await note({
+        id: 'win3-kill',
+        title: 'The last unit falls',
+        body: `Red rolled ${a}, Blue rolled ${d} — the final Blue Warrior is defeated. Zero units on the board and every respawn besieged: Blue is ELIMINATED.`,
+        anchor: '.combat-announce',
+        placement: 'bottom',
+      });
+    }
+    await note({
+      id: 'win3-done',
+      title: 'Conquest Victory!',
+      body: 'Last player standing takes the game — that’s Conquest, the third road to victory.',
+      anchor: '.winner',
+      placement: 'bottom',
+    });
+
     // ---- Wrap up -----------------------------------------------------------
     await note({
       id: 'wrap',
       title: 'You’ve got the basics!',
-      body: 'Three roads to victory: MageStone (6 activated, on your base), Ritual (your Priest holds the Nexus a full round), Conquest (last one standing). That’s everything — go play!',
+      body: 'You’ve now SEEN all three roads: MageStone (6 activated, on your base), Ritual (hold the Nexus a full round), Conquest (last one standing). Go play!',
       placement: 'center',
       gotItLabel: 'Finish',
     });

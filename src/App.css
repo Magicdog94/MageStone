@@ -1041,9 +1041,13 @@ body:not(.ui-mobile):has(.entry) .fs-toggle {
   letter-spacing: 0.5px;
   cursor: pointer;
 }
-.tut-skipbtn:hover {
+.tut-skipbtn:hover:not(:disabled) {
   color: var(--gold-bright);
   border-color: var(--gold);
+}
+.tut-skipbtn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 /* the highlight ring; its huge box-shadow dims everything else on screen */
 .tut-spot {

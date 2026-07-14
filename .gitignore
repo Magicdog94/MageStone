@@ -28,3 +28,6 @@ dist-ssr
 
 # headless-preview capture (dev only)
 .dev-shot.jpg
+
+srv-out.txt
+srv-err.txt

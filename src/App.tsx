@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Scene } from './three/Scene';
+import { SceneBoundary } from './ui/SceneBoundary';
 import { BotDriver } from './ui/BotDriver';
 import { HUD } from './ui/HUD';
 import { AlphaWelcome } from './ui/AlphaWelcome';
@@ -47,7 +48,10 @@ export default function App() {
         <EntryScreens />
       ) : (
         <div className="app">
-          <Scene />
+          {/* A physics/WebGL crash must never take the HUD + bots down with it. */}
+          <SceneBoundary>
+            <Scene />
+          </SceneBoundary>
           <HUD />
           <BotDriver />
           <AlphaWelcome />

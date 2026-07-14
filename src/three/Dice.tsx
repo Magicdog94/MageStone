@@ -226,73 +226,101 @@ function DiceBodies() {
   const reported = useRef(false);
   const settleFrames = useRef(0);
   const liveFrames = useRef(0);
+  const throwAt = useRef(0);
   const remoteSig = useRef('');
 
   // A remote player doesn't throw — they display the values the roller broadcast.
   const isRemoteViewer = online && current !== myColor;
   const show = rolling || phase === 'discard';
 
-  // Throw fresh on each roll — onto the roller's strip of the table.
+  // Throw fresh on each roll — onto the roller's strip of the table. Guarded:
+  // a crashed (poisoned) Rapier world throws on EVERY call — report the
+  // engine's values instead and ask for a fresh physics world.
   useEffect(() => {
     if (!rolling) return;
     reported.current = false;
     settleFrames.current = 0;
     liveFrames.current = 0;
-    bodies.current.forEach((b, i) => {
-      if (!b) return;
-      // Launch each die in its own lane (not a tight column) so they land spread
-      // out and flat instead of piling on top of each other.
-      const [x, z] = trayToWorld(
-        seat,
-        (i - 2) * 0.9 + rand(-0.15, 0.15),
-        rand(-TRAY_RAD * 0.55, TRAY_RAD * 0.55),
-      );
-      b.setGravityScale(1, true); // un-park (hidden dice wait weightless below)
-      b.setTranslation({ x, y: 2.8 + (i % 2) * 0.5, z }, true);
-      const e = new THREE.Euler(rand(0, 6.28), rand(0, 6.28), rand(0, 6.28));
-      const q = new THREE.Quaternion().setFromEuler(e);
-      b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
-      b.setLinvel({ x: rand(-1, 1), y: 1, z: rand(-1.2, 1.2) }, true);
-      b.setAngvel({ x: rand(-13, 13), y: rand(-13, 13), z: rand(-13, 13) }, true);
-    });
-  }, [rollNonce, rolling, seat]);
+    throwAt.current = performance.now();
+    try {
+      bodies.current.forEach((b, i) => {
+        if (!b) return;
+        // Launch each die in its own lane (not a tight column) so they land spread
+        // out and flat instead of piling on top of each other.
+        const [x, z] = trayToWorld(
+          seat,
+          (i - 2) * 0.9 + rand(-0.15, 0.15),
+          rand(-TRAY_RAD * 0.55, TRAY_RAD * 0.55),
+        );
+        b.setGravityScale(1, true); // un-park (hidden dice wait weightless below)
+        b.setTranslation({ x, y: 2.8 + (i % 2) * 0.5, z }, true);
+        const e = new THREE.Euler(rand(0, 6.28), rand(0, 6.28), rand(0, 6.28));
+        const q = new THREE.Quaternion().setFromEuler(e);
+        b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+        b.setLinvel({ x: rand(-1, 1), y: 1, z: rand(-1.2, 1.2) }, true);
+        b.setAngvel({ x: rand(-13, 13), y: rand(-13, 13), z: rand(-13, 13) }, true);
+      });
+    } catch (err) {
+      console.warn('MageStone: dice throw hit a dead physics world.', err);
+      reported.current = true;
+      report(useGame.getState().game.dice.map((d) => d.value));
+      useGame.getState().bumpPhysicsEpoch();
+    }
+  }, [rollNonce, rolling, seat, report]);
 
   useFrame(() => {
     if (!rolling || reported.current) return;
+    if (!throwAt.current) throwAt.current = performance.now(); // effect raced — clock from first frame
     liveFrames.current++;
     let slow = true;
-    for (const b of bodies.current) {
-      if (!b) {
-        slow = false;
-        break;
+    try {
+      for (const b of bodies.current) {
+        if (!b) {
+          slow = false;
+          break;
+        }
+        const lv = b.linvel();
+        const av = b.angvel();
+        if (Math.hypot(lv.x, lv.y, lv.z) > 0.18 || Math.hypot(av.x, av.y, av.z) > 0.25) {
+          slow = false;
+          break;
+        }
       }
-      const lv = b.linvel();
-      const av = b.angvel();
-      if (Math.hypot(lv.x, lv.y, lv.z) > 0.18 || Math.hypot(av.x, av.y, av.z) > 0.25) {
-        slow = false;
-        break;
+      settleFrames.current = slow ? settleFrames.current + 1 : 0;
+      // Require a brief tumble before accepting a settle — but NEVER wedge the
+      // game: a die perched mid-jitter (or a lost body) used to keep `rolling`
+      // true forever, freezing bot games. WALL-CLOCK timeout (frame counts scale
+      // with fps — a slow machine at 12fps would wait half a minute): after ~8s
+      // of real time, read the faces as they lie.
+      const timedOut =
+        throwAt.current > 0 && performance.now() - throwAt.current > 8000;
+      if ((liveFrames.current > 20 && settleFrames.current > 10) || timedOut) {
+        if (timedOut) console.warn('MageStone: dice settle timed out — forcing a read');
+        reported.current = true;
+        const values = bodies.current.map((b) => (b ? upValue(b) : 1));
+        report(values);
+        // Tidy the tray: lay every die flat in a row, its rolled value face-up, so
+        // a die that settled perched on another never reads as floating. The
+        // orientation is derived from the value just read, so it always matches.
+        bodies.current.forEach((b, i) => {
+          if (!b) return;
+          const faceIdx = FACE_VALUES.indexOf(values[i]);
+          const q = new THREE.Quaternion().setFromUnitVectors(NORMALS[faceIdx], UP);
+          q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, rand(0, Math.PI * 2)));
+          const [x, z] = trayToWorld(seat, (i - 2) * LANE, 0);
+          b.setTranslation({ x, y: TABLE_SURF + H, z }, true);
+          b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+          b.setLinvel({ x: 0, y: 0, z: 0 }, true);
+          b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        });
       }
-    }
-    settleFrames.current = slow ? settleFrames.current + 1 : 0;
-    // Require a brief tumble before accepting a settle.
-    if (liveFrames.current > 20 && settleFrames.current > 10) {
+    } catch (err) {
+      // A Rapier panic poisons the whole world (every later call throws).
+      // Accept the engine's rolled values and rebuild the physics world.
+      console.warn('MageStone: physics failed during dice settle.', err);
       reported.current = true;
-      const values = bodies.current.map((b) => (b ? upValue(b) : 1));
-      report(values);
-      // Tidy the tray: lay every die flat in a row, its rolled value face-up, so
-      // a die that settled perched on another never reads as floating. The
-      // orientation is derived from the value just read, so it always matches.
-      bodies.current.forEach((b, i) => {
-        if (!b) return;
-        const faceIdx = FACE_VALUES.indexOf(values[i]);
-        const q = new THREE.Quaternion().setFromUnitVectors(NORMALS[faceIdx], UP);
-        q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, rand(0, Math.PI * 2)));
-        const [x, z] = trayToWorld(seat, (i - 2) * LANE, 0);
-        b.setTranslation({ x, y: TABLE_SURF + H, z }, true);
-        b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
-        b.setLinvel({ x: 0, y: 0, z: 0 }, true);
-        b.setAngvel({ x: 0, y: 0, z: 0 }, true);
-      });
+      report(useGame.getState().game.dice.map((d) => d.value));
+      useGame.getState().bumpPhysicsEpoch();
     }
   });
 
@@ -303,19 +331,24 @@ function DiceBodies() {
     if (sig === remoteSig.current) return;
     if (!bodies.current.every((b) => b)) return;
     remoteSig.current = sig;
-    bodies.current.forEach((b, i) => {
-      if (!b) return;
-      b.setGravityScale(1, true);
-      const v = dice[i]?.value ?? 1;
-      const faceIdx = FACE_VALUES.indexOf(v);
-      const q = new THREE.Quaternion().setFromUnitVectors(NORMALS[faceIdx], UP);
-      q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, (i * 1.3) % (Math.PI * 2)));
-      const [x, z] = trayToWorld(seat, (i - 2) * LANE, 0);
-      b.setTranslation({ x, y: TABLE_SURF + H, z }, true);
-      b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
-      b.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      b.setAngvel({ x: 0, y: 0, z: 0 }, true);
-    });
+    try {
+      bodies.current.forEach((b, i) => {
+        if (!b) return;
+        b.setGravityScale(1, true);
+        const v = dice[i]?.value ?? 1;
+        const faceIdx = FACE_VALUES.indexOf(v);
+        const q = new THREE.Quaternion().setFromUnitVectors(NORMALS[faceIdx], UP);
+        q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, (i * 1.3) % (Math.PI * 2)));
+        const [x, z] = trayToWorld(seat, (i - 2) * LANE, 0);
+        b.setTranslation({ x, y: TABLE_SURF + H, z }, true);
+        b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+        b.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      });
+    } catch (err) {
+      console.warn('MageStone: physics failed placing remote dice.', err);
+      useGame.getState().bumpPhysicsEpoch();
+    }
   });
 
   // Park hidden dice below the table (weightless) so their invisible bodies
@@ -323,13 +356,18 @@ function DiceBodies() {
   // both throw paths restore gravity when they reposition the dice.
   useEffect(() => {
     if (show) return;
-    bodies.current.forEach((b, i) => {
-      if (!b) return;
-      b.setGravityScale(0, true);
-      b.setTranslation({ x: (i - 2) * 1.2, y: -2.5, z: 0 }, true);
-      b.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      b.setAngvel({ x: 0, y: 0, z: 0 }, true);
-    });
+    try {
+      bodies.current.forEach((b, i) => {
+        if (!b) return;
+        b.setGravityScale(0, true);
+        b.setTranslation({ x: (i - 2) * 1.2, y: -2.5, z: 0 }, true);
+        b.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      });
+    } catch (err) {
+      console.warn('MageStone: physics failed parking dice.', err);
+      useGame.getState().bumpPhysicsEpoch();
+    }
   }, [show]);
 
   // During the discard phase the player can click a die to discard it directly
@@ -424,6 +462,7 @@ function CombatDice() {
   const [run, setRun] = useState<CombatRun | null>(null);
   const bodies = useRef<(RapierRigidBody | null)[]>([]);
   const thrown = useRef(false);
+  const thrownAt = useRef(0);
   const settled = useRef(false);
   const liveFrames = useRef(0);
   const calmFrames = useRef(0);
@@ -482,6 +521,7 @@ function CombatDice() {
 
   useFrame(() => {
     if (!run || settled.current) return;
+    try {
     // Throw on the first physics frame where every body is registered — this
     // never races React commit order or StrictMode double-mounts.
     if (!thrown.current) {
@@ -503,6 +543,7 @@ function CombatDice() {
         b.setAngvel({ x: rand(-14, 14), y: rand(-14, 14), z: rand(-14, 14) }, true);
       });
       thrown.current = true;
+      thrownAt.current = performance.now();
       return;
     }
     liveFrames.current++;
@@ -517,7 +558,8 @@ function CombatDice() {
       }
     }
     calmFrames.current = calm ? calmFrames.current + 1 : 0;
-    const timedOut = liveFrames.current > 280; // ~4.5 s safety net
+    // Wall-clock safety net (frame counts stretch on slow machines).
+    const timedOut = thrownAt.current > 0 && performance.now() - thrownAt.current > 5000;
     if ((liveFrames.current > 20 && calmFrames.current > 10) || timedOut) {
       settled.current = true;
       // Lay each die flat in a row showing the ENGINE's value (the same
@@ -541,6 +583,14 @@ function CombatDice() {
       // The dice are now face-up on the table — NOW announce the numbers.
       showCombatRoll(run.roll);
       hideTimer.current = window.setTimeout(() => setRun(null), combatLingerMs());
+    }
+    } catch (err) {
+      // Poisoned physics world: skip the cosmetic throw, announce, move on.
+      console.warn('MageStone: physics failed during combat dice.', err);
+      settled.current = true;
+      showCombatRoll(run.roll);
+      hideTimer.current = window.setTimeout(() => setRun(null), 800);
+      useGame.getState().bumpPhysicsEpoch();
     }
   });
 
@@ -583,10 +633,14 @@ function CombatDice() {
  *  seat so they hop with the turn). Left running (idle bodies auto-sleep) so a
  *  throw always steps cleanly. */
 export function DiceLayer() {
+  // A Rapier WASM panic poisons the whole world (every later call throws
+  // "recursive use of an object…" forever — dice freeze). The dice layers
+  // detect it and bump this epoch, remounting a FRESH physics world.
+  const physicsEpoch = useGame((s) => s.physicsEpoch);
   return (
     /* Fixed timestep: wall-clock (vary) steps tunnel fast dice through the
        thin floor collider whenever a frame hiccups — 1/60 keeps them honest. */
-    <Physics gravity={[0, -22, 0]} timeStep={1 / 60}>
+    <Physics key={physicsEpoch} gravity={[0, -22, 0]} timeStep={1 / 60}>
       {/* floor: the whole wooden tabletop */}
       <CuboidCollider args={[TABLE_HALF, 0.15, TABLE_HALF]} position={[0, TABLE_SURF - 0.15, 0]} />
       {/* containment walls around ALL FOUR roll strips — combat throws land

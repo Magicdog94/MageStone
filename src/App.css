@@ -1158,6 +1158,24 @@ button.ghost:focus-visible {
   opacity: 0.85;
 }
 
+/* the 3D view (and its crash fallback) fill the app behind the HUD */
+.scene-holder {
+  position: absolute;
+  inset: 0;
+}
+.scene-down {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(120% 120% at 50% 40%, #16210f 0%, #0a1108 70%, #060a05 100%);
+  color: var(--ink-dim);
+  font-family: var(--display);
+  font-size: var(--text-lg);
+  letter-spacing: 0.5px;
+}
+
 /* ---- full-screen gates: "Loading Game" + "Turn to Landscape" ---- */
 .loading-gate,
 .orient-gate {

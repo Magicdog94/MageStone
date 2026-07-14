@@ -110,6 +110,14 @@ interface UIState {
    *  collapse animation each time a unit falls. */
   lastDeath: DeathEvent | null;
   deathNonce: number;
+  /** Bumped when the Rapier WASM world panics (it poisons itself — every later
+   *  call throws). Keyed onto <Physics> so the world remounts fresh. */
+  physicsEpoch: number;
+  bumpPhysicsEpoch: () => void;
+  /** True while the 3D view is down (SceneBoundary caught a crash) — rolls then
+   *  resolve from engine values almost immediately instead of waiting 10s. */
+  sceneDown: boolean;
+  setSceneDown: (down: boolean) => void;
   /** Bumped on every attack so the HUD replays the combat dice roll. */
   combatNonce: number;
   /** The rolled combat result to announce — set by the 3D dice layer the moment
@@ -191,12 +199,15 @@ interface UIState {
   doRitual: () => void;
 }
 
+// Rate-limits physics-world rebuilds (see bumpPhysicsEpoch).
+let lastEpochBump = 0;
+
 /** In an online match a client may only act on its own colour's turn — except
  *  the bot controller (the host), which also acts for the bot colours. */
 const outOfTurn = (s: UIState) =>
   s.online && s.game.current !== s.myColor && !(s.botController && s.bots[s.game.current]);
 
-export const useGame = create<UIState>((set) => ({
+export const useGame = create<UIState>((set, get) => ({
   game: createGame(2),
   selectedUnitId: null,
   selectedDieId: null,
@@ -205,6 +216,8 @@ export const useGame = create<UIState>((set) => ({
   rollNonce: 0,
   lastDeath: null,
   deathNonce: 0,
+  physicsEpoch: 0,
+  sceneDown: false,
   combatNonce: 0,
   combatRoll: null,
   combatIntro: null,
@@ -341,6 +354,17 @@ export const useGame = create<UIState>((set) => ({
   },
   setHovered: (unitId) => set({ hoveredUnitId: unitId }),
 
+  bumpPhysicsEpoch: () => {
+    // Throttled: if even the fresh world panics instantly we must not remount
+    // every frame — the dice fall back to engine values either way.
+    const now = Date.now();
+    if (now - lastEpochBump < 5000) return;
+    lastEpochBump = now;
+    console.warn('MageStone: physics world crashed — rebuilding it.');
+    set((s) => ({ physicsEpoch: s.physicsEpoch + 1 }));
+  },
+  setSceneDown: (down) => set({ sceneDown: down }),
+
   showCombatRoll: (info) =>
     set((s) => ({
       combatRoll: info ? { ...info, nonce: s.combatNonce + 1 } : null,
@@ -348,7 +372,7 @@ export const useGame = create<UIState>((set) => ({
       combatIntro: info ? s.combatIntro : null,
     })),
 
-  roll: () =>
+  roll: () => {
     set((s) => {
       if (outOfTurn(s)) return {};
       return {
@@ -360,7 +384,26 @@ export const useGame = create<UIState>((set) => ({
         combatIntro: null,
         combatRoll: null,
       };
-    }),
+    });
+    // Last-resort watchdog, deliberately OUTSIDE the render loop: the 3D dice
+    // normally report the physical faces, and Dice.tsx has its own in-frame
+    // settle timeout — but if the frame loop itself dies (tab throttled, WebGL
+    // context lost), `rolling` would wedge forever and freeze bot games. The
+    // engine already rolled real values, so after 10s we simply accept them.
+    const armed = get();
+    if (!armed.rolling) return;
+    const nonce = armed.rollNonce;
+    // With the 3D view down there's nothing to wait for — resolve almost at
+    // once; otherwise give the physical dice a generous 10s.
+    const grace = armed.sceneDown ? 400 : 10000;
+    window.setTimeout(() => {
+      const s = get();
+      if (s.rolling && s.rollNonce === nonce) {
+        if (!s.sceneDown) console.warn('MageStone: dice watchdog cleared a stuck roll');
+        s.reportDiceValues(s.game.dice.map((d) => d.value));
+      }
+    }, grace);
+  },
 
   reportDiceValues: (values) =>
     set((s) => (outOfTurn(s) ? {} : { game: setRolledValues(s.game, values), rolling: false })),

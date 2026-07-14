@@ -387,6 +387,8 @@ function Landing() {
   const openSettings = useGame((s) => s.openModal);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  // Hotseat first nudges newcomers toward the guided tutorial.
+  const [confirmHotseat, setConfirmHotseat] = useState(false);
   return (
     <Shell bare>
       <nav className="entry-menu">
@@ -394,10 +396,42 @@ function Landing() {
         <button className="menu-item" onClick={() => goAuth('signup')}>Sign Up</button>
         <button className="menu-item" onClick={() => setShowTutorial(true)}>Rule Book</button>
         <button className="menu-item" onClick={playTutorial}>Tutorial</button>
-        <button className="menu-item" onClick={playLocal}>Hotseat</button>
+        <button className="menu-item" onClick={() => setConfirmHotseat(true)}>Hotseat</button>
         <button className="menu-item" onClick={() => setShowLeaderboard(true)}>Leaderboard</button>
         <button className="menu-item" onClick={() => openSettings('settings')}>Settings</button>
       </nav>
+      {confirmHotseat && (
+        <Modal
+          title="Before you play"
+          onClose={() => setConfirmHotseat(false)}
+          footer={
+            <>
+              <button
+                className="primary"
+                onClick={() => {
+                  setConfirmHotseat(false);
+                  playTutorial();
+                }}
+              >
+                Play Tutorial
+              </button>
+              <button
+                className="primary"
+                onClick={() => {
+                  setConfirmHotseat(false);
+                  playLocal();
+                }}
+              >
+                Continue to Game
+              </button>
+            </>
+          }
+        >
+          <p className="hotseat-confirm">
+            It is recommended to play the tutorial first, do you wish to continue?
+          </p>
+        </Modal>
+      )}
       {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} />}
       {showTutorial && <Tutorial onClose={() => setShowTutorial(false)} />}
     </Shell>

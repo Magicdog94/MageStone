@@ -136,9 +136,11 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'gear',
       title: 'Settings',
-      body: 'Options and a new game live behind the gear, any time.',
+      body: 'Options and a new game live behind the gear, any time. Beside it: the Rule Book, music and fullscreen.',
+      // BELOW the gear — a 'left' box would cover the music/fullscreen toggles
+      // that share this top-right row.
       anchor: '.gear',
-      placement: 'left',
+      placement: 'bottom',
     });
 
     // ---- Roll --------------------------------------------------------------

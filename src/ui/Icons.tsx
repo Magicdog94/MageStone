@@ -24,6 +24,17 @@ export function CogIcon({ size = 18, className }: P) {
   );
 }
 
+/** Rule Book — an open tome. */
+export function BookIcon({ size = 18, className }: P) {
+  return (
+    <svg {...stroke(size)} className={className} aria-hidden="true">
+      <path d="M12 6.2C10.4 4.9 8 4.4 4.5 4.4v13.2c3.5 0 5.9.5 7.5 1.8 1.6-1.3 4-1.8 7.5-1.8V4.4c-3.5 0-5.9.5-7.5 1.8Z" />
+      <path d="M12 6.2v13.2" />
+      <path d="M7 8.4c1.2.1 2.2.3 3 .7M7 11.4c1.2.1 2.2.3 3 .7M17 8.4c-1.2.1-2.2.3-3 .7M17 11.4c-1.2.1-2.2.3-3 .7" />
+    </svg>
+  );
+}
+
 export function CloseIcon({ size = 18, className }: P) {
   return (
     <svg {...stroke(size)} className={className} aria-hidden="true">

@@ -19,7 +19,8 @@ import { PlayerStrip } from './PlayerStrip';
 import { SiegeBanner } from './SiegeBanner';
 import { TurnTimer } from './TurnTimer';
 import { Modals } from './Modals';
-import { CogIcon, GraveIcon } from './Icons';
+import { Tutorial } from './Tutorial';
+import { BookIcon, CogIcon, GraveIcon } from './Icons';
 
 const KIND_LABEL = { warrior: 'Warrior', mage: 'Mage', priest: 'Priest' } as const;
 
@@ -71,6 +72,8 @@ export function HUD() {
     useNet.setState({ screen: 'lobby' });
   };
 
+  // The Rule Book overlay, opened from the golden book beside the toggles.
+  const [showRules, setShowRules] = useState(false);
   // Match the turn-timer bar to the width of the two central player cards.
   const [timerWidth, setTimerWidth] = useState<number | undefined>(undefined);
   useEffect(() => {
@@ -164,6 +167,11 @@ export function HUD() {
       <button className="gear" onClick={() => openModal('settings')} aria-label="Settings">
         <CogIcon size={20} />
       </button>
+      {/* golden Rule Book — sits in the top-right row with music/fullscreen */}
+      <button className="book-toggle" onClick={() => setShowRules(true)} aria-label="Rule Book" title="Rule Book">
+        <BookIcon size={20} />
+      </button>
+      {showRules && <Tutorial onClose={() => setShowRules(false)} />}
       {online && (
         <button className="leave-btn" onClick={exitToLobby}>
           Leave

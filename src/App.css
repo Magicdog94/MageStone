@@ -93,6 +93,29 @@
 .music-toggle.off {
   color: var(--ink-dim);
 }
+/* golden Rule Book — in-game only, one slot left of the music toggle */
+.book-toggle {
+  position: fixed;
+  top: var(--space-4);
+  right: calc(var(--space-4) + 3 * (var(--control-md) + 8px));
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-md);
+  height: var(--control-md);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--gold);
+  background: linear-gradient(180deg, var(--panel-1), var(--panel-2));
+  color: var(--gold-bright);
+  cursor: pointer;
+  transition: color var(--ease), border-color var(--ease), box-shadow var(--ease);
+}
+.book-toggle:hover {
+  color: #fff3d6;
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 10px rgba(236, 203, 120, 0.35);
+}
 
 /* full-screen toggle — between the music toggle and the gear */
 .fs-toggle {
@@ -1100,6 +1123,23 @@ button.ghost:focus-visible {
   height: 100%;
   background: linear-gradient(90deg, var(--gold-dim), var(--gold-bright));
   transition: width 0.25s ease;
+}
+.loading-pct {
+  font-family: var(--display);
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+}
+/* the hotseat "play the tutorial first?" prompt */
+.hotseat-confirm {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  color: #f3ead2;
+  text-align: center;
+  padding: var(--space-2) 0;
 }
 .orient-icon {
   color: var(--gold);
@@ -2215,9 +2255,38 @@ body.ui-mobile .tut-gotit {
   font-size: var(--text-sm);
   color: var(--ink-dim);
 }
-/* Leaderboard tabs: Matches | ELO Rankings */
+/* Leaderboard tabs: Matches | ELO Rankings. Each tab wears its OWN gold trim
+   (the shared .segmented container border made the active pill read as an
+   offset double ring), so the band hugs every button's perimeter. */
 .lb-tabs {
   margin-bottom: var(--space-4);
+  border: none;
+  background: transparent;
+  padding: 0;
+  gap: var(--space-2);
+}
+/* (doubled selectors so these also outrank the `.entry .modal .seg` override
+   that clears seg borders inside main-menu modals) */
+.lb-tabs .seg,
+.entry .modal .lb-tabs .seg {
+  height: var(--control-md);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--gold-line);
+  border-radius: var(--radius-sm);
+  color: var(--ink-dim);
+  background: linear-gradient(180deg, rgba(60, 48, 26, 0.35), rgba(28, 22, 12, 0.45));
+}
+.lb-tabs .seg:hover,
+.entry .modal .lb-tabs .seg:hover {
+  color: var(--gold-bright);
+  border-color: var(--gold);
+}
+.lb-tabs .seg.active,
+.entry .modal .lb-tabs .seg.active {
+  color: #2a1c06;
+  font-weight: 700;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold) 55%, var(--gold-dim));
+  border-color: #f3d590;
 }
 .lb-elo-num {
   font-weight: 700;
@@ -3032,6 +3101,16 @@ body.ui-mobile .music-toggle {
   right: auto;
   left: calc(env(safe-area-inset-left, 0px) + 8px);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
+  width: 34px;
+  height: 34px;
+}
+/* mobile: the book pill stacks ABOVE the music pill in the bottom-left gutter
+   (the action bar starts at left+88, so a third pill can't sit beside them) */
+body.ui-mobile .book-toggle {
+  top: auto;
+  right: auto;
+  left: calc(env(safe-area-inset-left, 0px) + 8px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 46px);
   width: 34px;
   height: 34px;
 }

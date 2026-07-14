@@ -37,6 +37,7 @@ export function LoadingGate() {
         <div className="loading-bar">
           <span style={{ width: `${pct}%` }} />
         </div>
+        <div className="loading-pct">{pct}%</div>
         <div className="loading-sub">Summoning the board…</div>
       </div>
     </div>

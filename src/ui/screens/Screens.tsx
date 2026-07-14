@@ -383,15 +383,13 @@ function LeaderboardModal({ onClose }: { onClose: () => void }) {
 }
 
 function Landing() {
-  const goAuth = useNet((s) => s.goAuth);
   const playLocal = useNet((s) => s.playLocal);
   const playTutorial = useNet((s) => s.playTutorial);
   const username = useNet((s) => s.username);
   const setScreen = useNet((s) => s.setScreen);
   const openSettings = useGame((s) => s.openModal);
   const [showTutorial, setShowTutorial] = useState(false);
-  const [showLeaderboard, setShowLeaderboard] = useState(false);
-  // ONE route into a match: "Play MageStone" expands the three ways to play.
+  // ONE route into a match: "Play MageStone" expands the ways to play.
   const [playOpen, setPlayOpen] = useState(false);
   // Hotseat first nudges newcomers toward the guided tutorial.
   const [confirmHotseat, setConfirmHotseat] = useState(false);
@@ -416,12 +414,12 @@ function Landing() {
             <button className="menu-item menu-subitem" onClick={playTutorial}>
               Learn with Tutorial
             </button>
+            <button className="menu-item menu-subitem" onClick={() => setShowTutorial(true)}>
+              Rules
+            </button>
           </div>
         )}
-        <button className="menu-item" onClick={() => setShowTutorial(true)}>Rule Book</button>
-        <button className="menu-item" onClick={() => setShowLeaderboard(true)}>Leaderboard</button>
         <button className="menu-item" onClick={() => openSettings('settings')}>Settings</button>
-        <button className="menu-item menu-small" onClick={() => goAuth('signin')}>Sign In</button>
       </nav>
       {confirmHotseat && (
         <Modal
@@ -455,7 +453,6 @@ function Landing() {
           </p>
         </Modal>
       )}
-      {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} />}
       {showTutorial && <Tutorial onClose={() => setShowTutorial(false)} />}
       <LandingFooter />
     </Shell>
@@ -698,16 +695,21 @@ function CreateJoin() {
   const [createPw, setCreatePw] = useState('');
   const [joinId, setJoinId] = useState('');
   const [joinPw, setJoinPw] = useState('');
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   return (
     <Shell>
       <div className="entry-userbar">
         {guest ? 'Playing as' : 'Signed in as'} <strong>{username}</strong>
         {guest && <span className="guest-badge">guest</span>}
+        <button className="link-btn" onClick={() => setShowLeaderboard(true)}>
+          Leaderboard
+        </button>
         <button className="link-btn" onClick={signout}>
           {guest ? 'Leave' : 'Sign out'}
         </button>
       </div>
+      {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} />}
       <RankedCard />
       <div className="lobby-grid">
         <div className="entry-card">
@@ -878,6 +880,7 @@ function GuestName() {
   const error = useNet((s) => s.authError);
   const busy = useNet((s) => s.authBusy);
   const [name, setName] = useState('');
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (name.trim().length >= 2) guestPlay(name.trim());
@@ -902,6 +905,15 @@ function GuestName() {
         <button className="primary lg" type="submit" disabled={busy || name.trim().length < 2}>
           {pendingJoin ? 'Join game' : 'Continue'}
         </button>
+        {/* accounts (for Ranked/ELO) + the leaderboard live here, off the menu */}
+        <div className="online-extras">
+          <button type="button" className="ghost" onClick={() => goAuth('signin')}>
+            Sign In
+          </button>
+          <button type="button" className="ghost" onClick={() => setShowLeaderboard(true)}>
+            Leaderboard
+          </button>
+        </div>
         <div className="entry-switch">
           Want an ELO rating?{' '}
           <button type="button" className="link-btn" onClick={() => goAuth('signup')}>
@@ -912,6 +924,7 @@ function GuestName() {
           ← Back
         </button>
       </form>
+      {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} />}
     </Shell>
   );
 }

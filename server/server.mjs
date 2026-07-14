@@ -70,10 +70,112 @@ async function initStore() {
      username text, enjoy text, confuse text, change text, duration text, players text,
      finished text, victory text, bug text)`,
   );
+  await pool.query('ALTER TABLE feedback ADD COLUMN IF NOT EXISTS emailed boolean NOT NULL DEFAULT false');
   await pool.query(
     'CREATE TABLE IF NOT EXISTS pnp (email text PRIMARY KEY, created timestamptz DEFAULT now())',
   );
   console.log('Using Postgres for accounts.');
+}
+
+// ---- Feedback → email relay -------------------------------------------------
+// Every feedback row (past AND present) is forwarded to the designer's inbox
+// via formsubmit.co's keyless AJAX relay. The FIRST send triggers a one-time
+// activation email to the recipient; until they confirm, rows simply stay
+// queued (emailed=false) and are retried on boot and on the next submission.
+const FEEDBACK_EMAIL = process.env.FEEDBACK_EMAIL || 'jacobhirst94@gmail.com';
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const fieldsText = (f) =>
+  [
+    `From: ${f.username || 'anonymous'}`,
+    `Submitted: ${f.created ? String(f.created) : new Date().toISOString()}`,
+    `Most enjoyable: ${f.enjoy || '—'}`,
+    `Confusing/frustrating: ${f.confuse || '—'}`,
+    `Would change: ${f.change || '—'}`,
+    `Match length: ${f.duration || '—'}`,
+    `Players: ${f.players || '—'}`,
+    `Finished: ${f.finished || '—'}`,
+    `Victory: ${f.victory || '—'}`,
+    `Bug: ${f.bug || '—'}`,
+  ].join('\n');
+async function emailFeedbackRow(f) {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 20000); // never stall the flush
+  try {
+    if (RESEND_API_KEY) {
+      // Reliable path once the owner adds a (free) Resend key to the env.
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${RESEND_API_KEY}` },
+        signal: abort.signal,
+        body: JSON.stringify({
+          from: 'MageStone Alpha <onboarding@resend.dev>',
+          to: [FEEDBACK_EMAIL],
+          subject: `MageStone alpha feedback${f.username ? ` — ${f.username}` : ''}`,
+          text: fieldsText(f),
+        }),
+      });
+      return res.ok;
+    }
+    // Keyless fallback: formsubmit.co relay. Requires a site origin, and the
+    // FIRST successful contact emails the recipient an activation link.
+    const res = await fetch(`https://formsubmit.co/ajax/${FEEDBACK_EMAIL}`, {
+      method: 'POST',
+      signal: abort.signal,
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+        origin: 'https://magestone.net',
+        referer: 'https://magestone.net/',
+      },
+      body: JSON.stringify({
+        _subject: `MageStone alpha feedback${f.username ? ` — ${f.username}` : ''}`,
+        _template: 'box',
+        _captcha: 'false',
+        message: fieldsText(f),
+      }),
+    });
+    const out = await res.json().catch(() => ({}));
+    return res.ok && String(out.success) === 'true';
+  } finally {
+    clearTimeout(timer);
+  }
+}
+let flushing = false;
+async function flushFeedbackEmails() {
+  if (flushing) return;
+  flushing = true;
+  try {
+    if (pool) {
+      const r = await pool.query(
+        'SELECT id, created, username, enjoy, confuse, change, duration, players, finished, victory, bug FROM feedback WHERE NOT emailed ORDER BY id LIMIT 25',
+      );
+      for (const row of r.rows) {
+        const ok = await emailFeedbackRow(row).catch(() => false);
+        if (!ok) break; // relay not activated yet (or down) — retry later
+        await pool.query('UPDATE feedback SET emailed = true WHERE id = $1', [row.id]);
+      }
+    } else {
+      let list = [];
+      try {
+        if (existsSync(FEEDBACK_FILE)) list = JSON.parse(readFileSync(FEEDBACK_FILE, 'utf8'));
+      } catch {
+        list = [];
+      }
+      let dirty = false;
+      for (const row of list) {
+        if (row.emailed) continue;
+        const ok = await emailFeedbackRow(row).catch(() => false);
+        if (!ok) break;
+        row.emailed = true;
+        dirty = true;
+      }
+      if (dirty) writeFileSync(FEEDBACK_FILE, JSON.stringify(list, null, 2));
+    }
+  } catch (e) {
+    console.error('feedback email flush:', e.message);
+  } finally {
+    flushing = false;
+  }
 }
 
 // Feedback + PnP signups fall back to local JSON files in dev.
@@ -589,6 +691,8 @@ async function handle(ws, s, m) {
         victory: cap(m.victory),
         bug: cap(m.bug),
       });
+      // forward to the inbox in the background (queued rows retry too)
+      flushFeedbackEmails().catch(() => {});
       return send(ws, { t: 'feedbackOk' });
     }
     case 'pnp': {
@@ -696,6 +800,11 @@ wss.on('connection', (ws) => {
 const PORT = process.env.PORT || 8787;
 initStore()
   .then(() => httpServer.listen(PORT, () => console.log(`MageStone server listening on :${PORT}`)))
+  .then(() => {
+    // Deliver any feedback that hasn't reached the inbox yet (incl. rows from
+    // before the email relay existed — "past and present").
+    flushFeedbackEmails().catch(() => {});
+  })
   .catch((e) => {
     console.error('Failed to initialise the accounts database:', e.message);
     process.exit(1);

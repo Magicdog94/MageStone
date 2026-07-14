@@ -1,0 +1,2 @@
+Using local file for accounts (set DATABASE_URL for a real DB).
+MageStone server listening on :8788

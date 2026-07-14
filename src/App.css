@@ -2365,6 +2365,16 @@ body.ui-mobile .tut-gotit {
   font-size: clamp(14px, 1.5vw, 19px);
   opacity: 0.85;
 }
+/* Sign In + Leaderboard side-by-side on the Play Online screen */
+.online-extras {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: center;
+  margin-top: var(--space-3);
+}
+.online-extras .ghost {
+  flex: 1;
+}
 /* invite-link chip in the room header + guest badge in the userbar */
 .copy-link {
   height: var(--control-sm);
@@ -2781,6 +2791,16 @@ body.ui-mobile .tut-gotit {
   color: var(--ink-dim);
   background: transparent;
   border-color: transparent;
+}
+/* Inside a segmented CONTAINER the pills must keep the tight slot metrics —
+   the standalone `.entry .seg` sizing (full control height + wide padding)
+   otherwise makes the active pill span edge-to-edge over the container's own
+   border, reading as an offset ring. (.lb-tabs excluded: those tabs carry
+   their own per-button trim.) */
+.entry .modal .segmented:not(.lb-tabs) .seg {
+  height: 100%;
+  padding: 0 var(--space-3);
+  border: none;
 }
 .entry .modal .seg:hover {
   color: var(--gold-bright);

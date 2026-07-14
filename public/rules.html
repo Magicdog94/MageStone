@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MageStone Rules – Complete Rulebook</title>
+<meta name="description" content="The complete MageStone rulebook: setup, turn structure, movement, combat and coordination, MageStones, gravestones and resurrection, sieges, and the three victory conditions.">
+<link rel="canonical" href="https://magestone.net/rules">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta property="og:title" content="MageStone Rules">
+<meta property="og:description" content="The complete rulebook for MageStone, the free online fantasy strategy board game.">
+<meta property="og:image" content="https://magestone.net/og.jpg">
+<meta property="og:url" content="https://magestone.net/rules">
+<style>
+body{margin:0;background:#0c1710;color:#f3ead2;font:17px/1.6 Georgia,'Times New Roman',serif}
+main{max-width:760px;margin:0 auto;padding:40px 20px 80px}
+h1,h2{font-family:Georgia,serif;color:#eccb78;line-height:1.2}
+a{color:#eccb78}
+nav{display:flex;gap:18px;padding:18px 20px;border-bottom:1px solid rgba(201,162,74,.35);flex-wrap:wrap}
+nav a{text-decoration:none;font-size:15px;letter-spacing:.5px}
+footer{padding:24px 20px;border-top:1px solid rgba(201,162,74,.35);font-size:13px;color:#9aa08c;text-align:center}
+ol li,ul li{margin-bottom:8px}
+table{border-collapse:collapse;margin:16px 0}
+td,th{border:1px solid rgba(201,162,74,.35);padding:6px 12px;text-align:center}
+</style>
+</head>
+<body>
+<nav>
+<a href="/">Home</a><a href="/play">Play</a><a href="/how-to-play">How to Play</a><a href="/rules">Rules</a><a href="/about">About</a>
+</nav>
+<main>
+<h1>MageStone — Complete Rules</h1>
+<p>MageStone is played by 2 or 4 players on a 16×16 board with cut corners. Each player commands <strong>1 Mage, 1 Priest and 6 Warriors</strong>, arrayed along their home edge. The central 8×8 holds the MageStones (4 per player); the centre 2×2 is the <strong>Nexus</strong>.</p>
+
+<h2>Turn structure</h2>
+<ol>
+<li><strong>Roll 5 dice</strong>: 1 Mage die, 1 Priest die, 3 Warrior dice (all d6).</li>
+<li><strong>Discard 2 dice</strong> — 3 remain.</li>
+<li><strong>Movement</strong> — move up to 3 units. A die only moves its matching unit kind. Movement is an orthogonal route that may bend, up to the die value, through empty squares; units block, stones and gravestones do not.</li>
+<li><strong>Actions</strong> — each activated unit may take one action: attack, collect MageStones, activate MageStones, resurrect, or begin the ritual. An action reuses the unit's move die, or takes a free matching die.</li>
+<li><strong>End turn</strong>, passing clockwise.</li>
+</ol>
+
+<h2>Combat</h2>
+<p>Warriors and Mages attack an enemy on an orthogonally adjacent square; Priests never attack. One Warrior rolls 1d6; two or three Warriors adjacent to the same target <strong>coordinate</strong> for 2d6 or 3d6 summed. The Mage rolls its power die — d6 with 0–1 activated MageStones, d12 with 2–3, d20 with 4+.</p>
+<p>The defender rolls 1d6 (a defending Mage rolls its own power die). Higher total wins; <strong>ties are re-rolled</strong> until decisive. If the attacker wins, the target is defeated; if the defender wins, one attacker falls — except against a defending Priest, which repels the attack without killing.</p>
+<table>
+<tr><th>Attacker</th><th>vs d6</th><th>vs d12</th><th>vs d20</th></tr>
+<tr><td>1 Warrior (1d6)</td><td>50%</td><td>23%</td><td>13%</td></tr>
+<tr><td>2 Warriors (2d6)</td><td>90%</td><td>55%</td><td>32%</td></tr>
+<tr><td>3 Warriors (3d6)</td><td>99%</td><td>81%</td><td>50%</td></tr>
+<tr><td>Mage d12</td><td>77%</td><td>50%</td><td>29%</td></tr>
+<tr><td>Mage d20</td><td>87%</td><td>71%</td><td>50%</td></tr>
+</table>
+
+<h2>Defeat, gravestones and respawns</h2>
+<ul>
+<li>A fallen <strong>Warrior</strong> leaves a gravestone — only while the shared bank (3 per player) has stock, never on the Nexus, and never stacked on another gravestone.</li>
+<li>A fallen <strong>Mage</strong> drops its unactivated stones plus one activated stone where it fell, keeps the rest, and respawns at its base. A fallen <strong>Priest</strong> respawns at its base.</li>
+<li>If an enemy occupies your base, you are <strong>under siege</strong>: respawns wait until the base is clear. A player whose last units are locked out is eliminated.</li>
+</ul>
+
+<h2>MageStones</h2>
+<p>The Mage collects a stone by ending its move on it, and may <strong>activate</strong> carried stones only while standing on its own base. Activated stones power the Mage's combat die and count toward victory.</p>
+
+<h2>The Priest</h2>
+<p>A Priest standing on any gravestone may <strong>resurrect</strong> a Warrior there (up to 6 alive), stepping back one square. A Priest in the Nexus with all four Nexus squares free of enemies may <strong>begin the ritual</strong>.</p>
+
+<h2>Victory</h2>
+<ol>
+<li><strong>MageStone</strong> — your Mage stands on your own base with 6+ activated MageStones. Instant win.</li>
+<li><strong>Ritual</strong> — your Priest still holds a clear Nexus when play returns to you a full round after beginning the ritual.</li>
+<li><strong>Conquest</strong> — every rival is eliminated.</li>
+</ol>
+
+<p>Prefer to see it in motion? <a href="/how-to-play">Read the quick guide</a> or <a href="/">play the guided tutorial free in your browser</a>.</p>
+</main>
+<footer>© 2026 MageStone. Early alpha — gameplay and artwork subject to change. <a href="/">magestone.net</a></footer>
+</body>
+</html>

@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { attackOptions, unitActions, useGame } from '../store';
 import { useNet } from '../net/useNet';
 import { usePlayerLabel } from './playerNames';
@@ -20,26 +20,84 @@ import { SiegeBanner } from './SiegeBanner';
 import { TurnTimer } from './TurnTimer';
 import { Modals } from './Modals';
 import { Tutorial } from './Tutorial';
+import { FeedbackModal } from './FeedbackModal';
 import { BookIcon, CogIcon, GraveIcon } from './Icons';
 
 const KIND_LABEL = { warrior: 'Warrior', mage: 'Mage', priest: 'Priest' } as const;
+const KIND_ABILITY = {
+  warrior: 'Attacks · coordinates with adjacent Warriors (1–3d6)',
+  mage: 'Collects & activates MageStones · attack die grows d6 → d12 → d20',
+  priest: 'Cannot attack · resurrects from gravestones · Nexus ritual to win',
+} as const;
+
+/** Always-visible turn structure — each stage ticks off as the turn advances. */
+function PhaseTrack() {
+  const game = useGame((s) => s.game);
+  if (game.winner) return null;
+  const phase = game.turnPhase;
+  const dleft = phase === 'discard' ? discardsLeft(game) : 0;
+  const steps = [
+    { key: 'roll', label: '1 · Roll 5 dice', done: phase !== 'roll', active: phase === 'roll' },
+    {
+      key: 'discard',
+      label: phase === 'discard' ? `2 · Discard ${dleft} more` : '2 · Discard 2',
+      done: phase === 'act',
+      active: phase === 'discard',
+    },
+    { key: 'act', label: '3 · Move & act', done: false, active: phase === 'act' },
+  ];
+  return (
+    <div className="phase-track" aria-label="Turn phases">
+      {steps.map((s) => (
+        <span key={s.key} className={`phase-step${s.done ? ' done' : ''}${s.active ? ' active' : ''}`}>
+          {s.done ? '✓ ' : ''}
+          {s.label}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 /** "Red rolls 15 · Green rolls 4" — shown only once the physical combat dice
  *  have settled face-up (set by three/Dice.tsx::CombatDice on settle). */
 function CombatAnnounce() {
   const roll = useGame((s) => s.combatRoll);
+  const intro = useGame((s) => s.combatIntro);
   const label = usePlayerLabel();
-  if (!roll) return null;
+  // Numbers once the dice settle; before that, WHO fights WHOM with WHAT.
+  if (roll) {
+    return (
+      <div className="combat-announce" key={roll.nonce} role="status">
+        <span className="ca-side" style={{ '--accent': COLORS[roll.attacker] } as CSSProperties}>
+          <span className="ca-name">{label(roll.attacker)}</span> rolls{' '}
+          <span className="ca-roll">{roll.attackRoll}</span>
+        </span>
+        <span className="ca-dot">·</span>
+        <span className="ca-side" style={{ '--accent': COLORS[roll.defender] } as CSSProperties}>
+          <span className="ca-name">{label(roll.defender)}</span> rolls{' '}
+          <span className="ca-roll">{roll.defenseRoll}</span>
+        </span>
+      </div>
+    );
+  }
+  if (!intro) return null;
   return (
-    <div className="combat-announce" key={roll.nonce} role="status">
-      <span className="ca-side" style={{ '--accent': COLORS[roll.attacker] } as CSSProperties}>
-        <span className="ca-name">{label(roll.attacker)}</span> rolls{' '}
-        <span className="ca-roll">{roll.attackRoll}</span>
+    <div className="combat-announce" role="status">
+      <span className="ca-side" style={{ '--accent': COLORS[intro.attacker] } as CSSProperties}>
+        <span className="ca-name">
+          {label(intro.attacker)} {KIND_LABEL[intro.attackerKind]}
+          {intro.count > 1 ? ` ×${intro.count}` : ''}
+        </span>
+      </span>
+      <span className="ca-dot">attacks</span>
+      <span className="ca-side" style={{ '--accent': COLORS[intro.defender] } as CSSProperties}>
+        <span className="ca-name">
+          {label(intro.defender)} {KIND_LABEL[intro.defenderKind]}
+        </span>
       </span>
       <span className="ca-dot">·</span>
-      <span className="ca-side" style={{ '--accent': COLORS[roll.defender] } as CSSProperties}>
-        <span className="ca-name">{label(roll.defender)}</span> rolls{' '}
-        <span className="ca-roll">{roll.defenseRoll}</span>
+      <span className="ca-faces">
+        {intro.attackFaces} vs {intro.defenseFaces} · ties re-roll
       </span>
     </div>
   );
@@ -74,6 +132,21 @@ export function HUD() {
 
   // The Rule Book overlay, opened from the golden book beside the toggles.
   const [showRules, setShowRules] = useState(false);
+  // Alpha feedback: a persistent pill during play, and an automatic prompt
+  // shortly after each game ends (never during the tutorial).
+  const [showFeedback, setShowFeedback] = useState(false);
+  const tutorial = useGame((s) => s.tutorial);
+  const fbPrompted = useRef(false);
+  useEffect(() => {
+    if (!game.winner) {
+      fbPrompted.current = false;
+      return;
+    }
+    if (tutorial || fbPrompted.current) return;
+    fbPrompted.current = true;
+    const t = window.setTimeout(() => setShowFeedback(true), 2600);
+    return () => window.clearTimeout(t);
+  }, [game.winner, tutorial]);
   // Match the turn-timer bar to the width of the two central player cards.
   const [timerWidth, setTimerWidth] = useState<number | undefined>(undefined);
   useEffect(() => {
@@ -140,6 +213,7 @@ export function HUD() {
 
       {/* Top: player status, turn timer, round + gravestone-bank chips, settings */}
       <PlayerStrip />
+      <PhaseTrack />
       <TurnTimer key={`${game.current}:${turnSeconds ?? 'off'}`} width={timerWidth} />
       <div className="top-chips">
         <span className="turn-chip tip" data-tip="Round — advances when play returns to the first player">
@@ -172,6 +246,13 @@ export function HUD() {
         <BookIcon size={20} />
       </button>
       {showRules && <Tutorial onClose={() => setShowRules(false)} />}
+      {/* always-available bug/feedback entry point during a match */}
+      {!tutorial && (
+        <button className="feedback-btn" onClick={() => setShowFeedback(true)}>
+          Feedback
+        </button>
+      )}
+      {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)} />}
       {online && (
         <button className="leave-btn" onClick={exitToLobby}>
           Leave
@@ -221,13 +302,24 @@ export function HUD() {
         <div className="selinfo">
           {selectedUnit ? (
             <>
-              <strong>{KIND_LABEL[selectedUnit.kind]}</strong>
+              <strong title={KIND_ABILITY[selectedUnit.kind]}>{KIND_LABEL[selectedUnit.kind]}</strong>
+              <div className="muted unit-ability">{KIND_ABILITY[selectedUnit.kind]}</div>
               {selectedUnit.kind === 'mage' && (
                 <div className="muted">
                   carrying {selectedUnit.carried} · activated {selectedUnit.activated} · attack d
                   {magePowerDie(selectedUnit.activated)}
                 </div>
               )}
+              {/* the assigned die + how far this unit can still march */}
+              {(() => {
+                const die = game.dice.find((d) => d.id === selectedDieId);
+                const moved = game.unitsMovedThisTurn.includes(selectedUnit.id);
+                return die && !moved ? (
+                  <div className="muted">
+                    die {die.value} — move up to {die.value} squares
+                  </div>
+                ) : null;
+              })()}
               <div className="unit-actions">
                 {/* Attack from the bar — no need to click the enemy on the board.
                     Warriors offer Single/Double/Triple (coordinated); a Mage a

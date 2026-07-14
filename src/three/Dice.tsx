@@ -398,7 +398,9 @@ interface CombatDieSpec {
   slots: number;
 }
 
-const COMBAT_LINGER_MS = 2400; // how long the settled result stays on the table
+// How long the settled result stays on the table (players who fight a lot can
+// shorten it via Settings → Fast dice).
+const combatLingerMs = () => (useGame.getState().settings.fastDice ? 1000 : 2400);
 
 interface CombatRun {
   id: number;
@@ -538,7 +540,7 @@ function CombatDice() {
       });
       // The dice are now face-up on the table — NOW announce the numbers.
       showCombatRoll(run.roll);
-      hideTimer.current = window.setTimeout(() => setRun(null), COMBAT_LINGER_MS);
+      hideTimer.current = window.setTimeout(() => setRun(null), combatLingerMs());
     }
   });
 

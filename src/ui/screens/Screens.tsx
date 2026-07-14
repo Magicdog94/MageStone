@@ -4,8 +4,10 @@ import { eloTier, useNet, type LbRow } from '../../net/useNet';
 import { useGame } from '../../store';
 import { BOT_LABEL, BOT_LEVELS } from '../../game/bot';
 import { COLORS } from '../../three/coords';
+import { KNOWN_ISSUES, PATCH_NOTES, UPDATED, VERSION } from '../../version';
 import { Tutorial } from '../Tutorial';
 import { Modals } from '../Modals';
+import { FeedbackModal } from '../FeedbackModal';
 import { Modal } from '../controls';
 
 /** A hooded mage casting toward the centre. Rendered as a glowing silhouette so
@@ -384,21 +386,42 @@ function Landing() {
   const goAuth = useNet((s) => s.goAuth);
   const playLocal = useNet((s) => s.playLocal);
   const playTutorial = useNet((s) => s.playTutorial);
+  const username = useNet((s) => s.username);
+  const setScreen = useNet((s) => s.setScreen);
   const openSettings = useGame((s) => s.openModal);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  // ONE route into a match: "Play MageStone" expands the three ways to play.
+  const [playOpen, setPlayOpen] = useState(false);
   // Hotseat first nudges newcomers toward the guided tutorial.
   const [confirmHotseat, setConfirmHotseat] = useState(false);
+  const playOnline = () => {
+    // Signed in (or already playing as a guest) → straight to the lobby;
+    // otherwise just ask for a name — no account needed in the alpha.
+    if (username) setScreen('lobby');
+    else setScreen('guest');
+  };
   return (
     <Shell bare>
       <nav className="entry-menu">
-        <button className="menu-item" onClick={() => goAuth('signin')}>Sign In</button>
-        <button className="menu-item" onClick={() => goAuth('signup')}>Sign Up</button>
+        <button className="menu-item menu-primary" onClick={() => setPlayOpen((v) => !v)}>
+          Play MageStone
+        </button>
+        {playOpen && (
+          <div className="menu-sub">
+            <button className="menu-item menu-subitem" onClick={playOnline}>Play Online</button>
+            <button className="menu-item menu-subitem" onClick={() => setConfirmHotseat(true)}>
+              Play Hotseat
+            </button>
+            <button className="menu-item menu-subitem" onClick={playTutorial}>
+              Learn with Tutorial
+            </button>
+          </div>
+        )}
         <button className="menu-item" onClick={() => setShowTutorial(true)}>Rule Book</button>
-        <button className="menu-item" onClick={playTutorial}>Tutorial</button>
-        <button className="menu-item" onClick={() => setConfirmHotseat(true)}>Hotseat</button>
         <button className="menu-item" onClick={() => setShowLeaderboard(true)}>Leaderboard</button>
         <button className="menu-item" onClick={() => openSettings('settings')}>Settings</button>
+        <button className="menu-item menu-small" onClick={() => goAuth('signin')}>Sign In</button>
       </nav>
       {confirmHotseat && (
         <Modal
@@ -434,7 +457,103 @@ function Landing() {
       )}
       {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} />}
       {showTutorial && <Tutorial onClose={() => setShowTutorial(false)} />}
+      <LandingFooter />
     </Shell>
+  );
+}
+
+/** Trust signals + alpha housekeeping along the bottom of the front page. */
+function LandingFooter() {
+  const [modal, setModal] = useState<null | 'feedback' | 'issues' | 'patch' | 'privacy' | 'pnp'>(null);
+  const pnpSignup = useNet((s) => s.pnpSignup);
+  const pnpDone = useNet((s) => s.pnpDone);
+  const [email, setEmail] = useState('');
+  const close = () => setModal(null);
+  return (
+    <>
+      <footer className="entry-footer">
+        <span className="entry-footer-line">
+          MageStone — Early Alpha {VERSION} · updated {UPDATED} · © 2026 MageStone · desktop
+          recommended
+        </span>
+        <span className="entry-footer-links">
+          <button className="link-btn" onClick={() => setModal('feedback')}>Feedback</button>
+          <button className="link-btn" onClick={() => setModal('issues')}>Known issues</button>
+          <button className="link-btn" onClick={() => setModal('patch')}>Patch notes</button>
+          <button className="link-btn" onClick={() => setModal('pnp')}>Print &amp; Play</button>
+          <button className="link-btn" onClick={() => setModal('privacy')}>Privacy</button>
+        </span>
+      </footer>
+      {modal === 'feedback' && <FeedbackModal onClose={close} />}
+      {modal === 'issues' && (
+        <Modal title="Known issues" onClose={close} footer={<button className="primary" onClick={close}>Done</button>}>
+          <ul className="footer-list">
+            {KNOWN_ISSUES.map((k) => (
+              <li key={k}>{k}</li>
+            ))}
+          </ul>
+        </Modal>
+      )}
+      {modal === 'patch' && (
+        <Modal title="Patch notes" onClose={close} footer={<button className="primary" onClick={close}>Done</button>}>
+          <ul className="footer-list">
+            {PATCH_NOTES.map((k) => (
+              <li key={k}>{k}</li>
+            ))}
+          </ul>
+        </Modal>
+      )}
+      {modal === 'privacy' && (
+        <Modal title="Privacy" onClose={close} footer={<button className="primary" onClick={close}>Done</button>}>
+          <div className="footer-prose">
+            <p>
+              MageStone stores the minimum needed to run the alpha: account usernames with salted,
+              hashed passwords; win/loss and ELO records; feedback you submit; and an email address
+              only if you join the print-and-play list.
+            </p>
+            <p>
+              No ads, no trackers, no analytics cookies — the only browser storage used is for your
+              own preferences (layout, acknowledgements) and session token. To remove your data,
+              send a note through the Feedback form.
+            </p>
+          </div>
+        </Modal>
+      )}
+      {modal === 'pnp' && (
+        <Modal title="Print & Play" onClose={close} footer={<button className="primary" onClick={close}>Done</button>}>
+          {pnpDone ? (
+            <p className="hotseat-confirm">You’re on the list — thank you! We’ll email when the print-and-play kit is ready.</p>
+          ) : (
+            <>
+              <p className="footer-prose">
+                Interested in the physical game? Join the print-and-play playtest list and be first
+                to get the tabletop kit.
+              </p>
+              <form
+                className="pnp-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (email.includes('@')) pnpSignup(email);
+                }}
+              >
+                <label className="entry-field">
+                  <span>Email</span>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                  />
+                </label>
+                <button className="primary" type="submit" disabled={!email.includes('@')}>
+                  Join the list
+                </button>
+              </form>
+            </>
+          )}
+        </Modal>
+      )}
+    </>
   );
 }
 
@@ -514,11 +633,26 @@ function RankedCard() {
   const cancelRanked = useNet((s) => s.cancelRanked);
   const leaderboard = useNet((s) => s.leaderboard);
   const fetchLeaderboard = useNet((s) => s.fetchLeaderboard);
+  const guest = useNet((s) => s.guest);
+  const goAuth = useNet((s) => s.goAuth);
   useEffect(() => {
     fetchLeaderboard(); // fills `me` (my ELO) for the header line
   }, [fetchLeaderboard]);
   const me = leaderboard?.me ?? null;
   const rated = me?.elo != null;
+
+  // Guests can play casual games freely, but ELO needs a real account.
+  if (guest) {
+    return (
+      <div className="entry-card wide ranked-card">
+        <div className="entry-card-title">Ranked match</div>
+        <div className="ranked-info">Ranked play and ELO ratings need a free account.</div>
+        <button className="ghost lg" onClick={() => goAuth('signup')}>
+          Create an account
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="entry-card wide ranked-card">
@@ -555,6 +689,7 @@ function RankedCard() {
 
 function CreateJoin() {
   const username = useNet((s) => s.username);
+  const guest = useNet((s) => s.guest);
   const create = useNet((s) => s.createGame);
   const join = useNet((s) => s.joinGame);
   const signout = useNet((s) => s.signout);
@@ -567,9 +702,10 @@ function CreateJoin() {
   return (
     <Shell>
       <div className="entry-userbar">
-        Signed in as <strong>{username}</strong>
+        {guest ? 'Playing as' : 'Signed in as'} <strong>{username}</strong>
+        {guest && <span className="guest-badge">guest</span>}
         <button className="link-btn" onClick={signout}>
-          Sign out
+          {guest ? 'Leave' : 'Sign out'}
         </button>
       </div>
       <RankedCard />
@@ -593,7 +729,11 @@ function CreateJoin() {
           </div>
           <label className="entry-field">
             <span>Game password</span>
-            <input value={createPw} onChange={(e) => setCreatePw(e.target.value)} placeholder="players need this to join" />
+            <input
+              value={createPw}
+              onChange={(e) => setCreatePw(e.target.value)}
+              placeholder="optional — leave empty for link invites"
+            />
           </label>
           <button className="primary lg" onClick={() => create(players, createPw)}>
             Create game
@@ -634,6 +774,18 @@ function Room() {
   const removeBot = useNet((s) => s.removeBot);
   const isHost = room.host === username;
   const full = room.players.length >= room.playerCount;
+  // One-click invites: the link opens the game and pre-fills this room.
+  const [copied, setCopied] = useState(false);
+  const copyInvite = () => {
+    const url = `${location.origin}/?join=${room.gameId}`;
+    navigator.clipboard
+      ?.writeText(url)
+      .then(() => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => window.prompt('Copy this invite link:', url));
+  };
 
   return (
     <Shell>
@@ -646,7 +798,14 @@ function Room() {
         ) : (
           <div className="room-id">
             Game ID <span className="room-code">{room.gameId}</span>
-            <span className="room-hint">share this + the password</span>
+            <button className="ghost copy-link" onClick={copyInvite} type="button">
+              {copied ? 'Link copied!' : 'Copy invite link'}
+            </button>
+            <span className="room-hint">
+              {room.hasPass
+                ? 'friends also need the room password'
+                : 'anyone with the link can join'}
+            </span>
           </div>
         )}
         <div className="room-players">
@@ -704,6 +863,55 @@ export function EntryScreens() {
   const room = useNet((s) => s.room);
   if (screen === 'landing') return <Landing />;
   if (screen === 'auth') return <Auth />;
+  if (screen === 'guest') return <GuestName />;
   // lobby
   return room ? <Room /> : <CreateJoin />;
+}
+
+/** Account-free entry: just a display name, then straight to the lobby (or the
+ *  invite-linked room). Accounts stay available for Ranked/ELO. */
+function GuestName() {
+  const guestPlay = useNet((s) => s.guestPlay);
+  const setScreen = useNet((s) => s.setScreen);
+  const goAuth = useNet((s) => s.goAuth);
+  const pendingJoin = useNet((s) => s.pendingJoin);
+  const error = useNet((s) => s.authError);
+  const busy = useNet((s) => s.authBusy);
+  const [name, setName] = useState('');
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (name.trim().length >= 2) guestPlay(name.trim());
+  };
+  return (
+    <Shell>
+      <form className="entry-card" onSubmit={submit}>
+        <div className="entry-card-title">
+          {pendingJoin ? `Join game ${pendingJoin}` : 'Play online'}
+        </div>
+        <label className="entry-field">
+          <span>Your name</span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="shown to other players"
+            maxLength={20}
+            autoFocus
+          />
+        </label>
+        {error && <div className="entry-error">{error}</div>}
+        <button className="primary lg" type="submit" disabled={busy || name.trim().length < 2}>
+          {pendingJoin ? 'Join game' : 'Continue'}
+        </button>
+        <div className="entry-switch">
+          Want an ELO rating?{' '}
+          <button type="button" className="link-btn" onClick={() => goAuth('signup')}>
+            Create a free account
+          </button>
+        </div>
+        <button type="button" className="link-btn back" onClick={() => setScreen('landing')}>
+          ← Back
+        </button>
+      </form>
+    </Shell>
+  );
 }

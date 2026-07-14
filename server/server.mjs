@@ -64,7 +64,48 @@ async function initStore() {
   await pool.query('ALTER TABLE stats ADD COLUMN IF NOT EXISTS rankedplayed int NOT NULL DEFAULT 0');
   await pool.query('ALTER TABLE stats ADD COLUMN IF NOT EXISTS rankedwon int NOT NULL DEFAULT 0');
   await pool.query('ALTER TABLE stats ADD COLUMN IF NOT EXISTS rankedlost int NOT NULL DEFAULT 0');
+  // Alpha feedback + print-and-play interest list.
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS feedback (id serial PRIMARY KEY, created timestamptz DEFAULT now(),
+     username text, enjoy text, confuse text, change text, duration text, players text,
+     finished text, victory text, bug text)`,
+  );
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS pnp (email text PRIMARY KEY, created timestamptz DEFAULT now())',
+  );
   console.log('Using Postgres for accounts.');
+}
+
+// Feedback + PnP signups fall back to local JSON files in dev.
+const FEEDBACK_FILE = join(DATA_DIR, 'feedback.json');
+const PNP_FILE = join(DATA_DIR, 'pnp.json');
+const appendJson = (file, entry) => {
+  let list = [];
+  try {
+    if (existsSync(file)) list = JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    list = [];
+  }
+  list.push(entry);
+  writeFileSync(file, JSON.stringify(list, null, 2));
+};
+async function saveFeedback(f) {
+  if (pool) {
+    await pool.query(
+      `INSERT INTO feedback(username, enjoy, confuse, change, duration, players, finished, victory, bug)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [f.username, f.enjoy, f.confuse, f.change, f.duration, f.players, f.finished, f.victory, f.bug],
+    );
+  } else {
+    appendJson(FEEDBACK_FILE, { ...f, created: new Date().toISOString() });
+  }
+}
+async function savePnp(email) {
+  if (pool) {
+    await pool.query('INSERT INTO pnp(email) VALUES($1) ON CONFLICT (email) DO NOTHING', [email]);
+  } else {
+    appendJson(PNP_FILE, { email, created: new Date().toISOString() });
+  }
 }
 
 // ---- ELO (ranked play only) ------------------------------------------------
@@ -204,6 +245,7 @@ async function getTotals() {
 async function recordResult(g, winnerColor) {
   for (const p of g.players) {
     if (p.bot || !p.username || p.username.startsWith('bot:')) continue;
+    if (p.username.startsWith('guest:')) continue; // guests have no account row
     await bumpStats(p.username, p.display, p.color === winnerColor);
   }
   if (!g.ranked) return;
@@ -280,6 +322,7 @@ const lobbyMsg = (g) => ({
   playerCount: g.playerCount,
   started: g.started,
   ranked: !!g.ranked,
+  hasPass: !!g.hasPass,
   players: g.players.map((p) => ({
     username: p.display,
     color: p.color,
@@ -394,6 +437,17 @@ async function handle(ws, s, m) {
       s.display = user.display || key;
       return send(ws, { t: 'authOk', username: s.display, token: m.token });
     }
+    case 'guest': {
+      // Account-free alpha play: a display name is all that's needed. The key
+      // is namespaced + randomised so guests can never collide with accounts
+      // (and never touch stats or ELO — see recordResult / findRanked).
+      const name = (m.name || '').trim().slice(0, 20);
+      if (name.length < 2) return send(ws, { t: 'authErr', message: 'Pick a name (2+ characters).' });
+      s.username = `guest:${name.toLowerCase()}#${randomBytes(3).toString('hex')}`;
+      s.display = name;
+      s.guest = true;
+      return send(ws, { t: 'guestOk', username: name });
+    }
     case 'createGame': {
       if (!s.username) return send(ws, { t: 'error', message: 'Not signed in.' });
       const pc = [2, 3, 4].includes(m.playerCount) ? m.playerCount : 2;
@@ -403,6 +457,7 @@ async function handle(ws, s, m) {
         host: s.display,
         passSalt: salt,
         passHash: hashPw(m.password || '', salt),
+        hasPass: !!(m.password && m.password.length),
         playerCount: pc,
         players: [],
         state: null,
@@ -510,6 +565,7 @@ async function handle(ws, s, m) {
     }
     case 'findRanked': {
       if (!s.username) return send(ws, { t: 'error', message: 'Sign in to play Ranked.' });
+      if (s.guest) return send(ws, { t: 'error', message: 'Ranked play needs an account — sign up free to earn an ELO rating.' });
       if (s.gameId) leaveRoom(ws, s); // a queued player can't sit in another room
       dropFromQueue(ws);
       rankedQueue.push({ ws, s });
@@ -519,6 +575,27 @@ async function handle(ws, s, m) {
     case 'cancelRanked': {
       dropFromQueue(ws);
       return send(ws, { t: 'rankedCancelled' });
+    }
+    case 'feedback': {
+      const cap = (v) => (typeof v === 'string' ? v.slice(0, 2000) : null);
+      await saveFeedback({
+        username: s.display || null,
+        enjoy: cap(m.enjoy),
+        confuse: cap(m.confuse),
+        change: cap(m.change),
+        duration: cap(m.duration),
+        players: cap(m.players),
+        finished: cap(m.finished),
+        victory: cap(m.victory),
+        bug: cap(m.bug),
+      });
+      return send(ws, { t: 'feedbackOk' });
+    }
+    case 'pnp': {
+      const email = (m.email || '').trim().toLowerCase().slice(0, 120);
+      if (!/^\S+@\S+\.\S+$/.test(email)) return send(ws, { t: 'error', message: 'Enter a valid email address.' });
+      await savePnp(email);
+      return send(ws, { t: 'pnpOk' });
     }
     case 'leaveGame':
       return leaveRoom(ws, s);
@@ -566,8 +643,19 @@ const httpServer = createServer((req, res) => {
   try {
     data = readFileSync(file);
   } catch {
-    file = join(DIST, 'index.html'); // SPA fallback
-    data = readFileSync(file);
+    // Crawlable extensionless routes (/how-to-play, /rules, /play, /about)
+    // map to their static .html pages before the SPA fallback.
+    try {
+      if (!pathname.includes('.')) {
+        file = join(DIST, `${pathname.replace(/\/$/, '')}.html`);
+        data = readFileSync(file);
+      } else {
+        throw new Error('no ext match');
+      }
+    } catch {
+      file = join(DIST, 'index.html'); // SPA fallback
+      data = readFileSync(file);
+    }
   }
   const ext = file.slice(file.lastIndexOf('.'));
   res.writeHead(200, { 'content-type': MIME[ext] || 'application/octet-stream' });

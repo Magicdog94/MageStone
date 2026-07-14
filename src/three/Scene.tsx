@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { ContactShadows, Environment, Lightformer, OrbitControls } from '@react-three/drei';
@@ -7,8 +7,13 @@ import { DiceLayer } from './Dice';
 import { BoardTokens, ClashEffect, DeathAnimations, Units } from './Pieces';
 import { arenaCircleTexture, hazyFogTexture, tudorFloorTexture } from './textures';
 import { SmithyRoom, TeamBanners } from './Decor';
-import { ExteriorWorld } from './Exterior';
 import { FantasyProps } from './Props';
+
+// The castle-town outside the windows is the heaviest scenery and pure garnish —
+// code-split it so the BOARD is playable before the town even starts loading.
+const ExteriorWorld = lazy(() =>
+  import('./Exterior').then((m) => ({ default: m.ExteriorWorld })),
+);
 import { panState } from './pan';
 import { FLOOR_Y } from './coords';
 import { useGame } from '../store';
@@ -248,6 +253,7 @@ function WasdPan({ speed = 10, bound = 11 }: { speed?: number; bound?: number })
 
 export function Scene() {
   const clearSelection = useGame((s) => s.selectUnit);
+  const lowGfx = useGame((s) => s.settings.lowGfx);
   return (
     <Canvas
       shadows="percentage"
@@ -269,10 +275,15 @@ export function Scene() {
       <ArenaEnvironment />
       <Suspense fallback={null}>
         <SmithyRoom />
-        <ExteriorWorld />
-        <FantasyProps />
         <TeamBanners />
+        {/* Low graphics: skip the exterior town + prop dressing entirely */}
+        {!lowGfx && <FantasyProps />}
       </Suspense>
+      {!lowGfx && (
+        <Suspense fallback={null}>
+          <ExteriorWorld />
+        </Suspense>
+      )}
       {/* daylight fill — the open windows pour real sun into the chamber, so
           the ambient floor is lifted well above the old candlelit murk */}
       {/* ground term lifted so DOWN-facing surfaces (the beamed ceiling when

@@ -15,6 +15,7 @@ import {
   discardDie,
   endTurn,
   legalMoves,
+  magePowerDie,
   moveUnit,
   plannedAttackers,
   resolveAttack,
@@ -66,6 +67,19 @@ export interface CombatRollInfo {
   nonce: number;
 }
 
+/** Announced the INSTANT an attack is declared (before the dice even settle):
+ *  who attacks whom and with which dice — "Red Warrior ×3 attacks Green Mage,
+ *  3d6 vs d12". Cleared together with the roll announcement. */
+export interface CombatIntro {
+  attacker: PlayerColor;
+  attackerKind: UnitKind;
+  count: number;
+  defender: PlayerColor;
+  defenderKind: UnitKind;
+  attackFaces: string;
+  defenseFaces: string;
+}
+
 export interface Settings {
   healthBars: HealthBarMode;
   /** Per-turn time limit in seconds, or null for no limit. */
@@ -74,6 +88,10 @@ export interface Settings {
   sfxMuted: boolean;
   /** Interface layout: compact 'mobile' (phones, landscape) or full 'desktop'. */
   layout: LayoutMode;
+  /** Shorten combat dice/death timings for players who fight a lot. */
+  fastDice: boolean;
+  /** Skip the exterior town + prop dressing for weaker machines. */
+  lowGfx: boolean;
 }
 
 interface UIState {
@@ -100,6 +118,8 @@ interface UIState {
    *  sweep away. */
   combatRoll: CombatRollInfo | null;
   showCombatRoll: (info: Omit<CombatRollInfo, 'nonce'> | null) => void;
+  /** The "X attacks Y — 3d6 vs d6" banner, shown while the dice tumble. */
+  combatIntro: CombatIntro | null;
 
   playerCount: number;
   /** Team colours selected for the local game, in clockwise turn order. Each
@@ -149,6 +169,8 @@ interface UIState {
   setTurnSeconds: (seconds: number | null) => void;
   setSfxMuted: (muted: boolean) => void;
   setLayout: (layout: LayoutMode) => void;
+  setFastDice: (fast: boolean) => void;
+  setLowGfx: (low: boolean) => void;
   setHovered: (unitId: string | null) => void;
 
   roll: () => void;
@@ -185,10 +207,24 @@ export const useGame = create<UIState>((set) => ({
   deathNonce: 0,
   combatNonce: 0,
   combatRoll: null,
+  combatIntro: null,
   playerCount: 2,
   playerColors: playerSet(2),
   stoneLayoutId: 'diamond',
-  settings: { healthBars: 'off', turnSeconds: 60, sfxMuted: false, layout: detectLayout() },
+  settings: {
+    healthBars: 'off',
+    turnSeconds: 60,
+    sfxMuted: false,
+    layout: detectLayout(),
+    fastDice: false,
+    lowGfx: (() => {
+      try {
+        return localStorage.getItem('ms-lowgfx') === '1';
+      } catch {
+        return false;
+      }
+    })(),
+  },
   // Open the New Game selector on first load so the player chooses players/timer
   // before the turn timer starts (the timer pauses while any modal is open).
   modal: 'newGame',
@@ -286,6 +322,15 @@ export const useGame = create<UIState>((set) => ({
   setHealthBars: (mode) => set((s) => ({ settings: { ...s.settings, healthBars: mode } })),
   setTurnSeconds: (seconds) => set((s) => ({ settings: { ...s.settings, turnSeconds: seconds } })),
   setSfxMuted: (muted) => set((s) => ({ settings: { ...s.settings, sfxMuted: muted } })),
+  setFastDice: (fast) => set((s) => ({ settings: { ...s.settings, fastDice: fast } })),
+  setLowGfx: (low) => {
+    try {
+      localStorage.setItem('ms-lowgfx', low ? '1' : '0');
+    } catch {
+      /* storage unavailable — applies for this session only */
+    }
+    set((s) => ({ settings: { ...s.settings, lowGfx: low } }));
+  },
   setLayout: (layout) => {
     try {
       localStorage.setItem('ms-layout', layout);
@@ -297,7 +342,11 @@ export const useGame = create<UIState>((set) => ({
   setHovered: (unitId) => set({ hoveredUnitId: unitId }),
 
   showCombatRoll: (info) =>
-    set((s) => ({ combatRoll: info ? { ...info, nonce: s.combatNonce + 1 } : null })),
+    set((s) => ({
+      combatRoll: info ? { ...info, nonce: s.combatNonce + 1 } : null,
+      // the intro banner hands over to the numbers (or clears with them)
+      combatIntro: info ? s.combatIntro : null,
+    })),
 
   roll: () =>
     set((s) => {
@@ -308,6 +357,8 @@ export const useGame = create<UIState>((set) => ({
         selectedDieId: null,
         rolling: true,
         rollNonce: s.rollNonce + 1,
+        combatIntro: null,
+        combatRoll: null,
       };
     }),
 
@@ -370,6 +421,23 @@ export const useGame = create<UIState>((set) => ({
           ? attackerIds
           : plannedAttackers(game, selectedUnitId, targetId);
       if (ids.length === 0) return {};
+      // Announce the matchup the moment the attack is declared — who, whom,
+      // and which dice — so the fight is readable before anything lands.
+      const lead = unitById(game, ids[0]);
+      const target = unitById(game, targetId);
+      let intro: CombatIntro | null = null;
+      if (lead && target) {
+        const isMage = lead.kind === 'mage';
+        intro = {
+          attacker: lead.owner,
+          attackerKind: lead.kind,
+          count: ids.length,
+          defender: target.owner,
+          defenderKind: target.kind,
+          attackFaces: isMage ? `d${magePowerDie(lead.activated)}` : `${ids.length}d6`,
+          defenseFaces: target.kind === 'mage' ? `d${magePowerDie(target.activated)}` : 'd6',
+        };
+      }
       const game2 = resolveAttack(game, ids, targetId, rng);
       if (game2 === game) return {};
       const out: Partial<UIState> = {
@@ -377,6 +445,7 @@ export const useGame = create<UIState>((set) => ({
         selectedUnitId: null,
         selectedDieId: null,
         combatNonce: s.combatNonce + 1,
+        combatIntro: intro,
       };
       // Snapshot the defeated unit from the PRE-attack state (it's gone in game2)
       // so the 3D layer can animate its collapse where it stood.

@@ -6,7 +6,7 @@ import type { BotLevel } from '../game/bot';
 import { createGame } from '../game/setup';
 import { useGame } from '../store';
 
-export type Screen = 'landing' | 'auth' | 'lobby' | 'game';
+export type Screen = 'landing' | 'auth' | 'guest' | 'lobby' | 'game';
 
 export interface RoomPlayer {
   username: string;
@@ -22,6 +22,8 @@ export interface Room {
   started: boolean;
   /** True for queue-paired ranked 1v1 rooms (ELO on the line). */
   ranked?: boolean;
+  /** True when the room was created with a password (invite links then need it). */
+  hasPass?: boolean;
   players: RoomPlayer[];
 }
 
@@ -61,6 +63,10 @@ interface NetState {
   screen: Screen;
   status: 'offline' | 'connecting' | 'online';
   username: string | null;
+  /** True when playing account-free (alpha guest) — no stats, no Ranked. */
+  guest: boolean;
+  /** Room code from an invite link (?join=CODE), joined after name entry. */
+  pendingJoin: string | null;
   authMode: 'signin' | 'signup';
   authError: string | null;
   authBusy: boolean;
@@ -79,6 +85,9 @@ interface NetState {
   } | null;
   /** True while waiting in the ranked matchmaking queue. */
   rankedSearching: boolean;
+  /** Acks for the alpha feedback + print-and-play signups. */
+  feedbackSent: boolean;
+  pnpDone: boolean;
 
   init: () => void;
   fetchLeaderboard: () => void;
@@ -86,6 +95,8 @@ interface NetState {
   cancelRanked: () => void;
   setScreen: (s: Screen) => void;
   goAuth: (mode: 'signin' | 'signup') => void;
+  /** Play online without an account: name-only guest session (alpha). */
+  guestPlay: (name: string) => void;
   playLocal: () => void;
   playTutorial: () => void;
   signup: (username: string, password: string) => void;
@@ -97,6 +108,10 @@ interface NetState {
   removeBot: (color: PlayerColor) => void;
   startGame: () => void;
   leaveRoom: () => void;
+  /** Alpha feedback form (3 questions + optional details). */
+  sendFeedback: (f: Record<string, string | null>) => void;
+  /** Print-and-play interest list signup. */
+  pnpSignup: (email: string) => void;
 }
 
 // In dev the WS server runs on its own port (8787); in a production build the
@@ -127,6 +142,14 @@ useGame.subscribe((state, prev) => {
 export const useNet = create<NetState>((set, get) => {
   let pending: (() => void) | null = null; // run once authed/connected
 
+  // Invite links: once a name exists (guest or account), join the linked room.
+  function joinPendingRoom() {
+    const code = get().pendingJoin;
+    if (!code) return;
+    set({ pendingJoin: null });
+    sendWs({ t: 'joinGame', gameId: code, password: '' });
+  }
+
   function ensureSocket(onReady?: () => void) {
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
       if (ws.readyState === WebSocket.OPEN && onReady) onReady();
@@ -134,8 +157,16 @@ export const useNet = create<NetState>((set, get) => {
       return;
     }
     set({ status: 'connecting' });
+    // Free-tier hosting naps between games: if connecting drags past a few
+    // seconds, say so instead of leaving players staring at "connecting".
+    const wakeTimer = window.setTimeout(() => {
+      if (get().status === 'connecting') {
+        set({ notice: 'Waking the server — the free alpha host naps when idle. This can take ~30 seconds…' });
+      }
+    }, 4000);
     ws = new WebSocket(SERVER_URL);
     ws.onopen = () => {
+      window.clearTimeout(wakeTimer);
       set({ status: 'online', notice: null });
       const token = localStorage.getItem(TOKEN_KEY);
       if (token && !get().username) sendWs({ t: 'auth', token });
@@ -164,8 +195,14 @@ export const useNet = create<NetState>((set, get) => {
     switch (m.t) {
       case 'authOk': {
         localStorage.setItem(TOKEN_KEY, m.token as string);
-        set({ username: m.username as string, authError: null, authBusy: false });
+        set({ username: m.username as string, guest: false, authError: null, authBusy: false });
         if (get().screen === 'auth' || get().screen === 'landing') set({ screen: 'lobby' });
+        joinPendingRoom();
+        break;
+      }
+      case 'guestOk': {
+        set({ username: m.username as string, guest: true, authError: null, authBusy: false, screen: 'lobby' });
+        joinPendingRoom();
         break;
       }
       case 'authErr': {
@@ -239,6 +276,12 @@ export const useNet = create<NetState>((set, get) => {
       case 'rankedCancelled':
         set({ rankedSearching: false });
         break;
+      case 'feedbackOk':
+        set({ feedbackSent: true });
+        break;
+      case 'pnpOk':
+        set({ pnpDone: true });
+        break;
       case 'error':
         set({ notice: m.message as string });
         break;
@@ -249,6 +292,8 @@ export const useNet = create<NetState>((set, get) => {
     screen: 'landing',
     status: 'offline',
     username: null,
+    guest: false,
+    pendingJoin: null,
     authMode: 'signin',
     authError: null,
     authBusy: false,
@@ -258,8 +303,24 @@ export const useNet = create<NetState>((set, get) => {
     notice: null,
     leaderboard: null,
     rankedSearching: false,
+    feedbackSent: false,
+    pnpDone: false,
 
     init: () => {
+      // Invite link (?join=CODE): stash the room, strip the URL, and route the
+      // visitor to the name screen (signed-in players join right after re-auth).
+      try {
+        const params = new URLSearchParams(location.search);
+        const code = (params.get('join') || '').toUpperCase().trim();
+        if (code) {
+          set({ pendingJoin: code });
+          history.replaceState(null, '', location.pathname);
+          if (!localStorage.getItem(TOKEN_KEY)) set({ screen: 'guest' });
+          ensureSocket();
+        }
+      } catch {
+        /* URL APIs unavailable — regular flow */
+      }
       // Auto-resume a saved session on load (token → server re-auth → lobby).
       if (localStorage.getItem(TOKEN_KEY)) ensureSocket();
     },
@@ -270,6 +331,14 @@ export const useNet = create<NetState>((set, get) => {
     findRanked: () => {
       ensureSocket(() => sendWs({ t: 'findRanked' }));
     },
+    sendFeedback: (f) => {
+      set({ feedbackSent: false });
+      ensureSocket(() => sendWs({ t: 'feedback', ...f }));
+    },
+    pnpSignup: (email) => {
+      set({ pnpDone: false });
+      ensureSocket(() => sendWs({ t: 'pnp', email }));
+    },
     cancelRanked: () => {
       sendWs({ t: 'cancelRanked' });
       set({ rankedSearching: false });
@@ -278,6 +347,10 @@ export const useNet = create<NetState>((set, get) => {
     goAuth: (mode) => {
       set({ screen: 'auth', authMode: mode, authError: null });
       ensureSocket();
+    },
+    guestPlay: (name) => {
+      set({ authBusy: true, authError: null });
+      ensureSocket(() => sendWs({ t: 'guest', name }));
     },
     playLocal: () => {
       useGame.getState().setLocalMode();
@@ -299,7 +372,14 @@ export const useNet = create<NetState>((set, get) => {
       localStorage.removeItem(TOKEN_KEY);
       sendWs({ t: 'cancelRanked' });
       sendWs({ t: 'leaveGame' });
-      set({ username: null, room: null, myColor: null, screen: 'landing', rankedSearching: false });
+      set({
+        username: null,
+        guest: false,
+        room: null,
+        myColor: null,
+        screen: 'landing',
+        rankedSearching: false,
+      });
     },
     createGame: (playerCount, password) => {
       set({ joinError: null });

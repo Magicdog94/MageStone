@@ -257,6 +257,42 @@ export async function runTutorial(onDone: () => void) {
       placement: 'bottom',
     });
 
+    // ---- Collect one for real ----------------------------------------------
+    stage((st) => {
+      const mage = st.units.find((u) => u.id === 'red-m')!;
+      mage.cell = { r: 4, c: 8 };
+      const stone = st.stones.find((x) => !x.collected)!;
+      stone.cell = { r: 5, c: 8 };
+      st.dice = mkDice(['mage'], [2]);
+    });
+    await wait(700);
+    await note({
+      id: 'collect-stage',
+      title: 'Try it: collect a stone',
+      body: 'Red’s Mage stands beside a MageStone. Watch it step onto the stone’s square…',
+      placement: 'center',
+    });
+    g().selectUnit('red-m');
+    await wait(250);
+    g().moveTo({ r: 5, c: 8 });
+    await wait(800);
+    await note({
+      id: 'collect-press',
+      title: 'Collect',
+      body: 'Standing on a stone unlocks the COLLECT action down here.',
+      anchor: '.unit-actions',
+      placement: 'top',
+    });
+    g().collectStones();
+    await wait(400);
+    await note({
+      id: 'collect-done',
+      title: 'Picked up!',
+      body: 'The silver counter ticks to 1 — the stone is CARRIED. Haul it home to your base and ACTIVATE it to make it count.',
+      anchor: '[data-tut="carried"]',
+      placement: 'bottom',
+    });
+
     // ---- End turn ----------------------------------------------------------
     await note({
       id: 'endturn',

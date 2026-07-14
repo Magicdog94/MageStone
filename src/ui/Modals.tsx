@@ -247,6 +247,8 @@ function SettingsModal() {
   const settings = useGame((s) => s.settings);
   const setTurnSeconds = useGame((s) => s.setTurnSeconds);
   const setSfxMuted = useGame((s) => s.setSfxMuted);
+  const setFastDice = useGame((s) => s.setFastDice);
+  const setLowGfx = useGame((s) => s.setLowGfx);
   const setLayout = useGame((s) => s.setLayout);
   const openModal = useGame((s) => s.openModal);
   const closeModal = useGame((s) => s.closeModal);
@@ -308,7 +310,29 @@ function SettingsModal() {
           ariaLabel="Sound effects"
         />
       </Field>
+      <Field label="Dice speed" hint="Fast shortens combat dice + defeat animations">
+        <Segmented<'normal' | 'fast'>
+          options={[
+            { value: 'normal', label: 'Normal' },
+            { value: 'fast', label: 'Fast' },
+          ]}
+          value={settings.fastDice ? 'fast' : 'normal'}
+          onChange={(v) => setFastDice(v === 'fast')}
+          ariaLabel="Dice speed"
+        />
+      </Field>
       <div className="modal-section">Display</div>
+      <Field label="Graphics" hint="Low skips the castle town outside the windows (faster loads)">
+        <Segmented<'full' | 'low'>
+          options={[
+            { value: 'full', label: 'Full' },
+            { value: 'low', label: 'Low' },
+          ]}
+          value={settings.lowGfx ? 'low' : 'full'}
+          onChange={(v) => setLowGfx(v === 'low')}
+          ariaLabel="Graphics"
+        />
+      </Field>
       <Field label="Layout" hint="Mobile is a compact interface for phones (landscape)">
         <Segmented<'mobile' | 'desktop'>
           options={[

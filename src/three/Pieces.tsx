@@ -901,8 +901,9 @@ export function BoardTokens() {
 
 // The doomed unit stands where it fell for this long before toppling, so the
 // combat dice have landed and shown their value before anything is eliminated.
-// Tuned to sit just after the physics dice settle (see Dice.tsx::CombatDice).
-const DEATH_HOLD_MS = 1900;
+// Tuned to sit just after the physics dice settle (see Dice.tsx::CombatDice);
+// the Fast-dice setting shortens the whole beat.
+const deathHoldMs = () => (useGame.getState().settings.fastDice ? 900 : 1900);
 
 /** A defeated unit toppling to the ground then sinking away, played at the square
  *  where it fell (the engine has already removed the real unit). */
@@ -927,7 +928,7 @@ function DyingUnit({ ev, onDone }: { ev: DeathEvent & { nonce: number }; onDone:
     // Hold: keep the unit standing on its square while the combat dice roll,
     // so the result is on the table before anything is eliminated.
     if (!dying.current) {
-      if (performance.now() - mount.current < DEATH_HOLD_MS) return;
+      if (performance.now() - mount.current < deathHoldMs()) return;
       dying.current = true;
       anim.current = 'death';
       start.current = performance.now();

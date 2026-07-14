@@ -9,7 +9,7 @@ import { useProgress } from '@react-three/drei';
  * sure we never trap the player behind the cover if a load stalls.
  */
 export function LoadingGate() {
-  const { active, progress, total } = useProgress();
+  const { active, progress, total, item } = useProgress();
   const [ready, setReady] = useState(false);
   const settle = useRef<number | undefined>(undefined);
 
@@ -30,15 +30,23 @@ export function LoadingGate() {
 
   if (ready) return null;
   const pct = Math.max(6, Math.round(progress));
+  // Name what's actually streaming in, so the wait never feels like a hang.
+  const stage = item.includes('exterior')
+    ? 'Raising the castle town…'
+    : item.includes('models')
+      ? 'Mustering the units…'
+      : item
+        ? 'Summoning the board…'
+        : 'Preparing the chamber…';
   return (
     <div className="loading-gate" role="status" aria-live="polite">
       <div className="loading-card">
-        <div className="loading-title">Loading Game</div>
+        <div className="loading-title">Preparing the MageStone chamber…</div>
         <div className="loading-bar">
           <span style={{ width: `${pct}%` }} />
         </div>
         <div className="loading-pct">{pct}%</div>
-        <div className="loading-sub">Summoning the board…</div>
+        <div className="loading-sub">{stage}</div>
       </div>
     </div>
   );

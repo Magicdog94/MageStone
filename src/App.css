@@ -649,6 +649,89 @@ button.ghost:focus-visible {
   gap: var(--space-2);
   pointer-events: none;
 }
+/* ---- persistent turn-phase tracker (top-left, under the brand) ---- */
+.phase-track {
+  position: absolute;
+  top: 58px;
+  left: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  pointer-events: none;
+}
+.phase-step {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid rgba(201, 162, 74, 0.28);
+  border-radius: 999px;
+  background: rgba(8, 14, 9, 0.55);
+  font-family: var(--display);
+  font-size: var(--text-xs);
+  letter-spacing: 0.4px;
+  color: var(--ink-dim);
+}
+.phase-step.active {
+  color: #2a1c06;
+  border-color: #f3d590;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold-dim));
+  font-weight: 700;
+}
+.phase-step.done {
+  color: var(--gold);
+  border-color: var(--gold-line);
+}
+.ca-faces {
+  color: var(--ink-dim);
+  font-size: var(--text-sm);
+}
+/* selected-unit ability line under the kind heading */
+.unit-ability {
+  font-size: var(--text-xs);
+  max-width: 340px;
+}
+/* player-card extras: warriors, mage die, status flags */
+.pstat-glyph {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: var(--text-xs);
+  color: var(--ink-dim);
+}
+.pstat-die {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-1);
+  padding: 0 6px;
+  border: 1px solid var(--gold-line);
+  border-radius: var(--radius-sm);
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: var(--text-xs);
+  color: var(--gold-bright);
+}
+.pstat-flag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-1);
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--gold-line);
+  font-family: var(--display);
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  color: var(--ink-dim);
+}
+.pstat-flag.ritual {
+  color: #ffd45e;
+  border-color: rgba(255, 212, 94, 0.6);
+}
+.pstat-flag.siege {
+  color: #ff8a7a;
+  border-color: rgba(255, 138, 122, 0.55);
+}
+
 .pstat {
   display: inline-flex;
   align-items: center;
@@ -1130,6 +1213,105 @@ button.ghost:focus-visible {
   font-weight: 700;
   color: var(--gold-bright);
   font-variant-numeric: tabular-nums;
+}
+/* ---- landing footer: alpha trust signals ---- */
+.entry-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+.entry-footer-line {
+  font-family: var(--serif);
+  font-size: var(--text-xs);
+  color: var(--ink-dim);
+}
+.entry-footer-links {
+  display: flex;
+  gap: var(--space-4);
+  pointer-events: auto;
+}
+.entry-footer-links .link-btn {
+  font-size: var(--text-xs);
+}
+.footer-list {
+  margin: 0;
+  padding-left: 1.2em;
+  font-family: var(--serif);
+  color: #f3ead2;
+  line-height: 1.5;
+}
+.footer-list li {
+  margin-bottom: var(--space-2);
+}
+.footer-prose {
+  font-family: var(--serif);
+  color: #f3ead2;
+  line-height: 1.5;
+}
+/* ---- persistent in-game feedback pill (bottom-right corner) ---- */
+.feedback-btn {
+  position: fixed;
+  right: calc(env(safe-area-inset-right, 0px) + 12px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  z-index: 6;
+  height: var(--control-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--gold-line);
+  border-radius: 999px;
+  background: rgba(8, 12, 8, 0.7);
+  color: var(--ink-dim);
+  font-family: var(--display);
+  font-size: var(--text-xs);
+  letter-spacing: 0.5px;
+  cursor: pointer;
+}
+.feedback-btn:hover {
+  color: var(--gold-bright);
+  border-color: var(--gold);
+}
+body.ui-mobile .feedback-btn {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 150px);
+}
+/* feedback form fields */
+.entry-field textarea,
+.entry-field select {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--gold-line);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: var(--text-md);
+  resize: vertical;
+}
+.entry-field textarea:focus-visible,
+.entry-field select:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.feedback-row {
+  display: flex;
+  gap: var(--space-4);
+}
+.feedback-row .entry-field {
+  flex: 1;
+}
+.pnp-form {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.pnp-form .entry-field {
+  flex: 1;
 }
 /* the hotseat "play the tutorial first?" prompt */
 .hotseat-confirm {
@@ -2161,6 +2343,47 @@ body.ui-mobile .tut-gotit {
   filter: drop-shadow(0 0 12px rgba(240, 210, 122, 0.7)) drop-shadow(0 2px 5px rgba(0, 0, 0, 0.85));
   transform: translateX(5px);
 }
+/* ONE obvious route into a match: Play MageStone leads, the three ways to play
+   expand under it, and account entry hangs back as a quiet last item. */
+.menu-primary {
+  font-size: clamp(28px, 3.6vw, 46px);
+  filter: drop-shadow(0 0 14px rgba(240, 210, 122, 0.45)) drop-shadow(0 2px 5px rgba(0, 0, 0, 0.85));
+}
+.menu-sub {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin: 2px 0 6px 26px;
+  padding-left: 14px;
+  border-left: 2px solid var(--gold-line);
+}
+.menu-subitem {
+  font-size: clamp(17px, 2vw, 26px);
+}
+.menu-small {
+  font-size: clamp(14px, 1.5vw, 19px);
+  opacity: 0.85;
+}
+/* invite-link chip in the room header + guest badge in the userbar */
+.copy-link {
+  height: var(--control-sm);
+  padding: 0 var(--space-3);
+  font-size: var(--text-xs);
+  margin-left: var(--space-2);
+}
+.guest-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-1);
+  padding: 0 6px;
+  border: 1px solid var(--gold-line);
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
 .menu-item:focus-visible {
   outline: none;
   filter: drop-shadow(0 0 12px rgba(240, 210, 122, 0.9));
@@ -2952,6 +3175,22 @@ body.ui-mobile .pstat-metric svg {
 body.ui-mobile .pstat-badge {
   font-size: 8px;
   padding: 0 3px;
+}
+body.ui-mobile .pstat-die,
+body.ui-mobile .pstat-flag {
+  font-size: 8px;
+  padding: 0 4px;
+}
+/* phase tracker rides the free top-left corner on phones */
+body.ui-mobile .phase-track {
+  top: 6px;
+  left: calc(env(safe-area-inset-left, 0px) + 8px);
+  gap: 2px;
+}
+body.ui-mobile .phase-step {
+  height: 16px;
+  padding: 0 6px;
+  font-size: 8px;
 }
 body.ui-mobile .turn-timer-top {
   top: 40px;

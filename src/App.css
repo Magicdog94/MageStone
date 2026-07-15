@@ -116,6 +116,33 @@
   border-color: var(--gold-bright);
   box-shadow: 0 0 10px rgba(236, 203, 120, 0.35);
 }
+/* camera lock — one slot left of the Rule Book; gold-filled while engaged */
+.cam-toggle {
+  position: fixed;
+  top: var(--space-4);
+  right: calc(var(--space-4) + 4 * (var(--control-md) + 8px));
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-md);
+  height: var(--control-md);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--gold-line);
+  background: linear-gradient(180deg, var(--panel-1), var(--panel-2));
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: color var(--ease), border-color var(--ease), background var(--ease);
+}
+.cam-toggle:hover {
+  color: var(--gold-bright);
+  border-color: var(--gold);
+}
+.cam-toggle.on {
+  color: #2a1c06;
+  border-color: #f3d590;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold-dim));
+}
 
 /* full-screen toggle — between the music toggle and the gear */
 .fs-toggle {
@@ -2550,6 +2577,35 @@ body.ui-mobile .tut-gotit {
   font-size: var(--text-sm);
   color: var(--ink-dim);
 }
+/* owner-only feedback submissions list */
+.fb-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.fb-item {
+  padding: var(--space-3);
+  border: 1px solid var(--gold-line);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.25);
+}
+.fb-meta {
+  font-size: var(--text-xs);
+  color: var(--ink-dim);
+  margin-bottom: var(--space-2);
+}
+.fb-field {
+  font-family: var(--serif);
+  font-size: var(--text-md);
+  line-height: 1.45;
+  color: #f3ead2;
+}
+.fb-label {
+  color: var(--gold-bright);
+  font-family: var(--display);
+  font-size: var(--text-xs);
+  letter-spacing: 0.4px;
+}
 
 /* ---- ELO tier badges (Bronze → Grandmaster over 1000–2400) ---- */
 .tier-badge {
@@ -3387,6 +3443,14 @@ body.ui-mobile .book-toggle {
   top: auto;
   right: auto;
   left: calc(env(safe-area-inset-left, 0px) + 8px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 46px);
+  width: 34px;
+  height: 34px;
+}
+body.ui-mobile .cam-toggle {
+  top: auto;
+  right: auto;
+  left: calc(env(safe-area-inset-left, 0px) + 48px);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 46px);
   width: 34px;
   height: 34px;

@@ -110,8 +110,27 @@ interface NetState {
   leaveRoom: () => void;
   /** Alpha feedback form (3 questions + optional details). */
   sendFeedback: (f: Record<string, string | null>) => void;
+  /** Owner-only: all stored feedback submissions, viewable in-app. */
+  feedbackRows: FeedbackRow[] | null;
+  fetchFeedbackList: () => void;
   /** Print-and-play interest list signup. */
   pnpSignup: (email: string) => void;
+}
+
+/** One stored feedback submission (owner viewer). */
+export interface FeedbackRow {
+  id?: number;
+  created?: string;
+  username?: string | null;
+  enjoy?: string | null;
+  confuse?: string | null;
+  change?: string | null;
+  duration?: string | null;
+  players?: string | null;
+  finished?: string | null;
+  victory?: string | null;
+  bug?: string | null;
+  emailed?: boolean;
 }
 
 // In dev the WS server runs on its own port (8787); in a production build the
@@ -279,6 +298,9 @@ export const useNet = create<NetState>((set, get) => {
       case 'feedbackOk':
         set({ feedbackSent: true });
         break;
+      case 'feedbackList':
+        set({ feedbackRows: (m.rows as FeedbackRow[]) ?? [] });
+        break;
       case 'pnpOk':
         set({ pnpDone: true });
         break;
@@ -304,9 +326,43 @@ export const useNet = create<NetState>((set, get) => {
     leaderboard: null,
     rankedSearching: false,
     feedbackSent: false,
+    feedbackRows: null,
     pnpDone: false,
 
     init: () => {
+      // Crash recovery: SceneBoundary reloads the page when the physics WASM
+      // dies beyond repair, leaving a snapshot behind. Restore the match.
+      try {
+        const raw = sessionStorage.getItem('ms-recover');
+        if (raw) {
+          sessionStorage.removeItem('ms-recover');
+          const snap = JSON.parse(raw);
+          if (snap.kind === 'local' && snap.game) {
+            useGame.setState({
+              game: snap.game as GameState,
+              bots: snap.bots ?? {},
+              botController: true,
+              playerColors: snap.playerColors ?? snap.game.players,
+              playerCount: snap.playerCount ?? snap.game.players.length,
+              stoneLayoutId: snap.stoneLayoutId ?? 'diamond',
+              settings: { ...useGame.getState().settings, ...(snap.settings ?? {}) },
+              online: false,
+              myColor: null,
+              started: true,
+              modal: null,
+            });
+            set({ screen: 'game' });
+            console.warn('MageStone: match restored after a 3D crash reload.');
+          } else if (snap.kind === 'online' && snap.gameId) {
+            // Existing room members rejoin without the password once re-authed.
+            set({ pendingJoin: String(snap.gameId) });
+            if (!localStorage.getItem(TOKEN_KEY)) set({ screen: 'guest' });
+            ensureSocket();
+          }
+        }
+      } catch {
+        /* corrupt snapshot — fall through to a normal boot */
+      }
       // Invite link (?join=CODE): stash the room, strip the URL, and route the
       // visitor to the name screen (signed-in players join right after re-auth).
       try {
@@ -334,6 +390,9 @@ export const useNet = create<NetState>((set, get) => {
     sendFeedback: (f) => {
       set({ feedbackSent: false });
       ensureSocket(() => sendWs({ t: 'feedback', ...f }));
+    },
+    fetchFeedbackList: () => {
+      ensureSocket(() => sendWs({ t: 'feedbackList' }));
     },
     pnpSignup: (email) => {
       set({ pnpDone: false });

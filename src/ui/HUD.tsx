@@ -21,7 +21,7 @@ import { TurnTimer } from './TurnTimer';
 import { Modals } from './Modals';
 import { Tutorial } from './Tutorial';
 import { FeedbackModal } from './FeedbackModal';
-import { BookIcon, CogIcon, GraveIcon } from './Icons';
+import { BookIcon, CameraLockIcon, CogIcon, GraveIcon } from './Icons';
 
 const KIND_LABEL = { warrior: 'Warrior', mage: 'Mage', priest: 'Priest' } as const;
 const KIND_ABILITY = {
@@ -29,6 +29,24 @@ const KIND_ABILITY = {
   mage: 'Collects & activates MageStones · attack die grows d6 → d12 → d20',
   priest: 'Cannot attack · resurrects from gravestones · Nexus ritual to win',
 } as const;
+
+/** Camera-lock toggle: keep the camera at its start pose and rotate the BOARD
+ *  toward whichever human is playing (bots don't move the view). */
+function CamFixToggle() {
+  const on = useGame((s) => s.settings.cameraFix);
+  const setCameraFix = useGame((s) => s.setCameraFix);
+  return (
+    <button
+      className={`cam-toggle${on ? ' on' : ''}`}
+      onClick={() => setCameraFix(!on)}
+      aria-pressed={on}
+      aria-label="Camera lock"
+      title={on ? 'Camera lock ON — the board turns to face each player' : 'Camera lock OFF — click to fix the camera and turn the board instead'}
+    >
+      <CameraLockIcon size={20} />
+    </button>
+  );
+}
 
 /** Always-visible turn structure — each stage ticks off as the turn advances. */
 function PhaseTrack() {
@@ -245,6 +263,8 @@ export function HUD() {
       <button className="book-toggle" onClick={() => setShowRules(true)} aria-label="Rule Book" title="Rule Book">
         <BookIcon size={20} />
       </button>
+      {/* camera lock: fixed camera + the board turns to face each human player */}
+      <CamFixToggle />
       {showRules && <Tutorial onClose={() => setShowRules(false)} />}
       {/* always-available bug/feedback entry point during a match */}
       {!tutorial && (

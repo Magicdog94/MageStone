@@ -220,7 +220,9 @@ function DiceBodies() {
   const current = useGame((s) => s.game.current);
 
   // The tray sits behind the CURRENT roller's base, so it hops seat to seat.
-  const seat = useGame((s) => s.game.seats[s.game.current] ?? 0);
+  // Under the camera lock the board is rotated by viewOffset quarter-turns —
+  // remap to the VISUAL seat so the dice still land in front of the roller.
+  const seat = useGame((s) => ((s.game.seats[s.game.current] ?? 0) + s.viewOffset) % 4);
 
   const bodies = useRef<(RapierRigidBody | null)[]>([]);
   const reported = useRef(false);
@@ -482,8 +484,8 @@ function CombatDice() {
       showCombatRoll(null); // hide any prior result until THESE dice settle
       // Each side's dice land on that side's OWN tray (seats captured now,
       // so a turn change during the linger can't relocate them).
-      const atkSeat = s.game.seats[c.attackerOwner] ?? 0;
-      const defSeat = s.game.seats[c.defenderOwner] ?? 0;
+      const atkSeat = ((s.game.seats[c.attackerOwner] ?? 0) + s.viewOffset) % 4;
+      const defSeat = ((s.game.seats[c.defenderOwner] ?? 0) + s.viewOffset) % 4;
       setRun({
         id: ++combatRunSeq,
         roll: {

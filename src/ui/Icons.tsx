@@ -24,6 +24,18 @@ export function CogIcon({ size = 18, className }: P) {
   );
 }
 
+/** Camera lock — a camera body with a small padlock shackle. */
+export function CameraLockIcon({ size = 18, className }: P) {
+  return (
+    <svg {...stroke(size)} className={className} aria-hidden="true">
+      <rect x="3.2" y="8.2" width="13.6" height="10" rx="1.6" />
+      <path d="M7.4 8.2 8.8 5.8h3.4l1.4 2.4" />
+      <circle cx="10" cy="13.2" r="2.9" />
+      <path d="M17.8 13.6v-1.8a2.2 2.2 0 0 1 4.4 0v1.8M17.2 13.6h5.6v4.6h-5.6z" />
+    </svg>
+  );
+}
+
 /** Rule Book — an open tome. */
 export function BookIcon({ size = 18, className }: P) {
   return (

@@ -92,6 +92,9 @@ export interface Settings {
   fastDice: boolean;
   /** Skip the exterior town + prop dressing for weaker machines. */
   lowGfx: boolean;
+  /** Camera lock: keep the camera at its start position and ROTATE THE BOARD
+   *  to face each human player instead (bots keep the last human's view). */
+  cameraFix: boolean;
 }
 
 interface UIState {
@@ -118,6 +121,11 @@ interface UIState {
    *  resolve from engine values almost immediately instead of waiting 10s. */
   sceneDown: boolean;
   setSceneDown: (down: boolean) => void;
+  /** Camera-lock view: quarter-turns applied to the BOARD so the acting human's
+   *  edge faces the fixed camera (0 when the lock is off; bots don't move it). */
+  viewOffset: number;
+  /** Bumped when the camera lock engages — the scene snaps back to its start pose. */
+  camResetNonce: number;
   /** Bumped on every attack so the HUD replays the combat dice roll. */
   combatNonce: number;
   /** The rolled combat result to announce — set by the 3D dice layer the moment
@@ -179,6 +187,7 @@ interface UIState {
   setLayout: (layout: LayoutMode) => void;
   setFastDice: (fast: boolean) => void;
   setLowGfx: (low: boolean) => void;
+  setCameraFix: (on: boolean) => void;
   setHovered: (unitId: string | null) => void;
 
   roll: () => void;
@@ -237,7 +246,16 @@ export const useGame = create<UIState>((set, get) => ({
         return false;
       }
     })(),
+    cameraFix: (() => {
+      try {
+        return localStorage.getItem('ms-camerafix') === '1';
+      } catch {
+        return false;
+      }
+    })(),
   },
+  viewOffset: 0,
+  camResetNonce: 0,
   // Open the New Game selector on first load so the player chooses players/timer
   // before the turn timer starts (the timer pauses while any modal is open).
   modal: 'newGame',
@@ -343,6 +361,18 @@ export const useGame = create<UIState>((set, get) => ({
       /* storage unavailable — applies for this session only */
     }
     set((s) => ({ settings: { ...s.settings, lowGfx: low } }));
+  },
+  setCameraFix: (on) => {
+    try {
+      localStorage.setItem('ms-camerafix', on ? '1' : '0');
+    } catch {
+      /* storage unavailable — applies for this session only */
+    }
+    set((s) => ({
+      settings: { ...s.settings, cameraFix: on },
+      // Engaging the lock also snaps the camera home — that's the "fix".
+      camResetNonce: on ? s.camResetNonce + 1 : s.camResetNonce,
+    }));
   },
   setLayout: (layout) => {
     try {
@@ -531,6 +561,20 @@ export const useGame = create<UIState>((set, get) => ({
       return game === s.game ? {} : { game };
     }),
 }));
+
+// Camera-lock view offset: whenever a HUMAN's turn begins (or the toggle
+// flips), rotate the board so their home edge faces the fixed camera (visual
+// seat 2, the bottom). Bots never move the view — spectators keep watching
+// from wherever the last human left it.
+useGame.subscribe((s) => {
+  let next = s.viewOffset;
+  if (!s.settings.cameraFix) next = 0;
+  else if (!s.bots[s.game.current]) {
+    const seat = s.game.seats[s.game.current] ?? 2;
+    next = (2 - seat + 4) % 4;
+  }
+  if (next !== s.viewOffset) useGame.setState({ viewOffset: next });
+});
 
 // ---- Derived helpers used by the 3D view (pure; computed in components) ----
 

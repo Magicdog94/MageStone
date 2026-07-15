@@ -136,7 +136,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'gear',
       title: 'Settings',
-      body: 'Options and a new game live behind the gear, any time. Beside it: the Rule Book, music and fullscreen.',
+      body: 'Options and a new game live behind the gear, any time. Beside it: the Rule Book, music, fullscreen — and the CAMERA LOCK, which fixes the camera and turns the board to face whoever is playing.',
       // BELOW the gear — a 'left' box would cover the music/fullscreen toggles
       // that share this top-right row.
       anchor: '.gear',
@@ -156,7 +156,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'dice',
       title: 'Your 5 dice',
-      body: 'A die only moves its MATCHING unit — Mage die → Mage, Priest die → Priest, Warrior die → a Warrior. The number is how far it can move.',
+      body: 'The BLUE die is your Mage’s, the GREEN one your Priest’s, and the three RED dice belong to your Warriors. A die only moves its MATCHING unit, and the number is how far it can move.',
       anchor: '.tray',
       placement: 'top',
     });
@@ -191,7 +191,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'moved',
       title: 'It moved!',
-      body: 'A move is an orthogonal path (it can bend) up to the die’s value, through empty squares. Now three of your Warriors surround the enemy.',
+      body: 'A move is an orthogonal path up to the die’s value, through empty squares. Now three of your Warriors surround the enemy.',
       placement: 'center',
     });
 

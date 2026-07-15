@@ -83,6 +83,8 @@ async function initStore() {
 // activation email to the recipient; until they confirm, rows simply stay
 // queued (emailed=false) and are retried on boot and on the next submission.
 const FEEDBACK_EMAIL = process.env.FEEDBACK_EMAIL || 'jacobhirst94@gmail.com';
+// The account allowed to read all feedback in-app (lowercased key).
+const FEEDBACK_OWNER = (process.env.FEEDBACK_OWNER || 'magicdog94').toLowerCase();
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const fieldsText = (f) =>
   [
@@ -700,6 +702,27 @@ async function handle(ws, s, m) {
       if (!/^\S+@\S+\.\S+$/.test(email)) return send(ws, { t: 'error', message: 'Enter a valid email address.' });
       await savePnp(email);
       return send(ws, { t: 'pnpOk' });
+    }
+    case 'feedbackList': {
+      // Owner-only: every submission stays viewable on the site (the email
+      // relay is best-effort — this is the reliable path).
+      if (s.username !== FEEDBACK_OWNER)
+        return send(ws, { t: 'error', message: 'Sign in as the game owner to view feedback.' });
+      let rows = [];
+      if (pool) {
+        const r = await pool.query(
+          `SELECT id, created, username, enjoy, confuse, change, duration, players, finished, victory, bug, emailed
+           FROM feedback ORDER BY id DESC LIMIT 200`,
+        );
+        rows = r.rows;
+      } else if (existsSync(FEEDBACK_FILE)) {
+        try {
+          rows = JSON.parse(readFileSync(FEEDBACK_FILE, 'utf8')).slice().reverse().slice(0, 200);
+        } catch {
+          rows = [];
+        }
+      }
+      return send(ws, { t: 'feedbackList', rows });
     }
     case 'leaveGame':
       return leaveRoom(ws, s);

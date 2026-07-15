@@ -17,6 +17,47 @@ const ExteriorWorld = lazy(() =>
 import { panState } from './pan';
 import { FLOOR_Y } from './coords';
 import { useGame } from '../store';
+import type { ReactNode } from 'react';
+
+/**
+ * Camera-lock mode: the camera never moves between turns — instead the whole
+ * BOARD (tiles, pieces, tokens) glides through quarter-turns so the acting
+ * human player's home edge always faces the camera. `viewOffset` (store) is
+ * maintained per turn; bots never move it. The room stays put, which reads as
+ * "the table is turned toward you" — exactly hot-seat table manners.
+ */
+function BoardSpin({ children }: { children: ReactNode }) {
+  const offset = useGame((s) => s.viewOffset);
+  const target = -offset * (Math.PI / 2);
+  const g = useRef<THREE.Group>(null);
+  useFrame((_, dt) => {
+    const gr = g.current;
+    if (!gr) return;
+    // shortest-path ease toward the target quarter-turn
+    let d = target - gr.rotation.y;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    if (Math.abs(d) < 0.0005) {
+      gr.rotation.y = target;
+      return;
+    }
+    gr.rotation.y += d * Math.min(1, dt * 3.2);
+  });
+  return <group ref={g}>{children}</group>;
+}
+
+/** Snaps the camera back to its start pose when the camera-lock is switched on. */
+function CamReset() {
+  const nonce = useGame((s) => s.camResetNonce);
+  const camera = useThree((s) => s.camera);
+  const controls = useThree((s) => s.controls) as { target?: THREE.Vector3; update?: () => void } | null;
+  useEffect(() => {
+    if (!nonce) return;
+    camera.position.set(0, 20, 21);
+    controls?.target?.set(0, 0, 0);
+    controls?.update?.();
+  }, [nonce, camera, controls]);
+  return null;
+}
 
 /**
  * Fog backdrop — a cold, hazy night painted onto an equirectangular texture and
@@ -309,18 +350,23 @@ export function Scene() {
       {/* (no spotlight over the table — its pool read as a light stain on the
           tabletop; the ambient + window daylight carry the board instead) */}
 
-      <Suspense fallback={null}>
-        <Board />
-      </Suspense>
-      <BoardTokens />
-      <Suspense fallback={null}>
-        <Units />
-        <DeathAnimations />
-      </Suspense>
-      <ClashEffect />
+      {/* cell-space content spins together under the camera lock; the DICE
+          layer stays in world space (its tray math remaps to the visual seat) */}
+      <BoardSpin>
+        <Suspense fallback={null}>
+          <Board />
+        </Suspense>
+        <BoardTokens />
+        <Suspense fallback={null}>
+          <Units />
+          <DeathAnimations />
+        </Suspense>
+        <ClashEffect />
+      </BoardSpin>
       <Suspense fallback={null}>
         <DiceLayer />
       </Suspense>
+      <CamReset />
 
       <ContactShadows position={[0, 0.001, 0]} opacity={0.45} scale={24} blur={2.4} far={6} />
 

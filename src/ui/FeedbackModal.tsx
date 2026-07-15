@@ -1,12 +1,68 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNet } from '../net/useNet';
 import { useGame } from '../store';
 import { Modal } from './controls';
+
+/** Owner-only: every stored submission, straight from the database. The email
+ *  relay is best-effort — this list is the guaranteed way to read feedback. */
+function FeedbackList({ onClose }: { onClose: () => void }) {
+  const rows = useNet((s) => s.feedbackRows);
+  const fetchFeedbackList = useNet((s) => s.fetchFeedbackList);
+  useEffect(() => {
+    fetchFeedbackList();
+  }, [fetchFeedbackList]);
+  const field = (label: string, v?: string | null) =>
+    v ? (
+      <div className="fb-field">
+        <span className="fb-label">{label}</span> {v}
+      </div>
+    ) : null;
+  return (
+    <Modal
+      title={`Feedback submissions${rows ? ` (${rows.length})` : ''}`}
+      onClose={onClose}
+      footer={
+        <button className="primary" onClick={onClose}>
+          Done
+        </button>
+      }
+    >
+      {!rows ? (
+        <div className="lb-empty">Loading…</div>
+      ) : rows.length === 0 ? (
+        <div className="lb-empty">No feedback submitted yet.</div>
+      ) : (
+        <div className="fb-list">
+          {rows.map((r, i) => (
+            <div className="fb-item" key={r.id ?? i}>
+              <div className="fb-meta">
+                {r.created ? new Date(r.created).toLocaleString() : '—'}
+                {r.username ? ` · ${r.username}` : ' · anonymous'}
+                {r.players ? ` · ${r.players}p` : ''}
+                {r.victory ? ` · ${r.victory}` : ''}
+                {r.duration ? ` · ${r.duration}` : ''}
+                {r.finished ? ` · finished: ${r.finished}` : ''}
+              </div>
+              {field('Enjoyed:', r.enjoy)}
+              {field('Confusing:', r.confuse)}
+              {field('Would change:', r.change)}
+              {field('Bug:', r.bug)}
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
 
 /** The alpha feedback form: three open questions plus optional match details.
  *  Opened from the winner panel, the in-game Feedback pill, and the footer. */
 export function FeedbackModal({ onClose }: { onClose: () => void }) {
   const sendFeedback = useNet((s) => s.sendFeedback);
+  const username = useNet((s) => s.username);
+  const guest = useNet((s) => s.guest);
+  const isOwner = !guest && username?.toLowerCase() === 'magicdog94';
+  const [showList, setShowList] = useState(false);
   const game = useGame((s) => s.game);
   const [enjoy, setEnjoy] = useState('');
   const [confuse, setConfuse] = useState('');
@@ -32,6 +88,8 @@ export function FeedbackModal({ onClose }: { onClose: () => void }) {
     setSent(true);
   };
 
+  if (showList) return <FeedbackList onClose={onClose} />;
+
   if (sent) {
     return (
       <Modal
@@ -56,9 +114,16 @@ export function FeedbackModal({ onClose }: { onClose: () => void }) {
       title="Alpha feedback"
       onClose={onClose}
       footer={
-        <button className="primary" onClick={submit} disabled={!enjoy && !confuse && !change && !bug}>
-          Send Feedback
-        </button>
+        <>
+          {isOwner && (
+            <button className="ghost" onClick={() => setShowList(true)}>
+              View submissions
+            </button>
+          )}
+          <button className="primary" onClick={submit} disabled={!enjoy && !confuse && !change && !bug}>
+            Send Feedback
+          </button>
+        </>
       }
     >
       <form className="feedback-form" onSubmit={submit}>

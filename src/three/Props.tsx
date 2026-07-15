@@ -78,53 +78,9 @@ function ShadowBlob({ pos, w, d, opacity = 0.45 }: { pos: [number, number]; w: n
   );
 }
 
-/** The round pedestal side table extracted from the user's medieval
- *  furniture set (models/side-table.glb) — normalised to its real-world
- *  size (~0.8 m) and stood on the floor. */
-function SideTable({ pos, ry = 0 }: { pos: [number, number, number]; ry?: number }) {
-  const { scene } = useGLTF('/models/side-table.glb');
-  const obj = useMemo(() => {
-    const root = scene.clone(true);
-    root.updateMatrixWorld(true);
-    const g = new THREE.Group();
-    const meshes: THREE.Mesh[] = [];
-    root.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (m.isMesh) meshes.push(m);
-    });
-    for (const m of meshes) {
-      g.attach(m); // keeps world transforms
-      m.castShadow = true;
-      m.receiveShadow = true;
-      const mats = Array.isArray(m.material) ? m.material : [m.material];
-      for (const mat of mats) {
-        const std = mat as THREE.MeshStandardMaterial;
-        if (std.userData.propFixed) continue;
-        std.userData.propFixed = true;
-        std.metalness = 0;
-        std.roughness = 0.85;
-        std.envMapIntensity = 0.3;
-        std.emissive = new THREE.Color('#ffffff');
-        std.emissiveIntensity = 0.07;
-        if (std.map) std.emissiveMap = std.map;
-        std.needsUpdate = true;
-      }
-    }
-    // normalise: longest dimension → 0.8 m at room scale, base on the floor
-    const bb = new THREE.Box3().setFromObject(g);
-    const size = new THREE.Vector3();
-    bb.getSize(size);
-    const s = (0.8 * M) / Math.max(size.x, size.y, size.z, 1e-6);
-    const c = new THREE.Vector3();
-    bb.getCenter(c);
-    const wrap = new THREE.Group();
-    wrap.add(g);
-    g.scale.setScalar(s);
-    g.position.set(-c.x * s, -bb.min.y * s, -c.z * s);
-    return wrap;
-  }, [scene]);
-  return <primitive object={obj} position={pos} rotation={[0, ry, 0]} />;
-}
+/* (SideTable was removed on request — the lone pedestal table by the east
+   wall read as clutter. models/side-table.glb stays in public/ if it ever
+   returns.) */
 
 /**
  * The dressed corners of the chamber:
@@ -200,10 +156,8 @@ export function FantasyProps() {
 
       {/* (the NE wall torch became a candle sconce — see Decor's Sconce row) */}
 
-      {/* ---- the round side table against the east wall, north of the blue
-              banner zone (clear of the door at z=52 and the banner at z±22) ---- */}
-      <SideTable pos={[58, FLOOR_Y, -45]} ry={Math.PI} />
-      <ShadowBlob pos={[58, -45]} w={30} d={30} />
+      {/* (the lone round side table by the east wall was removed on request —
+          it read as clutter standing by itself) */}
     </group>
   );
 }
@@ -222,4 +176,3 @@ for (const n of [
 ]) {
   useGLTF.preload(KIT + n + '.gltf');
 }
-useGLTF.preload('/models/side-table.glb');

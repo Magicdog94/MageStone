@@ -1822,6 +1822,9 @@ body.ui-mobile .tut-gotit {
    Entry screens (landing / auth / lobby)
    ============================================================ */
 .entry {
+  /* Tall screens (signed-in lobby: Ranked + Create + Join + footer) must be
+     reachable everywhere — the fixed shell scrolls when content overflows. */
+  overflow-y: auto;
   position: fixed;
   inset: 0;
   display: grid;

@@ -30,9 +30,9 @@ import { BookIcon, CameraLockIcon, CogIcon, GraveIcon } from './Icons';
 
 const KIND_LABEL = { warrior: 'Warrior', mage: 'Mage', priest: 'Priest' } as const;
 const KIND_ABILITY = {
-  warrior: 'Attacks · coordinates with adjacent Warriors (1–3d6)',
-  mage: 'Collects & activates MageStones · attack die grows d6 → d12 → d20',
-  priest: 'Cannot attack · resurrects from gravestones · Nexus ritual to win',
+  warrior: 'Attacks adjacent enemies · coordinates 1–3d6',
+  mage: 'Collects & activates stones · power die d6→d12→d20',
+  priest: 'No attack · resurrects Warriors · Nexus ritual',
 } as const;
 
 /** Camera-lock toggle: keep the camera at its start pose and rotate the BOARD

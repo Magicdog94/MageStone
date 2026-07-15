@@ -210,6 +210,9 @@ function Shell({ children, bare = false }: { children: React.ReactNode; bare?: b
           {statusEl}
         </div>
       )}
+      {/* trust footer (Feedback, issues, patch notes…) on EVERY entry screen —
+          signed-in players land in the lobby and must reach Feedback too */}
+      <LandingFooter />
     </div>
   );
 }
@@ -454,7 +457,6 @@ function Landing() {
         </Modal>
       )}
       {showTutorial && <Tutorial onClose={() => setShowTutorial(false)} />}
-      <LandingFooter />
     </Shell>
   );
 }

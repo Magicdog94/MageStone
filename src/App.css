@@ -1833,6 +1833,45 @@ body.ui-mobile .tut-gotit {
   backdrop-filter: blur(5px);
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* In-game the overlay mounts inside .hud (pointer-events: none — buttons
+     re-enable themselves but plain divs don't), which silently killed WHEEL
+     scrolling over the rulebook. Re-enable the whole subtree. */
+  pointer-events: auto;
+}
+/* jumped-to chapters land BELOW the sticky contents bar */
+.htp-section {
+  scroll-margin-top: 100px;
+}
+/* sticky contents bar: jump anywhere without closing anything */
+.htp-toc {
+  position: sticky;
+  top: calc(-1 * clamp(20px, 4vw, 40px) + 8px);
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--gold-line);
+  border-radius: var(--radius-md);
+  background: rgba(6, 14, 9, 0.92);
+}
+.htp-toc button {
+  height: var(--control-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-dim);
+  font-family: var(--display);
+  font-size: var(--text-xs);
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.htp-toc button:hover {
+  color: var(--gold-bright);
+  border-color: var(--gold-line);
 }
 .htp-panel {
   position: relative;

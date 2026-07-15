@@ -295,28 +295,24 @@ const SECTIONS: Section[] = [
           </li>
           <li>Discard exactly 2 dice.</li>
           <li>
-            Move up to 3 units using the remaining dice.
+            Move up to 3 units — one die per unit, up to the die’s value.
             <ul className="htp-list htp-list--sub">
-              <li>Each die can move one unit.</li>
-              <li>Movement is orthogonal only.</li>
-              <li>Units move up, down, left, or right.</li>
-              <li>Units cannot move diagonally.</li>
+              <li>Movement is orthogonal (never diagonal), through empty squares. The path may turn.</li>
+              <li>A die only moves its matching unit type.</li>
             </ul>
           </li>
-          <li>Complete all movement first.</li>
           <li>
-            Then resolve actions:
+            After moving, resolve actions:
             <ul className="htp-list htp-list--sub">
               <li>Attack (Warrior: Single, Double, Triple; Mage)</li>
-              <li>Collect a MageStone (Mage)</li>
-              <li>Activate a MageStone (Mage)</li>
+              <li>Collect or Activate a MageStone (Mage)</li>
               <li>Resurrect a Warrior (Priest)</li>
               <li>Start a Nexus Ritual (Priest)</li>
             </ul>
           </li>
         </ol>
         <div className="htp-note">
-          <strong>Important:</strong> If you discard the Mage die, your Mage cannot move that turn.
+          <strong>Important:</strong> Discard a unit’s die and that unit cannot move this turn.
         </div>
         <MoveDiagram />
       </>
@@ -329,39 +325,33 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <h4 className="htp-sub htp-sub--w">Warrior</h4>
-        <p className="htp-p">Warriors are your main fighting units.</p>
+        <p className="htp-p">Your main fighters.</p>
         <ul className="htp-list">
-          <li>Warriors attack using 1d6.</li>
-          <li>Warriors can attack enemy units.</li>
-          <li>Warriors can make coordinated attacks with other Warriors.</li>
-          <li>If a Warrior is defeated, it becomes a Gravestone.</li>
+          <li>Attacks adjacent enemies with 1d6 — or coordinates with other Warriors (see Combat).</li>
+          <li>Defeated Warriors leave a Gravestone.</li>
           <li>You can never have more than 6 live Warriors.</li>
         </ul>
 
         <h4 className="htp-sub htp-sub--m">Mage</h4>
         <p className="htp-p">
-          The Mage is your most important unit. It becomes stronger as it carries MageStones:
+          Your victory carrier — it grows stronger with Activated MageStones:
         </p>
         <ul className="htp-list">
-          <li>0–1 MageStones: rolls 1d6</li>
-          <li>2–3 MageStones: rolls 1d12</li>
-          <li>4–5 MageStones: rolls 1d20</li>
+          <li>0–1 stones: rolls 1d6</li>
+          <li>2–3 stones: rolls 1d12</li>
+          <li>4–5 stones: rolls 1d20</li>
         </ul>
-        <p className="htp-p">If the Mage is defeated:</p>
-        <ul className="htp-list">
-          <li>It respawns at your base if possible.</li>
-          <li>It drops all Unactivated MageStones.</li>
-          <li>It also drops 1 Activated MageStone on the death square.</li>
-          <li>If the enemy has locked your base, your Mage may be unable to respawn.</li>
-        </ul>
+        <p className="htp-p">
+          A defeated Mage drops all Unactivated stones plus 1 Activated stone where it fell, then
+          respawns at your base — unless an enemy is holding the base (see Conquest).
+        </p>
 
         <h4 className="htp-sub htp-sub--p">Priest</h4>
-        <p className="htp-p">The Priest is a defensive and ritual unit.</p>
+        <p className="htp-p">Your support unit — it cannot attack.</p>
         <ul className="htp-list">
-          <li>The Priest cannot attack.</li>
-          <li>When attacked, the Priest rolls defence only.</li>
-          <li>If the Priest wins the defence roll, the attack is repelled — but the attacker is not defeated.</li>
-          <li>If the Priest is defeated, it respawns instead of becoming a Gravestone.</li>
+          <li>Resurrects Warriors from Gravestones and performs the Nexus Ritual.</li>
+          <li>A Priest that wins its defence only repels the attack — the attacker survives.</li>
+          <li>If defeated, it respawns at your base (no Gravestone).</li>
         </ul>
       </>
     ),
@@ -372,36 +362,22 @@ const SECTIONS: Section[] = [
     icon: 'swords',
     body: (
       <>
-        <p className="htp-p">Combat is resolved by opposed dice rolls.</p>
-        <ul className="htp-list">
-          <li>The attacker rolls their attack die.</li>
-          <li>The defender rolls their defence die.</li>
-          <li>Highest roll wins.</li>
-          <li>Ties are re-rolled until the result is decisive — combat never ends in a draw.</li>
-        </ul>
         <p className="htp-p">
-          <span className="htp-em">If the attacker wins:</span> the defender is defeated.
-        </p>
-        <p className="htp-p">
-          <span className="htp-em">If the defender wins:</span> the attacker is defeated — unless the defender is a
-          Priest. A Priest never kills the attacker; the attack is simply repelled and both units stay put.
+          Attacker and defender each roll their die — highest wins. Ties are re-rolled, so combat
+          never ends in a draw. The loser is defeated, with one exception: a Priest that wins its
+          defence only repels the attack (the attacker survives).
         </p>
 
         <h4 className="htp-sub">Coordinated Warrior Attacks</h4>
-        <p className="htp-p">Two or three Warriors can combine their attack against one target.</p>
-        <ul className="htp-list">
-          <li>2 Warriors attack together by rolling 2d6.</li>
-          <li>3 Warriors attack together by rolling 3d6.</li>
-          <li>Add the dice together.</li>
-          <li>Compare the total against the defender’s roll.</li>
-        </ul>
-        <p className="htp-p">If a coordinated attack fails, only one attacking Warrior is defeated.</p>
+        <p className="htp-p">
+          Two or three Warriors adjacent to one target can strike together, rolling 2d6 or 3d6 and
+          adding the dice. If the attack fails, only one Warrior falls.
+        </p>
 
         <h4 className="htp-sub">Win Chance</h4>
         <p className="htp-p">
-          Your chance to win an attack — your roll (row) against the defender’s die (column). The defender rolls d6,
-          unless it’s a Mage defending with its power die. Ties are re-rolled, so these are exactly the odds shown
-          in-game.
+          Your roll (row) against the defender’s die (column) — the defender rolls d6 unless it’s a
+          Mage using its power die. These are exactly the odds shown in-game.
         </p>
         <OddsTable />
         <ul className="htp-list htp-legend">
@@ -425,20 +401,11 @@ const SECTIONS: Section[] = [
     icon: 'gem',
     body: (
       <>
-        <p className="htp-p">MageStones are collected from the MageStone zone. There are two MageStone states:</p>
-        <ol className="htp-win">
-          <li>
-            <span className="htp-win-title">Unactivated MageStones</span>
-            Carried, but not yet ready for victory.
-          </li>
-          <li>
-            <span className="htp-win-title">Activated MageStones</span>
-            These count toward Mage Victory.
-          </li>
-        </ol>
         <p className="htp-p">
-          To win by Mage Victory, your Mage must return to your base with 6 or more Activated MageStones — the
-          win is instant the moment it arrives.
+          Your Mage collects a stone by landing on it — the stone is then{' '}
+          <span className="htp-em">Unactivated</span> (carried, silver). Back on your own base the
+          Mage can <span className="htp-em">Activate</span> its stones (gold) — these power its
+          attack die and count toward Mage Victory (6 Activated on your base wins instantly).
         </p>
         <StoneDiagram />
       </>
@@ -479,15 +446,10 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p className="htp-p">
-          The Nexus is the central power point of the board. A Priest can move onto the Nexus and declare a ritual.
+          The Nexus is the 2×2 heart of the board. A Priest standing on it — with no enemies on
+          its four squares — may declare a ritual. Hold the Nexus for one full round and you win.
+          Killing the Priest, or any enemy stepping into the Nexus, breaks the ritual.
         </p>
-        <h4 className="htp-sub">To win by Priest Ritual Victory</h4>
-        <ul className="htp-list">
-          <li>Your Priest must stand on the Nexus.</li>
-          <li>You declare the ritual.</li>
-          <li>Your Priest must remain there for a full round.</li>
-          <li>If the Priest survives and still controls the Nexus, you win.</li>
-        </ul>
         <NexusDiagram />
       </>
     ),
@@ -511,17 +473,26 @@ const SECTIONS: Section[] = [
 
 // ---- page -----------------------------------------------------------------
 
-const isMobile = () =>
-  typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches;
-
 export function Tutorial({ onClose }: { onClose: () => void }) {
-  // All sections open on desktop; only the first open on mobile so the guide
-  // doesn't start as one long scroll.
-  const [open, setOpen] = useState<Record<string, boolean>>(() => {
-    const mobile = isMobile();
-    return Object.fromEntries(SECTIONS.map((s, i) => [s.id, mobile ? i === 0 : true]));
-  });
+  // Every section starts CLOSED — the book opens as a tidy contents view, and
+  // the sticky contents bar jumps straight to (and opens) any chapter.
+  const [open, setOpen] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(SECTIONS.map((s) => [s.id, false])),
+  );
   const toggle = (id: string) => setOpen((o) => ({ ...o, [id]: !o[id] }));
+  const jumpTo = (id: string) => {
+    setOpen((o) => ({ ...o, [id]: true }));
+    // scroll after the section body has expanded; explicit math so the target
+    // lands BELOW the sticky contents bar, not underneath it
+    window.setTimeout(() => {
+      const ov = document.querySelector('.htp-overlay');
+      const el = document.getElementById(`htp-sec-${id}`);
+      if (!ov || !el) return;
+      const tocH = document.querySelector('.htp-toc')?.getBoundingClientRect().height ?? 0;
+      const top = el.getBoundingClientRect().top - ov.getBoundingClientRect().top + ov.scrollTop;
+      ov.scrollTo({ top: Math.max(0, top - tocH - 20), behavior: 'smooth' });
+    }, 60);
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -550,14 +521,18 @@ export function Tutorial({ onClose }: { onClose: () => void }) {
           <Divider />
         </header>
 
+        {/* sticky contents — jump to (and open) any chapter from anywhere */}
+        <nav className="htp-toc" aria-label="Contents">
+          {SECTIONS.map((s) => (
+            <button key={s.id} onClick={() => jumpTo(s.id)}>
+              {s.title}
+            </button>
+          ))}
+        </nav>
+
         <div className="htp-intro">
           <p className="htp-lead">
             Command Warriors, protect your Mage, control the Nexus, and claim the MageStones.
-          </p>
-          <p className="htp-p">
-            MageStone is a fantasy strategy board game for 2–4 players. Each player controls a small force of
-            Warriors, one Mage, and one Priest. Your aim is to gather MageStones, control the Nexus, defeat enemy
-            units, and win through one of three victory paths.
           </p>
         </div>
 
@@ -565,7 +540,7 @@ export function Tutorial({ onClose }: { onClose: () => void }) {
           {SECTIONS.map((s) => {
             const isOpen = !!open[s.id];
             return (
-              <section className={`htp-section${isOpen ? ' open' : ''}`} key={s.id}>
+              <section className={`htp-section${isOpen ? ' open' : ''}`} key={s.id} id={`htp-sec-${s.id}`}>
                 <button
                   className="htp-section-head"
                   aria-expanded={isOpen}

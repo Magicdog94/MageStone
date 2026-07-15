@@ -200,6 +200,10 @@ function Shell({ children, bare = false }: { children: React.ReactNode; bare?: b
             {children}
             {noticeEl}
           </div>
+          {/* trust footer (Feedback etc.) on EVERY entry screen. It must live
+              INSIDE this stacking context — as a sibling of .entry-cover (z:1)
+              its z:4 would paint over the Rule Book overlay trapped in here. */}
+          <LandingFooter />
         </div>
       ) : (
         <div className="entry-inner">
@@ -208,11 +212,9 @@ function Shell({ children, bare = false }: { children: React.ReactNode; bare?: b
           {children}
           {noticeEl}
           {statusEl}
+          <LandingFooter />
         </div>
       )}
-      {/* trust footer (Feedback, issues, patch notes…) on EVERY entry screen —
-          signed-in players land in the lobby and must reach Feedback too */}
-      <LandingFooter />
     </div>
   );
 }

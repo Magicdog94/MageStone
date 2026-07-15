@@ -14,15 +14,20 @@ import {
   MAX_WARRIORS,
   attackTargets,
   availableDice,
+  boltTargets,
   canAct,
   canActivate,
+  canBolt,
   canCollect,
   canDieMoveUnit,
+  canNova,
   canResurrect,
   canRitual,
   combatOdds,
   graveAt,
   legalMoves,
+  magePowerDie,
+  novaVictims,
   plannedAttackers,
   stonesAt,
   warriorCount,
@@ -38,6 +43,8 @@ export const BOT_LABEL: Record<BotLevel, string> = { easy: 'Easy', medium: 'Medi
 export type BotAction =
   | { type: 'move'; unitId: string; dieId: string; dest: Cell }
   | { type: 'attack'; unitId: string; targetId: string }
+  | { type: 'bolt'; unitId: string; targetId: string }
+  | { type: 'nova'; unitId: string }
   | { type: 'collect' | 'activate' | 'resurrect' | 'ritual'; unitId: string };
 
 interface Cfg {
@@ -49,8 +56,10 @@ interface Cfg {
 }
 const CFG: Record<BotLevel, Cfg> = {
   easy: { eps: 0.5, atkOdds: 0.4, plan: false, avoid: false, endBar: 8 },
-  medium: { eps: 0.15, atkOdds: 0.55, plan: true, avoid: false, endBar: 14 },
-  hard: { eps: 0, atkOdds: 0.45, plan: true, avoid: true, endBar: 14 },
+  // medium learned self-preservation; hard also spends its dice rather than
+  // passing (endBar down) — humans never leave dice on the table.
+  medium: { eps: 0.15, atkOdds: 0.55, plan: true, avoid: true, endBar: 12 },
+  hard: { eps: 0, atkOdds: 0.45, plan: true, avoid: true, endBar: 8 },
 };
 
 const manhattan = (a: Cell, b: Cell) => Math.abs(a.r - b.r) + Math.abs(a.c - b.c);
@@ -81,6 +90,19 @@ function quickOdds(nd6: number, defFaces: number): number {
       else if (a < d) lose += p;
     }
   }
+  const dec = win + lose;
+  return dec > 0 ? win / dec : 0;
+}
+
+/** P(win | not draw) for one aF-faced die against one dF-faced die (bolt duel). */
+function faceOdds(aF: number, dF: number): number {
+  let win = 0;
+  let lose = 0;
+  for (let a = 1; a <= aF; a++)
+    for (let d = 1; d <= dF; d++) {
+      if (a > d) win++;
+      else if (a < d) lose++;
+    }
   const dec = win + lose;
   return dec > 0 ? win / dec : 0;
 }
@@ -125,6 +147,13 @@ export function chooseDiscard(state: GameState, level: BotLevel): string | null 
       let s = 4 + d.value * 0.3;
       if (minDist(mage.cell, stones) <= d.value) s += 5;
       if (mage.carried > 0) s += minDist(mage.cell, home) <= d.value ? 6 : 3;
+      // a mage die is also BOLT range — keep it when sorcery is on the table
+      if (level === 'hard' && mage.activated >= 1) {
+        const inRange = state.units.filter(
+          (x) => x.owner !== me && manhattan(x.cell, mage.cell) <= d.value,
+        ).length;
+        if (inRange) s += 4 + Math.min(2, inRange);
+      }
       return s;
     }
     if (d.kind === 'priest') {
@@ -186,6 +215,36 @@ export function chooseAction(state: GameState, level: BotLevel): BotAction | nul
         if (odds < cfg.atkOdds && !(level === 'hard' && odds * value > 16)) continue;
         cands.push({ a: { type: 'attack', unitId: u.id, targetId: t.id }, score: odds * 70 + odds * value - 10 });
       }
+
+      // ---- Mage sorcery (hard only): spend activated stones like a human ----
+      if (level === 'hard' && u.kind === 'mage') {
+        if (canBolt(state, u.id)) {
+          for (const t of boltTargets(state, u.id)) {
+            const value = targetValue(state, t);
+            let score: number;
+            if (t.kind === 'mage') {
+              // duel: power die vs power die — only worth it against fat mages
+              const odds = faceOdds(magePowerDie(u.activated), magePowerDie(t.activated));
+              score = odds * value - 14;
+            } else {
+              // guaranteed kill for one stone
+              score = 22 + value * 0.9;
+            }
+            // one stone from the win? don't burn it on small game
+            if (u.activated >= 5 && value < 60) score -= 30;
+            cands.push({ a: { type: 'bolt', unitId: u.id, targetId: t.id }, score });
+          }
+        }
+        if (canNova(state, u.id)) {
+          const vs = novaVictims(state, u.id);
+          let gain = 0;
+          for (const v of vs) gain += v.owner === me ? -targetValue(state, v) * 1.1 : targetValue(state, v);
+          // the classic human nova: cornered mage clears the mob around it
+          const cornered = adjacentEnemies(state, u.cell, me);
+          const score = gain - 26 + (cornered >= 2 ? cornered * 9 : 0);
+          cands.push({ a: { type: 'nova', unitId: u.id }, score });
+        }
+      }
     }
 
     // ---- moves (a die of the unit's kind must be free, unit not yet used) ----
@@ -206,7 +265,19 @@ export function chooseAction(state: GameState, level: BotLevel): BotAction | nul
           else if (cfg.plan && u.carried > 0) score = 34 + (minDist(u.cell, home) - minDist(dest, home)) * 6;
           else if (cfg.plan && stones.length) score = 28 + (minDist(u.cell, stones) - minDist(dest, stones)) * 6;
           else score = 8 + Math.random() * 8;
-          if (cfg.avoid) score -= adjacentEnemies(state, dest, me) * 22;
+          if (cfg.avoid) {
+            score -= adjacentEnemies(state, dest, me) * 22;
+            // FLEE: a threatened mage runs — humans never leave the win
+            // condition standing next to swords.
+            const threatNow = adjacentEnemies(state, u.cell, me);
+            const threatAfter = adjacentEnemies(state, dest, me);
+            if (threatNow > 0 && threatAfter < threatNow) {
+              score = Math.max(
+                score,
+                42 + (threatNow - threatAfter) * 10 + (u.carried + u.activated) * 3,
+              );
+            }
+          }
         } else if (u.kind === 'priest') {
           const grave = graveAt(state, dest);
           const revivable = grave && warriorCount(state, me) < MAX_WARRIORS;
@@ -215,7 +286,15 @@ export function chooseAction(state: GameState, level: BotLevel): BotAction | nul
           else if (nexusDest && !state.ritual) score = 58;
           else if (cfg.plan && !state.ritual) score = 20 + (minDist(u.cell, NEXUS_CELLS) - minDist(dest, NEXUS_CELLS)) * 4;
           else score = 6 + Math.random() * 8;
-          if (cfg.avoid) score -= adjacentEnemies(state, dest, me) * 20;
+          if (cfg.avoid) {
+            score -= adjacentEnemies(state, dest, me) * 20;
+            // FLEE: a cornered priest backs off (unless mid-ritual — it must hold).
+            const holding = state.ritual?.priestId === u.id;
+            const threatNow = adjacentEnemies(state, u.cell, me);
+            if (!holding && threatNow > 0 && adjacentEnemies(state, dest, me) < threatNow) {
+              score = Math.max(score, 38 + threatNow * 8);
+            }
+          }
         } else {
           // warrior: set up attacks, march on enemies, besiege empty thrones
           const adjTargets = enemies.filter((e) => manhattan(e.cell, dest) === 1);
@@ -227,6 +306,9 @@ export function chooseAction(state: GameState, level: BotLevel): BotAction | nul
             const defFaces = best.kind === 'mage' ? (best.activated >= 4 ? 20 : best.activated >= 2 ? 12 : 6) : 6;
             const odds = quickOdds(Math.min(3, 1 + allies), defFaces);
             score = odds * 55 + odds * targetValue(state, best) * 0.8 - 4;
+            // DISCIPLINE: humans don't dangle a lone warrior beside an enemy
+            // warrior — it just gets coordinated to death on the reply.
+            if (level === 'hard' && allies === 0 && best.kind === 'warrior') score -= 16;
           } else if (cfg.plan && enemies.length) {
             const cells = enemies.map((e) => e.cell);
             score = 12 + (minDist(u.cell, cells) - minDist(dest, cells)) * 3;
@@ -238,6 +320,11 @@ export function chooseAction(state: GameState, level: BotLevel): BotAction | nul
             for (const p of state.players) {
               if (p === me || !state.pendingRespawns.some((pr) => pr.owner === p)) continue;
               if (baseCells(state, p).some((c) => sameCell(c, dest))) score += 42;
+            }
+            // BODYGUARDS: while our own ritual burns, warriors ring the Nexus.
+            if (state.ritual && state.ritual.player === me) {
+              const nearNexus = NEXUS_CELLS.some((c) => manhattan(c, dest) === 1);
+              if (nearNexus) score += 14;
             }
           }
         }
@@ -258,4 +345,9 @@ export function chooseAction(state: GameState, level: BotLevel): BotAction | nul
   if (Math.random() < cfg.eps) return cands[(Math.random() * cands.length) | 0].a;
   const best = cands.reduce((a, b) => (a.score >= b.score ? a : b));
   return best.score >= cfg.endBar ? best.a : null;
+}
+
+// DEV-only: expose the brain for the headless balance arena (tools/recorder).
+if (typeof window !== 'undefined' && import.meta.env?.DEV) {
+  (window as unknown as { __bot?: object }).__bot = { chooseAction, chooseDiscard };
 }

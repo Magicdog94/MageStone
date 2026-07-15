@@ -30,6 +30,14 @@ function executeAction(a: BotAction): void {
       s.selectUnit(a.unitId);
       s.attack(a.targetId);
       break;
+    case 'bolt':
+      s.selectUnit(a.unitId);
+      s.castBolt(a.targetId);
+      break;
+    case 'nova':
+      s.selectUnit(a.unitId);
+      s.castNova();
+      break;
     case 'collect':
       s.selectUnit(a.unitId);
       s.collectStones();

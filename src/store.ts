@@ -767,4 +767,20 @@ export function unitActions(game: GameState, unitId: string | null) {
 // Dev-only: expose the store so previews/tests can drive turns headlessly.
 if (import.meta.env.DEV) {
   (window as unknown as { __game?: typeof useGame }).__game = useGame;
+  // Raw engine hooks for the headless bot-balance arena (no store, no physics).
+  (window as unknown as { __engine?: object }).__engine = {
+    createGame,
+    rollDice,
+    discardDie,
+    moveUnit,
+    plannedAttackers,
+    resolveAttack,
+    collect,
+    activate,
+    resurrect,
+    beginRitual,
+    resolveBolt,
+    resolveNova,
+    endTurn,
+  };
 }

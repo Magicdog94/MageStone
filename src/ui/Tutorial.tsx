@@ -343,7 +343,8 @@ const SECTIONS: Section[] = [
         </ul>
         <p className="htp-p">
           A defeated Mage drops all Unactivated stones plus 1 Activated stone where it fell, then
-          respawns at your base — unless an enemy is holding the base (see Conquest).
+          respawns at your base — unless an enemy is holding the base (see Conquest). Activated
+          stones can also be SPENT on sorcery — see <span className="htp-em">Mage Powers</span>.
         </p>
 
         <h4 className="htp-sub htp-sub--p">Priest</h4>
@@ -408,6 +409,42 @@ const SECTIONS: Section[] = [
           attack die and count toward Mage Victory (6 Activated on your base wins instantly).
         </p>
         <StoneDiagram />
+      </>
+    ),
+  },
+  {
+    id: 'powers',
+    title: 'Mage Powers',
+    icon: 'gem',
+    body: (
+      <>
+        <p className="htp-p">
+          Activated MageStones can be spent as sorcery. Spent stones stay ACTIVATED but leave the
+          Mage and land back on the board for anyone to claim — and spending them lowers the
+          Mage’s power die.
+        </p>
+        <h4 className="htp-sub htp-sub--m">Bolt — 1 Activated stone</h4>
+        <ul className="htp-list">
+          <li>
+            A ranged strike on any enemy within range — range equals the mage die’s roll for that
+            action (whether or not the Mage moved with it).
+          </li>
+          <li>
+            Only an enemy <span className="htp-em">Mage</span> can repel it: both Mages roll their
+            power dice, highest wins (ties re-roll). Every other unit is destroyed outright.
+          </li>
+          <li>The spent stone lands on the target’s square, still activated.</li>
+        </ul>
+        <h4 className="htp-sub htp-sub--m">Nova — 3 Activated stones</h4>
+        <ul className="htp-list">
+          <li>
+            Destroys <span className="htp-em">every</span> unit within 1 square of the Mage —
+            diagonals included, friend or foe. Nothing can repel it.
+          </li>
+          <li>
+            The 3 spent stones scatter to random squares of the 3×3 blast area, still activated.
+          </li>
+        </ul>
       </>
     ),
   },

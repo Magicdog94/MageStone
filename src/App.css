@@ -714,6 +714,26 @@ button.ghost:focus-visible {
   color: var(--ink-dim);
   font-size: var(--text-sm);
 }
+.ca-nova {
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #ffd45e;
+  text-shadow: 0 0 12px rgba(255, 212, 94, 0.6);
+}
+/* bolt button while waiting for a target click */
+.hud .attack-btn.arming {
+  animation: bolt-pulse 1s ease-in-out infinite;
+}
+@keyframes bolt-pulse {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.35);
+  }
+}
 /* selected-unit ability line under the kind heading */
 .unit-ability {
   font-size: var(--text-xs);

@@ -293,6 +293,71 @@ export async function runTutorial(onDone: () => void) {
       placement: 'bottom',
     });
 
+    // ---- Mage powers: Bolt ---------------------------------------------------
+    stage((st) => {
+      const mage = st.units.find((u) => u.id === 'red-m')!;
+      mage.cell = { r: 8, c: 5 };
+      mage.activated = 4;
+      st.units.find((u) => u.id === 'blue-w1')!.cell = { r: 8, c: 8 };
+      st.dice = mkDice(['mage'], [4]);
+    });
+    await wait(700);
+    await note({
+      id: 'power-intro',
+      title: 'Mage powers',
+      body: 'Activated stones are more than a score — they can be SPENT as sorcery. Red’s Mage holds 4 activated stones, and its die shows 4.',
+      placement: 'center',
+    });
+    g().selectUnit('red-m');
+    await wait(250);
+    await note({
+      id: 'power-bolt',
+      title: 'Bolt — 1 stone',
+      body: 'A ranged strike on ANY enemy within as many squares as the mage die shows (here: 4). Only an enemy Mage may roll to repel — everything else is destroyed outright. Watch.',
+      anchor: '.unit-actions',
+      placement: 'top',
+    });
+    g().castBolt('blue-w1');
+    await wait(1400);
+    await note({
+      id: 'power-bolt-stone',
+      title: 'The stone disperses',
+      body: 'The spent stone lands ON the target’s square — still ACTIVATED (gold). Any Mage can go and claim it.',
+      placement: 'center',
+    });
+
+    // ---- Mage powers: Nova ---------------------------------------------------
+    stage((st) => {
+      const mage = st.units.find((u) => u.id === 'red-m')!;
+      mage.cell = { r: 5, c: 5 };
+      mage.activated = 3;
+      st.units.find((u) => u.id === 'blue-w1')!.cell = { r: 4, c: 5 };
+      st.units.find((u) => u.id === 'blue-w2')!.cell = { r: 6, c: 6 }; // diagonal!
+      st.units.find((u) => u.id === 'blue-w3')!.cell = { r: 5, c: 6 };
+      st.dice = mkDice(['mage'], [2]);
+    });
+    await wait(700);
+    await note({
+      id: 'power-nova',
+      title: 'Nova — 3 stones',
+      body: 'Three enemies crowd Red’s Mage — one of them diagonally. NOVA destroys EVERY unit within 1 square, diagonals included, friend or foe. Nothing can repel it.',
+      placement: 'center',
+    });
+    g().selectUnit('red-m');
+    await wait(250);
+    {
+      const novaRig = [0.15, 0.5, 0.85];
+      let ni = 0;
+      g().castNova(() => novaRig[Math.min(ni++, novaRig.length - 1)]);
+    }
+    await wait(1600);
+    await note({
+      id: 'power-nova-stones',
+      title: 'Three stones scatter',
+      body: 'The three spent stones scatter across the 3×3 blast area — still activated, waiting to be claimed. Spending stones lowers the Mage’s power die, so choose your moment.',
+      placement: 'center',
+    });
+
     // ---- End turn ----------------------------------------------------------
     await note({
       id: 'endturn',

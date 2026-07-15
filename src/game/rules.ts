@@ -676,6 +676,190 @@ export function activate(state: GameState, unitId: string): GameState {
   });
 }
 
+// ---- Mage powers: Bolt / Nova ---------------------------------------------
+// Activated MageStones can be SPENT as sorcery. The spent stones stay
+// activated but leave the Mage and land back on the board for anyone to claim.
+
+export const BOLT_COST = 1;
+export const NOVA_COST = 3;
+
+const manhattan = (a: Cell, b: Cell) => Math.abs(a.r - b.r) + Math.abs(a.c - b.c);
+const chebyshev = (a: Cell, b: Cell) => Math.max(Math.abs(a.r - b.r), Math.abs(a.c - b.c));
+
+/** The die value a Mage action would use (its move die, else the best free
+ *  mage die) — the Bolt's RANGE. 0 when no die is available. */
+export function mageActionDieValue(state: GameState, unitId: string): number {
+  const existing = unitDie(state, unitId);
+  if (existing) return existing.value;
+  const free = availableDice(state)
+    .filter((d) => d.kind === 'mage')
+    .sort((a, b) => b.value - a.value)[0];
+  return free?.value ?? 0;
+}
+
+export function canBolt(state: GameState, unitId: string): boolean {
+  const u = unitById(state, unitId);
+  if (!u || u.kind !== 'mage' || !canAct(state, unitId)) return false;
+  if (u.activated < BOLT_COST) return false;
+  return mageActionDieValue(state, unitId) > 0;
+}
+
+/** Enemy units within Bolt range (the mage die's value, orthogonal steps). */
+export function boltTargets(state: GameState, unitId: string): Unit[] {
+  if (!canBolt(state, unitId)) return [];
+  const mage = unitById(state, unitId)!;
+  const range = mageActionDieValue(state, unitId);
+  return state.units.filter(
+    (u) => u.owner !== mage.owner && manhattan(u.cell, mage.cell) <= range,
+  );
+}
+
+/**
+ * BOLT — spend 1 activated stone to strike any enemy in range. Only an enemy
+ * MAGE may roll to repel (power die vs power die, ties re-rolled); everything
+ * else is destroyed outright. The spent stone lands ON the target's square,
+ * still activated, waiting to be claimed.
+ */
+export function resolveBolt(
+  state: GameState,
+  mageId: string,
+  targetId: string,
+  rng: RNG = defaultRng,
+): GameState {
+  if (state.turnPhase !== 'act' || state.winner) return state;
+  const mage = unitById(state, mageId);
+  const target = unitById(state, targetId);
+  if (!mage || !target || !canBolt(state, mageId)) return state;
+  if (target.owner === mage.owner) return state;
+  if (manhattan(target.cell, mage.cell) > mageActionDieValue(state, mageId)) return state;
+
+  const dice = spendActionDie(state, mageId);
+  if (!dice) return state;
+
+  const attackFaces = magePowerDie(mage.activated);
+  let attackRoll = dN(attackFaces, rng);
+  let defenseRoll = 0;
+  let repelled = false;
+  if (target.kind === 'mage') {
+    const defenseFaces = magePowerDie(target.activated);
+    do {
+      attackRoll = dN(attackFaces, rng);
+      defenseRoll = dN(defenseFaces, rng);
+    } while (attackRoll === defenseRoll);
+    repelled = defenseRoll > attackRoll;
+  }
+
+  // The spent stone drops on the target square, still activated.
+  const boltStone: MageStone = {
+    id: `stone-bolt-${stoneCounter++}`,
+    cell: { ...target.cell },
+    collected: false,
+    activated: true,
+  };
+
+  let next: GameState = {
+    ...state,
+    dice,
+    units: state.units.map((u) => (u.id === mageId ? { ...u, activated: u.activated - BOLT_COST } : u)),
+    stones: [...state.stones, boltStone],
+    unitsActedThisTurn: markActed(state, mageId),
+    // Physical dice only make sense for the mage-vs-mage duel; an unopposed
+    // bolt has no defence roll (defenseFaces 0 would break the dice layer).
+    lastCombat:
+      target.kind === 'mage'
+        ? {
+            attackerIds: [mageId],
+            defenderId: targetId,
+            attackerOwner: mage.owner,
+            defenderOwner: target.owner,
+            attackerKind: 'mage',
+            defenderKind: target.kind,
+            attackRoll,
+            attackDice: [attackRoll],
+            attackFaces,
+            defenseRoll,
+            defenseFaces: magePowerDie(target.activated),
+            outcome: repelled ? 'lose' : 'win',
+            defeatedId: repelled ? null : targetId,
+            defenderCell: { ...target.cell },
+          }
+        : null,
+    log: [
+      ...state.log,
+      repelled
+        ? `${mage.owner}'s Mage bolts ${target.owner}'s Mage — REPELLED (${defenseRoll} beats ${attackRoll})!`
+        : `${mage.owner}'s Mage bolts ${target.owner}'s ${target.kind} for ${BOLT_COST} stone!`,
+    ],
+  };
+  if (!repelled) {
+    next = bumpKill(defeatUnit(next, targetId), mage.owner);
+  }
+  return checkVictory(resolveRespawns(next));
+}
+
+export function canNova(state: GameState, unitId: string): boolean {
+  const u = unitById(state, unitId);
+  if (!u || u.kind !== 'mage' || !canAct(state, unitId)) return false;
+  if (u.activated < NOVA_COST) return false;
+  if (mageActionDieValue(state, unitId) === 0) return false;
+  return novaVictims(state, unitId).length > 0;
+}
+
+/** EVERY unit (friend or foe) within 1 square of the mage — diagonals too. */
+export function novaVictims(state: GameState, unitId: string): Unit[] {
+  const mage = unitById(state, unitId);
+  if (!mage) return [];
+  return state.units.filter((u) => u.id !== unitId && chebyshev(u.cell, mage.cell) === 1);
+}
+
+/**
+ * NOVA — spend 3 activated stones for an unrepellable blast that destroys
+ * every unit within 1 square of the Mage (diagonals included, friend or foe).
+ * The 3 stones scatter to random squares of the 3×3 around the Mage, still
+ * activated.
+ */
+export function resolveNova(state: GameState, mageId: string, rng: RNG = defaultRng): GameState {
+  if (state.turnPhase !== 'act' || state.winner) return state;
+  const mage = unitById(state, mageId);
+  if (!mage || !canNova(state, mageId)) return state;
+  const dice = spendActionDie(state, mageId);
+  if (!dice) return state;
+
+  const victims = novaVictims(state, mageId);
+  // Scatter the 3 spent stones over the 3×3 blast area (existing cells only;
+  // stones may stack, and units can stand on stones).
+  const area: Cell[] = [];
+  for (let dr = -1; dr <= 1; dr++)
+    for (let dc = -1; dc <= 1; dc++) {
+      const c = { r: mage.cell.r + dr, c: mage.cell.c + dc };
+      if (cellExists(c)) area.push(c);
+    }
+  const scattered: MageStone[] = Array.from({ length: NOVA_COST }, () => ({
+    id: `stone-nova-${stoneCounter++}`,
+    cell: { ...area[Math.floor(rng() * area.length)] },
+    collected: false,
+    activated: true,
+  }));
+
+  let next: GameState = {
+    ...state,
+    dice,
+    units: state.units.map((u) => (u.id === mageId ? { ...u, activated: u.activated - NOVA_COST } : u)),
+    stones: [...state.stones, ...scattered],
+    unitsActedThisTurn: markActed(state, mageId),
+    lastCombat: null, // no dice duel — the blast is absolute
+    log: [
+      ...state.log,
+      `${mage.owner}'s Mage unleashes a NOVA — ${victims.length} unit(s) consumed!`,
+    ],
+  };
+  for (const v of victims) {
+    next = defeatUnit(next, v.id);
+    if (v.owner !== mage.owner) next = bumpKill(next, mage.owner);
+  }
+  return checkVictory(resolveRespawns(next));
+}
+
 // ---- Priest actions: resurrect / ritual ----------------------------------
 
 export function canResurrect(state: GameState, unitId: string): boolean {

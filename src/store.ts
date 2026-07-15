@@ -5,6 +5,7 @@ import {
   activate,
   attackTargets,
   beginRitual,
+  boltTargets,
   canActivate,
   canCollect,
   canDieMoveUnit,
@@ -17,8 +18,11 @@ import {
   legalMoves,
   magePowerDie,
   moveUnit,
+  novaVictims,
   plannedAttackers,
   resolveAttack,
+  resolveBolt,
+  resolveNova,
   resurrect,
   rollDice,
   setRolledValues,
@@ -71,6 +75,8 @@ export interface CombatRollInfo {
  *  who attacks whom and with which dice — "Red Warrior ×3 attacks Green Mage,
  *  3d6 vs d12". Cleared together with the roll announcement. */
 export interface CombatIntro {
+  /** 'attack' = normal melee; 'bolt'/'nova' = Mage sorcery announcements. */
+  kind?: 'attack' | 'bolt' | 'nova';
   attacker: PlayerColor;
   attackerKind: UnitKind;
   count: number;
@@ -202,6 +208,11 @@ interface UIState {
    *  board-click path auto-maximises coordination via `plannedAttackers`. `rng`
    *  overrides the dice randomness (the guided Tutorial scripts its combat). */
   attack: (targetId: string, attackerIds?: string[], rng?: () => number) => void;
+  /** Bolt targeting mode: the next enemy clicked takes the ranged bolt. */
+  boltMode: boolean;
+  setBoltMode: (on: boolean) => void;
+  castBolt: (targetId: string, rng?: () => number) => void;
+  castNova: (rng?: () => number) => void;
   collectStones: () => void;
   activateStones: () => void;
   doResurrect: () => void;
@@ -227,6 +238,7 @@ export const useGame = create<UIState>((set, get) => ({
   deathNonce: 0,
   physicsEpoch: 0,
   sceneDown: false,
+  boltMode: false,
   combatNonce: 0,
   combatRoll: null,
   combatIntro: null,
@@ -443,7 +455,7 @@ export const useGame = create<UIState>((set, get) => ({
 
   selectUnit: (unitId) =>
     set((s) => {
-      if (unitId === null) return { selectedUnitId: null };
+      if (unitId === null) return { selectedUnitId: null, boltMode: false };
       if (outOfTurn(s)) return {};
       const unit = unitById(s.game, unitId);
       if (!unit || unit.owner !== s.game.current) return {};
@@ -459,7 +471,8 @@ export const useGame = create<UIState>((set, get) => ({
           .sort((a, b) => b.value - a.value)[0];
         dieId = best?.id ?? null;
       }
-      return { selectedUnitId: unitId, selectedDieId: dieId };
+      // switching units always leaves bolt-targeting mode
+      return { selectedUnitId: unitId, selectedDieId: dieId, boltMode: false };
     }),
 
   selectDie: (dieId) =>
@@ -482,7 +495,9 @@ export const useGame = create<UIState>((set, get) => ({
 
   endTurn: () =>
     set((s) =>
-      outOfTurn(s) ? {} : { game: endTurn(s.game), selectedUnitId: null, selectedDieId: null },
+      outOfTurn(s)
+        ? {}
+        : { game: endTurn(s.game), selectedUnitId: null, selectedDieId: null, boltMode: false },
     ),
 
   attack: (targetId, attackerIds, rng) =>
@@ -532,6 +547,91 @@ export const useGame = create<UIState>((set, get) => ({
       }
       return out;
     }),
+
+  setBoltMode: (on) => set({ boltMode: on }),
+
+  castBolt: (targetId, rng) => {
+    const s = get();
+    const mageId = s.selectedUnitId;
+    if (!mageId || outOfTurn(s)) return;
+    const game = s.game;
+    const mage = unitById(game, mageId);
+    const target = unitById(game, targetId);
+    if (!mage || !target) return;
+    const faces = magePowerDie(mage.activated);
+    const game2 = resolveBolt(game, mageId, targetId, rng);
+    if (game2 === game) return;
+    const repelled = !game2.units.every((u) => u.id !== targetId) && target.kind === 'mage';
+    const out: Partial<UIState> = {
+      game: game2,
+      boltMode: false,
+      selectedUnitId: null,
+      selectedDieId: null,
+      combatNonce: s.combatNonce + 1,
+      combatIntro: {
+        kind: 'bolt',
+        attacker: mage.owner,
+        attackerKind: 'mage',
+        count: 1,
+        defender: target.owner,
+        defenderKind: target.kind,
+        attackFaces: `d${faces}`,
+        defenseFaces: target.kind === 'mage' ? `d${magePowerDie(target.activated)}` : '—',
+      },
+    };
+    if (!repelled) {
+      out.lastDeath = { id: target.id, kind: target.kind, owner: target.owner, cell: target.cell };
+      out.deathNonce = s.deathNonce + 1;
+    }
+    set(out);
+    // Unopposed bolts have no dice to sweep the banner away — clear it after a beat.
+    if (target.kind !== 'mage') {
+      window.setTimeout(() => {
+        if (get().combatIntro?.kind === 'bolt') set({ combatIntro: null });
+      }, 4200);
+    }
+  },
+
+  castNova: (rng) => {
+    const s = get();
+    const mageId = s.selectedUnitId;
+    if (!mageId || outOfTurn(s)) return;
+    const game = s.game;
+    const mage = unitById(game, mageId);
+    if (!mage) return;
+    const victims = novaVictims(game, mageId);
+    const game2 = resolveNova(game, mageId, rng);
+    if (game2 === game) return;
+    set({
+      game: game2,
+      boltMode: false,
+      selectedUnitId: null,
+      selectedDieId: null,
+      combatIntro: {
+        kind: 'nova',
+        attacker: mage.owner,
+        attackerKind: 'mage',
+        count: victims.length,
+        defender: mage.owner,
+        defenderKind: 'mage',
+        attackFaces: '',
+        defenseFaces: '',
+      },
+    });
+    // Stagger the collapse animations — the death layer takes one event per
+    // nonce, and a Nova fells several units at once.
+    victims.forEach((v, i) => {
+      window.setTimeout(() => {
+        set((st) => ({
+          lastDeath: { id: v.id, kind: v.kind, owner: v.owner, cell: v.cell },
+          deathNonce: st.deathNonce + 1,
+        }));
+      }, i * 120);
+    });
+    window.setTimeout(() => {
+      if (get().combatIntro?.kind === 'nova') set({ combatIntro: null });
+    }, 4200);
+  },
 
   collectStones: () =>
     set((s) => {
@@ -589,6 +689,12 @@ export function moveDestinations(game: GameState, unitId: string | null, dieId: 
 export function attackTargetIds(game: GameState, unitId: string | null): Set<string> {
   if (game.turnPhase !== 'act' || !unitId) return new Set();
   return new Set(attackTargets(game, unitId).map((u) => u.id));
+}
+
+/** Enemies the selected Mage could BOLT (used while bolt-targeting). */
+export function boltTargetIds(game: GameState, unitId: string | null): Set<string> {
+  if (game.turnPhase !== 'act' || !unitId) return new Set();
+  return new Set(boltTargets(game, unitId).map((u) => u.id));
 }
 
 /** One selectable attack for the action bar: how many attackers coordinate, who

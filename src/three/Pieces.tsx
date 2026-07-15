@@ -6,7 +6,7 @@ import { Billboard, useAnimations, useGLTF } from '@react-three/drei';
 import type { CombatResult, Unit, UnitKind } from '../game/types';
 import { cellKey, sameCell } from '../game/board';
 import { COLORS, TILE_SURFACE, cellToWorld } from './coords';
-import { attackTargetIds, useGame, type DeathEvent } from '../store';
+import { attackTargetIds, boltTargetIds, useGame, type DeathEvent } from '../store';
 import { combatOdds, plannedAttackers } from '../game/rules';
 import { useTokens, type TokenKind } from './tokens';
 
@@ -595,17 +595,26 @@ function UnitPiece({ unit }: { unit: Unit }) {
   // turn). Bot-owned pieces are never human-clickable — the BotDriver moves them.
   const isCurrent =
     game.current === unit.owner && !bots[unit.owner] && (!online || unit.owner === myColor);
-  const isTarget = useMemo(
+  const boltMode = useGame((s) => s.boltMode);
+  const castBolt = useGame((s) => s.castBolt);
+  // In bolt-targeting mode the Mage's RANGED targets glow instead of melee ones.
+  const isBoltTarget = useMemo(
+    () => boltMode && boltTargetIds(game, selectedUnitId).has(unit.id),
+    [boltMode, game, selectedUnitId, unit.id],
+  );
+  const isMeleeTarget = useMemo(
     () => attackTargetIds(game, selectedUnitId).has(unit.id),
     [game, selectedUnitId, unit.id],
   );
+  const isTarget = boltMode ? isBoltTarget : isMeleeTarget;
   // Pre-attack chance of victory for the attack the selected unit would launch.
+  // (Bolts show no % — they kill outright unless an enemy Mage repels.)
   const winPct = useMemo(() => {
-    if (!isTarget || !selectedUnitId) return null;
+    if (!isTarget || boltMode || !selectedUnitId) return null;
     const ids = plannedAttackers(game, selectedUnitId, unit.id);
     if (ids.length === 0) return null;
     return Math.round(combatOdds(game, ids, unit.id).win * 100);
-  }, [isTarget, selectedUnitId, game, unit.id]);
+  }, [isTarget, boltMode, selectedUnitId, game, unit.id]);
 
   const ref = useRef<THREE.Group>(null);
   const outer = useRef<THREE.Group>(null);
@@ -741,8 +750,10 @@ function UnitPiece({ unit }: { unit: Unit }) {
         ref={ref}
         onClick={(e) => {
           e.stopPropagation();
-          if (isTarget) attack(unit.id);
-          else if (isCurrent) selectUnit(selected ? null : unit.id);
+          if (isTarget) {
+            if (boltMode) castBolt(unit.id);
+            else attack(unit.id);
+          } else if (isCurrent) selectUnit(selected ? null : unit.id);
         }}
         onPointerOver={(e) => {
           e.stopPropagation();

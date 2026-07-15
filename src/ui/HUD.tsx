@@ -4,11 +4,16 @@ import { useNet } from '../net/useNet';
 import { usePlayerLabel } from './playerNames';
 import { COLORS } from '../three/coords';
 import {
+  boltTargets,
+  canBolt,
+  canNova,
   discardsLeft,
   gravestoneBank,
   gravestoneCapacity,
   hasPlayLeft,
+  mageActionDieValue,
   magePowerDie,
+  novaVictims,
   unitById,
 } from '../game/rules';
 import { useTokenUrl } from '../three/tokens';
@@ -99,6 +104,42 @@ function CombatAnnounce() {
     );
   }
   if (!intro) return null;
+  if (intro.kind === 'nova') {
+    return (
+      <div className="combat-announce" role="status">
+        <span className="ca-side" style={{ '--accent': COLORS[intro.attacker] } as CSSProperties}>
+          <span className="ca-name">{label(intro.attacker)} Mage</span>
+        </span>
+        <span className="ca-dot">unleashes</span>
+        <span className="ca-nova">NOVA</span>
+        <span className="ca-dot">·</span>
+        <span className="ca-faces">
+          {intro.count} unit{intro.count === 1 ? '' : 's'} consumed · nothing can repel
+        </span>
+      </div>
+    );
+  }
+  if (intro.kind === 'bolt') {
+    return (
+      <div className="combat-announce" role="status">
+        <span className="ca-side" style={{ '--accent': COLORS[intro.attacker] } as CSSProperties}>
+          <span className="ca-name">{label(intro.attacker)} Mage</span>
+        </span>
+        <span className="ca-dot">bolts</span>
+        <span className="ca-side" style={{ '--accent': COLORS[intro.defender] } as CSSProperties}>
+          <span className="ca-name">
+            {label(intro.defender)} {KIND_LABEL[intro.defenderKind]}
+          </span>
+        </span>
+        <span className="ca-dot">·</span>
+        <span className="ca-faces">
+          {intro.defenderKind === 'mage'
+            ? `${intro.attackFaces} vs ${intro.defenseFaces} — only a Mage can repel`
+            : 'no defence'}
+        </span>
+      </div>
+    );
+  }
   return (
     <div className="combat-announce" role="status">
       <span className="ca-side" style={{ '--accent': COLORS[intro.attacker] } as CSSProperties}>
@@ -140,6 +181,9 @@ export function HUD() {
   const myColor = useGame((s) => s.myColor);
   const bots = useGame((s) => s.bots);
   const attack = useGame((s) => s.attack);
+  const boltMode = useGame((s) => s.boltMode);
+  const setBoltMode = useGame((s) => s.setBoltMode);
+  const castNova = useGame((s) => s.castNova);
   const label = usePlayerLabel();
   // A bot's turn is never "my turn" — the BotDriver plays it; humans watch.
   const myTurn = !bots[game.current] && (!online || game.current === myColor);
@@ -355,6 +399,33 @@ export function HUD() {
                     <small>{Math.round(o.odds * 100)}%</small>
                   </button>
                 ))}
+                {/* Mage sorcery: BOLT (ranged, 1 stone) arms click-to-target
+                    mode; NOVA (3 stones) blasts everything within 1 square. */}
+                {myTurn && selectedUnit.kind === 'mage' && canBolt(game, selectedUnit.id) && (
+                  <button
+                    className={`primary attack-btn${boltMode ? ' arming' : ''}`}
+                    onClick={() => setBoltMode(!boltMode)}
+                    disabled={boltTargets(game, selectedUnit.id).length === 0}
+                    title={
+                      boltTargets(game, selectedUnit.id).length === 0
+                        ? 'No enemies within range'
+                        : 'Spend 1 activated stone — click any enemy in range. Only an enemy Mage can repel. The stone lands on the target square, still activated.'
+                    }
+                  >
+                    {boltMode ? 'Pick a target…' : 'Bolt'}
+                    <small>1 stone · range {mageActionDieValue(game, selectedUnit.id)}</small>
+                  </button>
+                )}
+                {myTurn && selectedUnit.kind === 'mage' && canNova(game, selectedUnit.id) && (
+                  <button
+                    className="primary attack-btn"
+                    onClick={() => castNova()}
+                    title="Spend 3 activated stones — destroys EVERY unit within 1 square (diagonals too, friend or foe). Nothing can repel it. The stones scatter nearby, still activated."
+                  >
+                    Nova
+                    <small>3 stones · {novaVictims(game, selectedUnit.id).length} caught</small>
+                  </button>
+                )}
                 {actions.collect && <button onClick={collectStones}>Collect</button>}
                 {actions.activate && <button onClick={activateStones}>Activate</button>}
                 {actions.resurrect && <button onClick={doResurrect}>Resurrect</button>}

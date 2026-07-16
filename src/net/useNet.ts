@@ -115,6 +115,15 @@ interface NetState {
   fetchFeedbackList: () => void;
   /** Print-and-play interest list signup. */
   pnpSignup: (email: string) => void;
+  /** Owner-only: the stored print-and-play signup emails, viewable in-app. */
+  pnpRows: PnpRow[] | null;
+  fetchPnpList: () => void;
+}
+
+/** One stored print-and-play signup (owner viewer). */
+export interface PnpRow {
+  email: string;
+  created?: string;
 }
 
 /** One stored feedback submission (owner viewer). */
@@ -301,6 +310,9 @@ export const useNet = create<NetState>((set, get) => {
       case 'feedbackList':
         set({ feedbackRows: (m.rows as FeedbackRow[]) ?? [] });
         break;
+      case 'pnpList':
+        set({ pnpRows: (m.rows as PnpRow[]) ?? [] });
+        break;
       case 'pnpOk':
         set({ pnpDone: true });
         break;
@@ -328,6 +340,7 @@ export const useNet = create<NetState>((set, get) => {
     feedbackSent: false,
     feedbackRows: null,
     pnpDone: false,
+    pnpRows: null,
 
     init: () => {
       // Crash recovery: SceneBoundary reloads the page when the physics WASM
@@ -393,6 +406,9 @@ export const useNet = create<NetState>((set, get) => {
     },
     fetchFeedbackList: () => {
       ensureSocket(() => sendWs({ t: 'feedbackList' }));
+    },
+    fetchPnpList: () => {
+      ensureSocket(() => sendWs({ t: 'pnpList' }));
     },
     pnpSignup: (email) => {
       set({ pnpDone: false });

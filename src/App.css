@@ -9,6 +9,12 @@
   --gold-bright: #eccb78;
   --gold-dim: #8a6a22;
   --gold-line: rgba(201, 162, 74, 0.5);
+  /* Dark bronze rim for gold-filled buttons (matches the emblem stroke): a
+     pale border disappears against the bright top of the gold gradient, so
+     the rim must be DARKER than the fill to read on all four edges. */
+  --gold-rim: #6e521a;
+  /* Bright inner bevel along the top edge keeps the gilded 3D shine. */
+  --gold-bevel: inset 0 1px 0 rgba(255, 243, 214, 0.5);
   /* ---- emerald accents (box-cover theme): deep green leather + gilt ---- */
   --emerald: #1f5138;
   --emerald-deep: #0c2118;
@@ -140,7 +146,7 @@
 }
 .cam-toggle.on {
   color: #2a1c06;
-  border-color: #f3d590;
+  border-color: var(--gold-rim);
   background: linear-gradient(180deg, var(--gold-bright), var(--gold-dim));
 }
 
@@ -310,6 +316,7 @@ body:not(.ui-mobile):has(.entry) .fs-toggle {
 .hud .primary:focus-visible,
 .winner button:focus-visible {
   box-shadow:
+    var(--gold-bevel),
     var(--focus-ring),
     0 3px 0 #5e4715,
     0 6px 14px rgba(0, 0, 0, 0.5);
@@ -335,6 +342,7 @@ button:focus-visible {
 .tut-gotit:focus-visible {
   outline: none;
   box-shadow:
+    var(--gold-bevel),
     var(--focus-ring),
     0 3px 0 #5e4715,
     0 6px 14px rgba(0, 0, 0, 0.5);
@@ -353,8 +361,8 @@ button:focus-visible {
   font-weight: 700;
   color: #2a1c06;
   background: linear-gradient(180deg, var(--gold-bright), var(--gold) 55%, var(--gold-dim));
-  border-color: #f3d590;
-  box-shadow: 0 3px 0 #5e4715, 0 6px 14px rgba(0, 0, 0, 0.5);
+  border-color: var(--gold-rim);
+  box-shadow: var(--gold-bevel), 0 3px 0 #5e4715, 0 6px 14px rgba(0, 0, 0, 0.5);
 }
 .hud .primary:hover,
 .winner button:hover {
@@ -363,13 +371,13 @@ button:focus-visible {
 .hud .primary:active,
 .winner button:active {
   transform: translateY(2px);
-  box-shadow: 0 1px 0 #5e4715, 0 3px 8px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--gold-bevel), 0 1px 0 #5e4715, 0 3px 8px rgba(0, 0, 0, 0.5);
 }
 .hud .primary:disabled,
 .winner button:disabled {
   cursor: not-allowed;
   filter: grayscale(0.55) brightness(0.72);
-  box-shadow: 0 2px 0 #3a2c0d, 0 4px 10px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--gold-bevel), 0 2px 0 #3a2c0d, 0 4px 10px rgba(0, 0, 0, 0.4);
 }
 .hud .primary:disabled:hover {
   filter: grayscale(0.55) brightness(0.72);
@@ -389,7 +397,7 @@ button:focus-visible {
   gap: var(--space-2);
   height: var(--control-md);
   padding: 0 var(--space-4);
-  border: 1px solid #f3d590;
+  border: 1px solid var(--gold-rim);
   border-radius: var(--radius-sm);
   font-family: var(--display);
   font-size: var(--text-sm);
@@ -400,7 +408,7 @@ button:focus-visible {
   cursor: pointer;
   color: #2a1c06;
   background: linear-gradient(180deg, var(--gold-bright), var(--gold) 55%, var(--gold-dim));
-  box-shadow: 0 3px 0 #5e4715, 0 6px 14px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--gold-bevel), 0 3px 0 #5e4715, 0 6px 14px rgba(0, 0, 0, 0.5);
 }
 :where(button.primary):hover {
   filter: brightness(1.1);
@@ -433,6 +441,7 @@ button.primary:focus-visible,
 button.ghost:focus-visible {
   outline: none;
   box-shadow:
+    var(--gold-bevel),
     var(--focus-ring),
     0 3px 0 #5e4715,
     0 6px 14px rgba(0, 0, 0, 0.5);
@@ -676,6 +685,50 @@ button.ghost:focus-visible {
   gap: var(--space-2);
   pointer-events: none;
 }
+/* 4-player on a narrower desktop window: four full-size cards would run under
+   the brand (left) and the corner-button row (right) — compact the cards (the
+   phone treatment) so the whole header stays visible between the corners.
+   Names ellipsize rather than ever pushing under the buttons. */
+@media (max-width: 1750px) {
+  .player-strip.p4 {
+    gap: 3px;
+    max-width: calc(100vw - 480px);
+  }
+  .player-strip.p4 .pstat {
+    height: 30px;
+    padding: 0 4px;
+    gap: 3px;
+    min-width: 0;
+  }
+  .player-strip.p4 .pstat-name {
+    min-width: 0;
+    max-width: 64px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
+    letter-spacing: 0.6px;
+  }
+  .player-strip.p4 .pstat-metric {
+    gap: 1px;
+    padding-left: 3px;
+    font-size: 10px;
+  }
+  .player-strip.p4 .pstat-metric svg,
+  .player-strip.p4 .pstat-token {
+    width: 12px;
+    height: 12px;
+  }
+  .player-strip.p4 .pstat-die,
+  .player-strip.p4 .pstat-flag {
+    font-size: 8px;
+    padding: 0 3px;
+  }
+  .player-strip.p4 .pstat-badge {
+    font-size: 8px;
+    padding: 0 3px;
+  }
+}
 /* ---- persistent turn-phase tracker (top-left, under the brand) ---- */
 .phase-track {
   position: absolute;
@@ -686,6 +739,11 @@ button.ghost:focus-visible {
   align-items: flex-start;
   gap: 4px;
   pointer-events: none;
+}
+/* online games have the Leave button at 52px — step the tracker down a row
+   (desktop only: the mobile layout parks Leave top-right instead) */
+body:not(.ui-mobile) .hud:has(.leave-btn) .phase-track {
+  top: 96px;
 }
 .phase-step {
   display: inline-flex;
@@ -702,7 +760,7 @@ button.ghost:focus-visible {
 }
 .phase-step.active {
   color: #2a1c06;
-  border-color: #f3d590;
+  border-color: var(--gold-rim);
   background: linear-gradient(180deg, var(--gold-bright), var(--gold-dim));
   font-weight: 700;
 }
@@ -1306,6 +1364,23 @@ button.ghost:focus-visible {
 .entry-footer-links .link-btn {
   font-size: var(--text-xs);
 }
+/* On the landing COVER the box art is the page, and its bottom plaque reads
+   "FANTASY STRATEGY BOARD GAME" — lift the footer clear of it so no artwork
+   wording is ever covered (the plaque's top sits ~12% up the art on 16:9-ish
+   desktop viewports; on phones the plaque is cropped off and the mobile
+   override below re-anchors the footer to the bottom edge). */
+.entry--cover .entry-footer {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 13vh);
+}
+/* Non-cover entry screens (sign-in / lobby / room): the gilt panel's
+   backdrop-filter makes it the containing block for fixed descendants, so the
+   "fixed" footer actually hung off the panel's bottom — below the fold, links
+   clipped. Flow it as the panel's last row instead: always fully visible (the
+   screen scrolls with the panel) and it can never sit on other text. */
+.entry-inner .entry-footer {
+  position: static;
+  margin-top: var(--space-2);
+}
 .footer-list {
   margin: 0;
   padding-left: 1.2em;
@@ -1509,7 +1584,7 @@ body.ui-mobile .feedback-btn {
   justify-content: center;
   height: var(--control-md);
   padding: 0 var(--space-5);
-  border: 1px solid #f3d590;
+  border: 1px solid var(--gold-rim);
   border-radius: var(--radius-sm);
   font-family: var(--display);
   font-size: var(--text-sm);
@@ -1519,7 +1594,7 @@ body.ui-mobile .feedback-btn {
   text-transform: uppercase;
   color: #2a1c06;
   background: linear-gradient(180deg, var(--gold-bright), var(--gold) 55%, var(--gold-dim));
-  box-shadow: 0 3px 0 #5e4715, 0 6px 14px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--gold-bevel), 0 3px 0 #5e4715, 0 6px 14px rgba(0, 0, 0, 0.5);
   cursor: pointer;
 }
 .tut-gotit:hover {
@@ -1712,7 +1787,9 @@ body.ui-mobile .tut-gotit {
 .modal {
   width: min(640px, 94vw);
   /* Never taller than the viewport: the header and footer (with its buttons)
-     always stay on screen at 100% zoom; only the body scrolls if needed. */
+     always stay on screen at 100% zoom; only the body scrolls if needed.
+     (plain-vh line first: browsers without dvh drop the min() entirely) */
+  max-height: 92vh;
   max-height: min(92vh, 92dvh);
   display: flex;
   flex-direction: column;
@@ -2626,7 +2703,7 @@ body.ui-mobile .tut-gotit {
   color: #2a1c06;
   font-weight: 700;
   background: linear-gradient(180deg, var(--gold-bright), var(--gold) 55%, var(--gold-dim));
-  border-color: #f3d590;
+  border-color: var(--gold-rim);
 }
 .lb-elo-num {
   font-weight: 700;
@@ -2910,7 +2987,8 @@ body.ui-mobile .tut-gotit {
 .entry .primary {
   background: linear-gradient(180deg, #d8b65f, #a9842f);
   color: #1c1407;
-  border-color: #e7c878;
+  border-color: var(--gold-rim);
+  box-shadow: var(--gold-bevel);
   font-weight: 600;
 }
 .entry .ghost {
@@ -2951,6 +3029,9 @@ body.ui-mobile .tut-gotit {
 .entry .ghost:hover {
   transform: translateY(-1px);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.entry .primary:hover {
+  box-shadow: var(--gold-bevel), 0 6px 18px rgba(0, 0, 0, 0.45);
 }
 .entry .primary:disabled {
   opacity: 0.5;
@@ -3055,7 +3136,7 @@ body.ui-mobile .tut-gotit {
 .entry .seg.on {
   background: linear-gradient(180deg, #d8b65f, #a9842f);
   color: #1c1407;
-  border-color: #e7c878;
+  border-color: var(--gold-rim);
 }
 .entry-status {
   font-size: 12px;
@@ -3254,7 +3335,8 @@ body.ui-mobile .tut-gotit {
 }
 .leave-btn {
   position: absolute;
-  top: var(--space-4);
+  /* below the brand mark — sharing the corner painted the two over each other */
+  top: 52px;
   left: var(--space-4);
   height: var(--control-sm);
   padding: 0 var(--space-4);
@@ -3311,10 +3393,48 @@ body.ui-mobile .player-strip {
   left: 50%;
   transform: translateX(-50%);
   gap: 4px;
+  /* Never run under the corner controls (gear right, phase pills left):
+     the strip caps its width and the cards ELLIPSIZE their names to fit. */
+  max-width: calc(100vw - 100px);
 }
 body.ui-mobile .pstat {
   padding: 0 6px;
   gap: 4px;
+  min-width: 0;
+}
+body.ui-mobile .pstat-name {
+  min-width: 0;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Four players: the header is at its tightest — compact the cards further so
+   all four fit between the phase pills and the gear on a phone. */
+body.ui-mobile .player-strip.p4 {
+  gap: 3px;
+}
+body.ui-mobile .player-strip.p4 .pstat {
+  padding: 0 4px;
+  gap: 3px;
+}
+body.ui-mobile .player-strip.p4 .pstat-name {
+  max-width: 56px;
+  letter-spacing: 0.6px;
+}
+body.ui-mobile .player-strip.p4 .pstat-metric {
+  gap: 1px;
+  padding-left: 3px;
+  font-size: 10px;
+}
+body.ui-mobile .player-strip.p4 .pstat-metric svg,
+body.ui-mobile .player-strip.p4 .pstat-token {
+  width: 12px;
+  height: 12px;
+}
+body.ui-mobile .player-strip.p4 .pstat-die,
+body.ui-mobile .player-strip.p4 .pstat-flag {
+  padding: 0 3px;
 }
 body.ui-mobile .pstat-token {
   width: 14px;
@@ -3337,9 +3457,10 @@ body.ui-mobile .pstat-flag {
   font-size: 8px;
   padding: 0 4px;
 }
-/* phase tracker rides the free top-left corner on phones */
+/* phase tracker: second row on the LEFT — the top row belongs to the player
+   cards, which span nearly the whole width in a 4-player game */
 body.ui-mobile .phase-track {
-  top: 6px;
+  top: 40px;
   left: calc(env(safe-area-inset-left, 0px) + 8px);
   gap: 2px;
 }
@@ -3533,6 +3654,42 @@ body.ui-mobile .entry {
 body.ui-mobile .entry-cover {
   padding-left: calc(env(safe-area-inset-left, 0px) + 40px);
 }
+/* Menu wording smaller on phones so "Play MageStone" stops short of the gold
+   flower emblem in the middle of the cover art. */
+body.ui-mobile .menu-item {
+  font-size: clamp(15px, 2.1vw, 20px);
+}
+body.ui-mobile .menu-primary {
+  font-size: clamp(20px, 2.9vw, 26px);
+}
+body.ui-mobile .menu-subitem {
+  font-size: clamp(13px, 1.8vw, 17px);
+}
+body.ui-mobile .menu-sub {
+  margin-left: 18px;
+}
+/* On phones the art is top-anchored, so its bottom plaque is cropped off —
+   the footer can sit right on the bottom edge (the desktop cover rule lifts
+   it 13vh to clear the "FANTASY STRATEGY BOARD GAME" plaque). */
+body.ui-mobile .entry--cover .entry-footer {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+}
+/* Entry screens on mobile: the music/fullscreen pills leave the bottom-left
+   (they sat on the Early Alpha footer note) and ride top-right instead, over
+   plain sky in the art — clear of the wordmark, footer and menu. In-game the
+   bottom-left gutter rules above still apply. */
+body.ui-mobile.on-entry .music-toggle {
+  bottom: auto;
+  left: auto;
+  top: 40px;
+  right: calc(env(safe-area-inset-right, 0px) + 48px);
+}
+body.ui-mobile.on-entry .fs-toggle {
+  bottom: auto;
+  left: auto;
+  top: 40px;
+  right: calc(env(safe-area-inset-right, 0px) + 8px);
+}
 /* Cover art on phones: a phone in landscape is far wider (≈2.16) than the 16:9
    art, so object-fit:cover would crop a big band off the TOP and bottom — hiding
    the gold star + "MageStone" wordmark the user wants visible. Anchor the art to
@@ -3544,6 +3701,7 @@ body.ui-mobile .entry-photo {
   transform: scale(1.028, 1);
 }
 body.ui-mobile .modal {
+  max-height: 96vh;
   max-height: min(96vh, 96dvh);
   width: min(560px, 96vw);
 }

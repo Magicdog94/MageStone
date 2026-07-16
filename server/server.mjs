@@ -724,6 +724,23 @@ async function handle(ws, s, m) {
       }
       return send(ws, { t: 'feedbackList', rows });
     }
+    case 'pnpList': {
+      // Owner-only: the print-and-play signup emails, readable in-app.
+      if (s.username !== FEEDBACK_OWNER)
+        return send(ws, { t: 'error', message: 'Sign in as the game owner to view signups.' });
+      let rows = [];
+      if (pool) {
+        const r = await pool.query('SELECT email, created FROM pnp ORDER BY created DESC LIMIT 500');
+        rows = r.rows;
+      } else if (existsSync(PNP_FILE)) {
+        try {
+          rows = JSON.parse(readFileSync(PNP_FILE, 'utf8')).slice().reverse().slice(0, 500);
+        } catch {
+          rows = [];
+        }
+      }
+      return send(ws, { t: 'pnpList', rows });
+    }
     case 'leaveGame':
       return leaveRoom(ws, s);
   }

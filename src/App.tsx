@@ -30,6 +30,13 @@ export default function App() {
     return () => document.body.classList.remove('ui-mobile');
   }, [layout]);
 
+  // Entry screens vs in-game: lets the floating toggles reposition on the
+  // landing/lobby (mobile pins them top-right there, clear of the footer).
+  useEffect(() => {
+    document.body.classList.toggle('on-entry', screen !== 'game');
+    return () => document.body.classList.remove('on-entry');
+  }, [screen]);
+
   // Autoplay is blocked until the player interacts, so kick off the score on the
   // first gesture anywhere (a landing button, the board, etc.). It then plays
   // continuously across screens — the audio graph is a singleton in audio/music.

@@ -463,11 +463,50 @@ function Landing() {
   );
 }
 
+/** Owner-only: every print-and-play signup email, straight from the database. */
+function PnpList({ onClose }: { onClose: () => void }) {
+  const rows = useNet((s) => s.pnpRows);
+  const fetchPnpList = useNet((s) => s.fetchPnpList);
+  useEffect(() => {
+    fetchPnpList();
+  }, [fetchPnpList]);
+  return (
+    <Modal
+      title={`Print & Play signups${rows ? ` (${rows.length})` : ''}`}
+      onClose={onClose}
+      footer={
+        <button className="primary" onClick={onClose}>
+          Done
+        </button>
+      }
+    >
+      {!rows ? (
+        <div className="lb-empty">Loading…</div>
+      ) : rows.length === 0 ? (
+        <div className="lb-empty">No signups yet.</div>
+      ) : (
+        <div className="fb-list">
+          {rows.map((r, i) => (
+            <div className="fb-item" key={r.email ?? i}>
+              <div className="fb-meta">{r.created ? new Date(r.created).toLocaleString() : '—'}</div>
+              {r.email}
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 /** Trust signals + alpha housekeeping along the bottom of the front page. */
 function LandingFooter() {
-  const [modal, setModal] = useState<null | 'feedback' | 'issues' | 'patch' | 'privacy' | 'pnp'>(null);
+  const [modal, setModal] = useState<null | 'feedback' | 'issues' | 'patch' | 'privacy' | 'pnp' | 'pnpList'>(null);
   const pnpSignup = useNet((s) => s.pnpSignup);
   const pnpDone = useNet((s) => s.pnpDone);
+  const username = useNet((s) => s.username);
+  const guest = useNet((s) => s.guest);
+  // The signup list is only readable signed in as the owner account.
+  const isOwner = !guest && username?.toLowerCase() === 'magicdog94';
   const [email, setEmail] = useState('');
   const close = () => setModal(null);
   return (
@@ -520,8 +559,24 @@ function LandingFooter() {
           </div>
         </Modal>
       )}
+      {modal === 'pnpList' && <PnpList onClose={close} />}
       {modal === 'pnp' && (
-        <Modal title="Print & Play" onClose={close} footer={<button className="primary" onClick={close}>Done</button>}>
+        <Modal
+          title="Print & Play"
+          onClose={close}
+          footer={
+            <>
+              {isOwner && (
+                <button className="ghost" onClick={() => setModal('pnpList')}>
+                  View signups
+                </button>
+              )}
+              <button className="primary" onClick={close}>
+                Done
+              </button>
+            </>
+          }
+        >
           {pnpDone ? (
             <p className="hotseat-confirm">You’re on the list — thank you! We’ll email when the print-and-play kit is ready.</p>
           ) : (

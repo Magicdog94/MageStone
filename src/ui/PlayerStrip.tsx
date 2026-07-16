@@ -18,7 +18,7 @@ export function PlayerStrip() {
   const sieged = siegedPlayers(game);
 
   return (
-    <div className="player-strip">
+    <div className={`player-strip p${game.players.length}`}>
       {game.players.map((p) => {
         const mage = game.units.find((u) => u.kind === 'mage' && u.owner === p);
         const queuedMage = game.pendingRespawns.find((r) => r.owner === p && r.kind === 'mage');

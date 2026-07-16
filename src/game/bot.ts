@@ -40,6 +40,7 @@ import {
   collect,
   combatOdds,
   discardDie,
+  endTurn,
   graveAt,
   legalMoves,
   magePowerDie,
@@ -50,6 +51,7 @@ import {
   resolveBolt,
   resolveNova,
   resurrect,
+  rollDice,
   stonesAt,
   unitById,
   warriorCount,
@@ -248,7 +250,7 @@ export function chooseDiscard(state: GameState, level: BotLevel): string | null 
     try {
       const key = `${state.turn}:${state.current}:${state.dice.map((d) => d.id).join(',')}`;
       if (discardPlan?.key !== key) {
-        const sr: Search = { deadline: performance.now() + SEARCH_BUDGET_MS * 1.3 };
+        const sr = newSearch(performance.now() + SEARCH_BUDGET_MS * 1.3);
         const usefulness = dieUsefulness(state, level);
         const byId = new Map(live.map((d) => [d.id, usefulness(d)]));
         // Try discarding every pair; most promising combos (dropping the least
@@ -263,7 +265,7 @@ export function chooseDiscard(state: GameState, level: BotLevel): string | null 
         for (const combo of combos) {
           let s2: GameState = state;
           for (const id of combo) s2 = discardDie(s2, id);
-          const v = turnValue(s2, state.current, 2, sr);
+          const v = turnValue(s2, state.current, BRAIN.wide ? 3 : 2, sr);
           if (v > bestV) {
             bestV = v;
             best = combo;
@@ -449,6 +451,11 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
               const nearNexus = NEXUS_CELLS.some((c) => manhattan(c, dest) === 1);
               if (nearNexus) score += 14;
             }
+            // (a stronger "guard the Nexus pre-ritual" MOVE bonus was arena
+            // tested and REGRESSED — warriors abandoned the material game to
+            // chase phantom rituals. The evaluate() prophylaxis term alone is
+            // what works: it prices the threat, and the normal march/attack
+            // candidates answer it.)
           }
         }
         // Ritual denial: any of our units standing in the Nexus breaks an enemy
@@ -471,10 +478,26 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
 const WIN = 1_000_000;
 
 /** Search time budget per decision, ms. The DEV arena lowers this to mass-play
- *  games; live games keep the full think. */
-let SEARCH_BUDGET_MS = 110;
+ *  games; live games keep the full think (the BotDriver's ~800ms step pause
+ *  absorbs it — the think happens while a human would be "reading the board"). */
+let SEARCH_BUDGET_MS = 300;
 export function setSearchBudget(ms: number): void {
   SEARCH_BUDGET_MS = ms;
+}
+
+/** Feature switches for the hard brain. Live play runs everything ON; the DEV
+ *  arena flips them per decision to A/B a new brain against the previous one
+ *  on identical budgets. */
+interface BrainOpts {
+  /** Deep pass: score the finalists by SIMULATING the game forward — finish my
+   *  turn, play the enemy's whole reply turn, then (heads-up) my next turn. */
+  rollouts: boolean;
+  /** Wider root shortlist + beams (the classic brain's were tuned for 110ms). */
+  wide: boolean;
+}
+const BRAIN: BrainOpts = { rollouts: true, wide: true };
+export function setBrainOpts(o: Partial<BrainOpts>): void {
+  Object.assign(BRAIN, o);
 }
 
 /** Board worth of a unit on the evaluation scale. */
@@ -649,6 +672,37 @@ function evaluate(state: GameState, me: PlayerColor): number {
     v -= sideScore(state, e);
     v -= w * expectedDamage(state, e, me);
     v += 0.45 * expectedDamage(state, me, e);
+
+    // ---- imminent-win reads (the "block or lose" instincts) ----
+    const eUnits = state.units.filter((u) => u.owner === e);
+    const eMage = eUnits.find((u) => u.kind === 'mage');
+    if (eMage) {
+      const dHome = minDist(eMage.cell, baseCells(state, e));
+      if (eMage.activated >= STONES_TO_WIN) {
+        // they win the moment that mage steps home — price it at the actual
+        // chance their next roll covers the distance
+        v -= 1600 * reachProb('mage', dHome);
+      } else if (eMage.activated + eMage.carried >= STONES_TO_WIN) {
+        v -= 700 * reachProb('mage', dHome); // home → activate → win
+      }
+    }
+    // PROPHYLAXIS: an enemy priest closing on the Nexus is a ritual brewing.
+    // Contest the centre BEFORE it starts — once it stands, breaking it costs
+    // a whole turn and a lucky roll (the standing-ritual terms take over below).
+    if (!state.ritual) {
+      const ePriest = eUnits.find((u) => u.kind === 'priest');
+      if (ePriest) {
+        const pd = minDist(ePriest.cell, NEXUS_CELLS);
+        if (pd <= 6) {
+          const myGuard = Math.min(
+            99,
+            ...state.units.filter((u) => u.owner === me).map((u) => minDist(u.cell, NEXUS_CELLS)),
+          );
+          // heavier when they'd get there before any of my units can contest
+          v -= (7 - pd) * (myGuard > pd ? 16 : 7);
+        }
+      }
+    }
   }
   v += state.eliminated.filter((p) => p !== me).length * 200;
 
@@ -730,26 +784,52 @@ function outcomes(state: GameState, a: BotAction): { p: number; s: GameState }[]
 // ---- The search ------------------------------------------------------------
 // Depth counts PLAYS within the bot's own turn (a move, an action…). Each leaf
 // is judged by evaluate(), whose opponent-reply model extends the horizon a
-// further step — so depth 4 reads as "my next few plays, then their answer".
+// further step — and the finalists are then re-judged by ROLLOUTS that play
+// the game forward through the real engine: the rest of my turn, the enemy's
+// whole reply turn, and (heads-up) my following turn — 5-10 plies deep.
 
 interface Search {
   deadline: number;
+  /** Transposition memo: different play orders reach the same position — pay
+   *  for its subtree once. Keyed by position fingerprint + remaining depth. */
+  memo: Map<string, number>;
+}
+const newSearch = (deadline: number): Search => ({ deadline, memo: new Map() });
+
+/** Cheap structural fingerprint of everything the in-turn search can change. */
+function fingerprint(state: GameState): string {
+  let s = state.current + state.turnPhase;
+  for (const u of state.units) s += `|${u.id}:${u.cell.r},${u.cell.c},${u.carried},${u.activated}`;
+  for (const d of state.dice) s += `~${d.kind[0]}${d.value}${d.discarded ? 'x' : (d.usedBy ?? '-')}`;
+  for (const st of state.stones) if (!st.collected) s += `.${st.cell.r},${st.cell.c}`;
+  for (const g of state.gravestones) s += `+${g.cell.r},${g.cell.c}`;
+  s += `!${state.unitsMovedThisTurn.join(',')};${state.unitsActedThisTurn.join(',')}`;
+  s += state.ritual ? `R${state.ritual.player}` : '';
+  for (const pr of state.pendingRespawns) s += `p${pr.owner[0]}${pr.kind[0]}`;
+  s += `e${state.eliminated.length}`;
+  return s;
 }
 
 /** Best achievable value for the REST of the current turn from `state`
  *  (ending the turn immediately is always on the table). */
 function turnValue(state: GameState, me: PlayerColor, depth: number, sr: Search): number {
   if (state.winner) return state.winner === me ? WIN : -WIN;
+  if (depth <= 0 || performance.now() > sr.deadline) return evaluate(state, me);
+  const key = depth >= 2 ? `${fingerprint(state)}#${depth}` : null;
+  if (key) {
+    const hit = sr.memo.get(key);
+    if (hit !== undefined) return hit;
+  }
   const here = evaluate(state, me);
-  if (depth <= 0 || performance.now() > sr.deadline) return here;
   const cands = candidateActions(state, 'hard').sort((a, b) => b.score - a.score);
-  const K = depth >= 3 ? 4 : depth === 2 ? 4 : 3;
+  const K = BRAIN.wide ? (depth >= 2 ? 5 : 4) : depth >= 2 ? 4 : 3;
   let best = here;
   for (const c of cands.slice(0, K)) {
     const v = actionValue(state, c.a, me, depth, sr);
     if (v > best) best = v;
     if (performance.now() > sr.deadline) break;
   }
+  if (key) sr.memo.set(key, best);
   return best;
 }
 
@@ -772,26 +852,103 @@ function actionValue(state: GameState, a: BotAction, me: PlayerColor, depth: num
  *  out of the search by one loud unit's many options. */
 function rootCandidates(cands: Cand[]): Cand[] {
   const sorted = [...cands].sort((a, b) => b.score - a.score);
+  const big = BRAIN.wide && SEARCH_BUDGET_MS >= 200; // live budget → widest nets
+  const cap = BRAIN.wide ? (big ? 5 : 4) : 3;
+  const total = BRAIN.wide ? (big ? 24 : 18) : 14;
   const perUnit = new Map<string, number>();
   const picked: Cand[] = [];
   for (const c of sorted) {
     const n = perUnit.get(c.a.unitId) ?? 0;
-    if (n >= 3) continue;
+    if (n >= cap) continue;
     perUnit.set(c.a.unitId, n + 1);
     picked.push(c);
-    if (picked.length >= 14) break;
+    if (picked.length >= total) break;
   }
   return picked;
 }
 
+// ---- Rollouts: play the game forward through the real engine ---------------
+// NO CHEATING, still: simulated turns use TYPICAL dice (nothing is peeked —
+// the model just assumes both sides roll averagely and keep sensibly), and
+// simulated combats take their most likely outcome. It's how a strong human
+// reads ahead: "if the dice behave, here is where we all stand in two turns."
+
+/** Rigged roll: [mage 4, priest 4, warrior 5/4/3] via rollDice's rng hook. */
+const typicalRoll = () => seqRng([0.583, 0.583, 0.75, 0.583, 0.417]);
+
+/** Play out the CURRENT player's act phase greedily (their best-scored plays,
+ *  most likely combat branches), then end the turn. Both the rest of my own
+ *  turn and each simulated enemy turn run through this policy. */
+function playOutTurn(state: GameState, sr: Search): GameState {
+  let s = state;
+  if (s.turnPhase === 'roll') s = rollDice(s, typicalRoll());
+  for (let guard = 0; s.turnPhase === 'discard' && guard < 3; guard++) {
+    const id = heuristicDiscard(s, 'hard');
+    if (!id) break;
+    s = discardDie(s, id);
+  }
+  for (let plays = 0; plays < 6 && s.turnPhase === 'act' && !s.winner; plays++) {
+    if (performance.now() > sr.deadline) break;
+    const cands = candidateActions(s, 'hard');
+    if (!cands.length) break;
+    const best = cands.reduce((a, b) => (a.score >= b.score ? a : b));
+    if (best.score < 6) break; // nothing worth doing — pass
+    const outs = outcomes(s, best.a);
+    const likely = outs.reduce((a, b) => (a.p >= b.p ? a : b));
+    if (likely.s === s) break; // engine rejected — stop rather than loop
+    s = likely.s;
+  }
+  return s.winner ? s : endTurn(s);
+}
+
 /**
- * Hard's chooser: a two-pass, deadline-bounded search. Pass 1 gives every
- * shortlisted candidate a shallow (depth-2) look; pass 2 re-searches the best
- * survivors at full depth. The turn ends when nothing beats standing pat.
+ * Deep judgement of a mid-turn position: finish my turn (greedy), give the
+ * next enemy their WHOLE reply turn, and in a heads-up game play my following
+ * turn too — then score the far position. Roughly 5-10 plies of real engine
+ * beyond the play under consideration. Wins/losses discovered along the way
+ * collapse to near-terminal scores (sooner = stronger).
+ */
+function rolloutValue(state: GameState, me: PlayerColor, sr: Search): number {
+  let s = state;
+  if (s.winner) return s.winner === me ? WIN : -WIN;
+  // my remaining plays + end turn
+  s = s.current === me ? playOutTurn(s, sr) : s;
+  if (s.winner) return s.winner === me ? WIN * 0.99 : -WIN * 0.99;
+  // the enemy's whole reply turn
+  if (s.current !== me) s = playOutTurn(s, sr);
+  if (s.winner) return s.winner === me ? WIN * 0.97 : -WIN * 0.97;
+  // heads-up: my next turn as well (in 4p the remaining seats stay static —
+  // evaluate()'s threat terms cover them)
+  if (s.players.length - s.eliminated.length === 2 && s.current === me) {
+    s = playOutTurn(s, sr);
+    if (s.winner) return s.winner === me ? WIN * 0.95 : -WIN * 0.95;
+  }
+  return evaluate(s, me);
+}
+
+/** Probability-weighted rollout over a play's outcome branches. */
+function deepValue(state: GameState, a: BotAction, me: PlayerColor, sr: Search): number {
+  const outs = outcomes(state, a);
+  let v = 0;
+  for (const o of outs) {
+    if (o.s === state) return -Infinity;
+    if (o.p <= 0.0005) continue;
+    v += o.p * rolloutValue(o.s, me, sr);
+  }
+  return v;
+}
+
+/**
+ * Hard's chooser: a staged, deadline-bounded search.
+ *   pass 1 — every shortlisted candidate gets a shallow (depth-2) look;
+ *   pass 2 — the best survivors re-search at depth 4;
+ *   pass 3 — while time remains, the finalists (and "end turn now") are
+ *            re-judged by full game rollouts (my turn → their turn → mine).
+ * The turn ends when nothing beats standing pat.
  */
 function searchAction(state: GameState): BotAction | null {
   const me = state.current;
-  const sr: Search = { deadline: performance.now() + SEARCH_BUDGET_MS };
+  const sr = newSearch(performance.now() + SEARCH_BUDGET_MS);
   const cands = candidateActions(state, 'hard');
   if (!cands.length) return null;
   const endNow = evaluate(state, me);
@@ -799,18 +956,74 @@ function searchAction(state: GameState): BotAction | null {
   const pass1 = rootCandidates(cands).map((c) => ({ c, v: actionValue(state, c.a, me, 2, sr) }));
   pass1.sort((a, b) => b.v - a.v);
 
-  let bestA: BotAction | null = null;
-  let bestV = -Infinity;
-  for (const e of pass1.slice(0, 6)) {
+  const big = BRAIN.wide && SEARCH_BUDGET_MS >= 200;
+  const finalists: { c: Cand; v: number }[] = [];
+  for (const e of pass1.slice(0, BRAIN.wide ? (big ? 10 : 8) : 6)) {
     if (e.v === -Infinity) continue;
     const v = performance.now() > sr.deadline ? e.v : actionValue(state, e.c.a, me, 4, sr);
-    // a sliver of the fast heuristic breaks value ties toward human-shaped play
-    const vv = v + e.c.score * 0.01;
+    finalists.push({ c: e.c, v });
+  }
+  finalists.sort((a, b) => b.v - a.v);
+  if (!finalists.length) return null;
+
+  // ---- pass 2b: iterative deepening — spend leftover budget re-reading the
+  // leaders at depth 6 (a whole turn of plays), memo making revisits cheap ----
+  if (BRAIN.wide && sr.deadline - performance.now() > SEARCH_BUDGET_MS * 0.35) {
+    for (const f of finalists.slice(0, big ? 6 : 4)) {
+      if (performance.now() > sr.deadline) break;
+      f.v = actionValue(state, f.c.a, me, 6, sr);
+    }
+    finalists.sort((a, b) => b.v - a.v);
+  }
+
+  // ---- pass 3: sanity-check the podium by playing the game forward ----
+  // The rollout's scalar is too deterministic to RANK by (it prices luck as
+  // certainty), but it is excellent at spotting CONCRETE events two turns
+  // out: "this play lets their mage walk home and win", "ending now hands
+  // them the ritual", "this line wins outright". So it vetoes blunders and
+  // seizes discovered wins; ordinary ranking stays with the searched value.
+  const LOSS_BAR = -WIN * 0.5;
+  const WIN_BAR = WIN * 0.5;
+  const deeps = new Map<Cand, number>();
+  let endDeep = 0;
+  const spare = sr.deadline - performance.now();
+  const useRollouts =
+    BRAIN.rollouts && spare > SEARCH_BUDGET_MS * 0.2 && !finalists.some((f) => f.v >= WIN * 0.9);
+  if (useRollouts) {
+    // "end my turn right now" gets the same deep look the plays do (endTurn
+    // first — otherwise the rollout would spend the dice we propose to pass)
+    endDeep = rolloutValue(endTurn(state), me, sr);
+    for (const f of finalists.slice(0, 4)) {
+      if (performance.now() > sr.deadline) break;
+      deeps.set(f.c, deepValue(state, f.c.a, me, sr));
+    }
+    // a play whose rollout WINS beats everything (soonest win first)
+    let winA: BotAction | null = null;
+    let winV = -Infinity;
+    for (const [c, d] of deeps) {
+      if (d >= WIN_BAR && d > winV) {
+        winV = d;
+        winA = c.a;
+      }
+    }
+    if (winA) return winA;
+  }
+
+  let bestA: BotAction | null = null;
+  let bestV = -Infinity;
+  for (const f of finalists) {
+    // veto: the rollout watched this line hand the game away — skip it
+    // unless literally every option (including passing) loses anyway
+    const d = deeps.get(f.c);
+    if (d !== undefined && d <= LOSS_BAR && endDeep > LOSS_BAR) continue;
+    const vv = f.v + f.c.score * 0.01;
     if (vv > bestV) {
       bestV = vv;
-      bestA = e.c.a;
+      bestA = f.c.a;
     }
   }
+  // ending the turn hands the game away, and some play doesn't → play it
+  if (useRollouts && endDeep <= LOSS_BAR && bestA) return bestA;
   // Dice don't carry over — on a measured tie, playing beats passing. Only
   // stand pat when every play is clearly WORSE than the current position.
   return bestA && bestV > endNow - 1 ? bestA : null;
@@ -849,6 +1062,7 @@ if (typeof window !== 'undefined' && import.meta.env?.DEV) {
     greedyAction,
     heuristicDiscard,
     setSearchBudget,
+    setBrainOpts,
     evaluate,
   };
 }

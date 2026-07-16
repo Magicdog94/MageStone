@@ -1,8 +1,9 @@
 // Bumped with each notable alpha update — shown in the landing footer.
-export const VERSION = 'v0.6.0-alpha';
+export const VERSION = 'v0.6.1-alpha';
 export const UPDATED = '16 July 2026';
 
 export const PATCH_NOTES = [
+  'v0.6.1 — Hard AI plays like a master: it now reads 5–10 plays ahead, simulating your whole reply turn before it commits, spots wins and blocks yours turns in advance. Beats the previous Hard bot 2 games to 1.',
   'v0.6 — AI bots improved intelligence: the hard bot now plans turns ahead and uses Mage sorcery (Bolt & Nova). Plus layout fixes across desktop and mobile.',
   'v0.5 — Ranked matchmaking + ELO ladder (five tiers), guided tutorial with all three victories played out, in-game Rule Book, guest play with invite links, alpha feedback form.',
   'v0.4 — Guided tutorial mode, action-bar attacks with win odds, online usernames, loading screen, landscape prompt.',

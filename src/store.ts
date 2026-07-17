@@ -16,6 +16,7 @@ import {
   discardDie,
   endTurn,
   legalMoves,
+  undoDiscard as undoDiscardRule,
   magePowerDie,
   moveUnit,
   novaVictims,
@@ -198,6 +199,9 @@ interface UIState {
 
   roll: () => void;
   discard: (dieId: string) => void;
+  /** Take back the most recent discard (mis-click fix — allowed until any
+   *  unit moves or acts this turn). */
+  undoDiscard: () => void;
   selectUnit: (unitId: string | null) => void;
   selectDie: (dieId: string | null) => void;
   moveTo: (dest: Cell) => void;
@@ -452,6 +456,13 @@ export const useGame = create<UIState>((set, get) => ({
 
   discard: (dieId) =>
     set((s) => (s.rolling || outOfTurn(s) ? {} : { game: discardDie(s.game, dieId) })),
+
+  undoDiscard: () =>
+    set((s) => {
+      if (s.rolling || outOfTurn(s)) return {};
+      const game = undoDiscardRule(s.game);
+      return game === s.game ? {} : { game, selectedUnitId: null, selectedDieId: null };
+    }),
 
   selectUnit: (unitId) =>
     set((s) => {

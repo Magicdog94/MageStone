@@ -7,6 +7,7 @@ import {
   boltTargets,
   canBolt,
   canNova,
+  canUndoDiscard,
   discardsLeft,
   gravestoneBank,
   gravestoneCapacity,
@@ -168,6 +169,7 @@ export function HUD() {
   const selectedDieId = useGame((s) => s.selectedDieId);
   const roll = useGame((s) => s.roll);
   const discard = useGame((s) => s.discard);
+  const undoDiscard = useGame((s) => s.undoDiscard);
   const selectDie = useGame((s) => s.selectDie);
   const endTurn = useGame((s) => s.endTurn);
   const collectStones = useGame((s) => s.collectStones);
@@ -461,6 +463,16 @@ export function HUD() {
             </span>
           ) : (
             <>
+              {/* mis-clicked a discard? take it back — until anything moves/acts */}
+              {!tutorial && canUndoDiscard(game) && (
+                <button
+                  className="ghost"
+                  onClick={undoDiscard}
+                  title="Take back the last discarded die"
+                >
+                  Undo
+                </button>
+              )}
               {phase === 'roll' && (
                 <button className="primary" onClick={roll}>
                   Roll Dice

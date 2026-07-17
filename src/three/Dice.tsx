@@ -425,6 +425,35 @@ function DiceBodies() {
     }
   });
 
+  // Re-entering the tray WITHOUT a throw — an Undo stepped the phase back to
+  // `discard` after the dice were already parked — lays the rolled dice back
+  // out in their lanes, values face-up (the values are unchanged; only the
+  // presentation returns).
+  const prevShow = useRef(false);
+  useEffect(() => {
+    const was = prevShow.current;
+    prevShow.current = show;
+    if (!show || was || rolling || isRemoteViewer) return;
+    try {
+      bodies.current.forEach((b, i) => {
+        if (!b) return;
+        b.setGravityScale(1, true);
+        const v = dice[i]?.value ?? 1;
+        const faceIdx = FACE_VALUES.indexOf(v);
+        const q = new THREE.Quaternion().setFromUnitVectors(NORMALS[faceIdx], UP);
+        q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, (i * 1.1) % (Math.PI * 2)));
+        const [x, z] = trayToWorld(seat, (i - 2) * LANE, 0);
+        b.setTranslation({ x, y: TABLE_SURF + H, z }, true);
+        b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+        b.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      });
+    } catch (err) {
+      console.warn('MageStone: physics failed relaying dice after undo.', err);
+      useGame.getState().bumpPhysicsEpoch();
+    }
+  }, [show, rolling, isRemoteViewer, dice, seat]);
+
   // Park hidden dice below the table (weightless) so their invisible bodies
   // never collide with the combat dice thrown onto the tray during act phase;
   // both throw paths restore gravity when they reposition the dice.

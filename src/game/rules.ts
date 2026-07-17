@@ -251,14 +251,43 @@ export function discardDie(state: GameState, dieId: string): GameState {
   if (state.turnPhase !== 'discard') return state;
   const die = state.dice.find((d) => d.id === dieId);
   if (!die || die.discarded) return state;
-  const dice = state.dice.map((d) => (d.id === dieId ? { ...d, discarded: true } : d));
-  const discarded = dice.filter((d) => d.discarded).length;
-  const done = discarded >= DISCARDS;
+  const seq = state.dice.filter((d) => d.discarded).length + 1;
+  const dice = state.dice.map((d) =>
+    d.id === dieId ? { ...d, discarded: true, discardSeq: seq } : d,
+  );
+  const done = seq >= DISCARDS;
   return {
     ...state,
     dice,
     turnPhase: done ? 'act' : 'discard',
     log: [...state.log, `${state.current} discards a ${die.value} (${die.kind} die).`],
+  };
+}
+
+/** May the current player take back their most recent discard? Only while the
+ *  turn hasn't really begun — nothing moved, nothing acted, no die spent. */
+export function canUndoDiscard(state: GameState): boolean {
+  if (state.winner) return false;
+  if (state.turnPhase !== 'discard' && state.turnPhase !== 'act') return false;
+  if (state.unitsMovedThisTurn.length > 0 || state.unitsActedThisTurn.length > 0) return false;
+  if (state.dice.some((d) => d.usedBy !== null)) return false;
+  return state.dice.some((d) => d.discarded);
+}
+
+/** Take back the MOST RECENT discard (a mis-click fix, not a rewind): the die
+ *  returns to the tray and the phase steps back to `discard`. */
+export function undoDiscard(state: GameState): GameState {
+  if (!canUndoDiscard(state)) return state;
+  const discarded = state.dice.filter((d) => d.discarded);
+  const last = discarded.reduce((a, b) => ((b.discardSeq ?? 0) >= (a.discardSeq ?? 0) ? b : a));
+  const dice = state.dice.map((d) =>
+    d.id === last.id ? { ...d, discarded: false, discardSeq: null } : d,
+  );
+  return {
+    ...state,
+    dice,
+    turnPhase: 'discard',
+    log: [...state.log, `${state.current} takes back the ${last.value} (${last.kind} die).`],
   };
 }
 

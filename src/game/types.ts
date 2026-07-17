@@ -47,6 +47,9 @@ export interface Die {
   value: number; // 1..6
   kind: DieKind;
   discarded: boolean;
+  /** Discard order stamp (1st discard = 1, 2nd = 2) — lets Undo revert the
+   *  MOST RECENT discard. Absent/null while the die is live. */
+  discardSeq?: number | null;
   /** Unit id this die was spent on (movement/action), if any. */
   usedBy: string | null;
 }

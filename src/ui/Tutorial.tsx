@@ -300,7 +300,10 @@ const SECTIONS: Section[] = [
               </li>
             </ul>
           </li>
-          <li>Discard exactly 2 dice.</li>
+          <li>
+            Discard exactly 2 dice. Mis-clicked? The <span className="htp-em">Undo</span> button
+            takes the last discard back — until any unit moves or acts.
+          </li>
           <li>
             Move up to 3 units — one die per unit, up to the die’s value.
             <ul className="htp-list htp-list--sub">

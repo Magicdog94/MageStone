@@ -1,8 +1,9 @@
 // Bumped with each notable alpha update — shown in the landing footer.
-export const VERSION = 'v0.6.1-alpha';
-export const UPDATED = '16 July 2026';
+export const VERSION = 'v0.6.2-alpha';
+export const UPDATED = '17 July 2026';
 
 export const PATCH_NOTES = [
+  'v0.6.2 — Tutorial rebuilt around what confused playtesters: sieges now play out on the board (respawns visibly blocked, then freed when the besieger falls), a failed coordinated attack + resurrection demo, Bolt range highlighting, Nova friendly-fire and the stones scattering. New rule: if the home square is taken, a respawning Mage/Priest appears on the closest free base square. Rule Book corrected; attack buttons cleaned up.',
   'v0.6.1 — Hard AI plays like a master: it now reads 5–10 plays ahead, simulating your whole reply turn before it commits, spots wins and blocks yours turns in advance. Beats the previous Hard bot 2 games to 1.',
   'v0.6 — AI bots improved intelligence: the hard bot now plans turns ahead and uses Mage sorcery (Bolt & Nova). Plus layout fixes across desktop and mobile.',
   'v0.5 — Ranked matchmaking + ELO ladder (five tiers), guided tutorial with all three victories played out, in-game Rule Book, guest play with invite links, alpha feedback form.',

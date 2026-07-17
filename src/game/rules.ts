@@ -116,11 +116,14 @@ export function besiegersOf(state: GameState, player: PlayerColor): PlayerColor[
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([p]) => p);
 }
 
-/** First free base cell (preferring the unit's home slot), or null. */
+/** Free base cell for a respawn: the unit's own home slot if it's empty,
+ *  otherwise the CLOSEST free square of the base (ties resolve leftward). */
 function freeBaseCell(state: GameState, player: PlayerColor, preferred: Cell): Cell | null {
   if (!unitAt(state, preferred)) return preferred;
-  for (const c of baseCellsOf(state, player)) if (!unitAt(state, c)) return c;
-  return null;
+  const free = baseCellsOf(state, player).filter((c) => !unitAt(state, c));
+  if (!free.length) return null;
+  const d = (c: Cell) => Math.abs(c.r - preferred.r) + Math.abs(c.c - preferred.c);
+  return free.reduce((a, b) => (d(b) < d(a) ? b : a));
 }
 
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);

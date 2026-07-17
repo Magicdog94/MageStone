@@ -37,6 +37,15 @@ const EST_H = 230;
 function layout(rect: Rect | null, placement: Placement) {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
+  if (!rect && placement === 'bottom') {
+    // Anchor-less "look at the board" notes: sit LOW, just above the action
+    // bar, so the play area being narrated stays fully visible (no spotlight,
+    // so nothing is dimmed either).
+    return {
+      box: { bottom: 110, left: vw / 2, transform: 'translateX(-50%)' } as CSSProperties,
+      arrow: null as CSSProperties | null,
+    };
+  }
   if (!rect || placement === 'center') {
     return {
       box: { top: vh / 2, left: vw / 2, transform: 'translate(-50%, -50%)' } as CSSProperties,

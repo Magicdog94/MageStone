@@ -1258,6 +1258,22 @@ body:not(.ui-mobile) .hud:has(.leave-btn) .phase-track {
 .hud .attack-btn {
   padding: 0 var(--space-3);
   font-size: var(--text-xs);
+  /* flat: the 3D ledge + drop shadow read as a smudged double edge on these
+     small, tightly-stacked buttons — keep the gold fill and the crisp rim */
+  box-shadow: none;
+}
+.hud .attack-btn:hover {
+  box-shadow: none;
+}
+.hud .attack-btn:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+.hud .attack-btn:disabled {
+  box-shadow: none;
+}
+.hud .attack-btn:focus-visible {
+  box-shadow: var(--focus-ring);
 }
 .attack-btn small {
   font-size: 0.78em;

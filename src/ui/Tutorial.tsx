@@ -229,9 +229,12 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <span className="htp-win-title">Conquest Victory</span>
-            Be the last player standing. Lay siege to enemy bases — a besieged base can’t respawn its Mage or
-            Priest — and a besieged player who runs out of units on the board is <em>eliminated</em>: they take no
-            more turns and never respawn.
+            Be the last player standing. A fallen Mage or Priest normally respawns on its home
+            square — if something stands there, it appears on the closest free square of the base
+            instead. But while an <em>enemy</em> stands on any base square (a <em>siege</em>) they
+            wait in a queue and only return once the base is clear again. A besieged player who
+            runs out of units on the board is <em>eliminated</em>: they take no more turns and
+            never respawn.
           </li>
         </ol>
         <BoardOverview />
@@ -244,13 +247,11 @@ const SECTIONS: Section[] = [
     icon: 'formation',
     body: (
       <>
-        <p className="htp-p">Each player starts with:</p>
+        <p className="htp-p">Each player commands 8 units:</p>
         <ul className="htp-list">
           <li>6 Warriors</li>
           <li>1 Priest</li>
           <li>1 Mage</li>
-          <li>4 MageStones</li>
-          <li>3 Gravestones (added to the shared bank)</li>
         </ul>
         <p className="htp-p">Each player sets up their units on their own base row in this order:</p>
         <div className="htp-formation">
@@ -264,8 +265,14 @@ const SECTIONS: Section[] = [
           <span className="htp-tag htp-tag--w">Warrior</span>
         </div>
         <p className="htp-p">
-          The central area of the board contains the MageStone zone and the Nexus. MageStones are placed into the
-          MageStone zone according to the player count.
+          The central area of the board contains the MageStone zone and the Nexus. The board is
+          seeded with <span className="htp-em">4 MageStones per player</span> (8 in a 2-player
+          game, 16 with four players), placed in the MageStone zone — never on the Nexus. Nobody
+          owns them: any Mage may collect any stone.
+        </p>
+        <p className="htp-p">
+          The shared Gravestone bank starts at <span className="htp-em">3 Gravestones per player</span>{' '}
+          (6 in a 2-player game, 12 with four players).
         </p>
         <SetupDiagram />
       </>
@@ -312,7 +319,8 @@ const SECTIONS: Section[] = [
           </li>
         </ol>
         <div className="htp-note">
-          <strong>Important:</strong> Discard a unit’s die and that unit cannot move this turn.
+          <strong>Important:</strong> Discard the Mage or Priest die and that unit cannot move this
+          turn. The three Warrior dice are shared by all your Warriors — one die per Warrior.
         </div>
         <MoveDiagram />
       </>
@@ -339,7 +347,7 @@ const SECTIONS: Section[] = [
         <ul className="htp-list">
           <li>0–1 stones: rolls 1d6</li>
           <li>2–3 stones: rolls 1d12</li>
-          <li>4–5 stones: rolls 1d20</li>
+          <li>4 or more stones: rolls 1d20</li>
         </ul>
         <p className="htp-p">
           A defeated Mage drops all Unactivated stones plus 1 Activated stone where it fell, then
@@ -389,7 +397,7 @@ const SECTIONS: Section[] = [
             <strong>2d6 / 3d6</strong> — two / three coordinated Warriors
           </li>
           <li>
-            <strong>d12 / d20</strong> — a Mage with 2–3 / 4–5 activated stones
+            <strong>d12 / d20</strong> — a Mage with 2–3 / 4+ activated stones
           </li>
         </ul>
         <CombatDiagram />
@@ -485,7 +493,8 @@ const SECTIONS: Section[] = [
         <p className="htp-p">
           The Nexus is the 2×2 heart of the board. A Priest standing on it — with no enemies on
           its four squares — may declare a ritual. Hold the Nexus for one full round and you win.
-          Killing the Priest, or any enemy stepping into the Nexus, breaks the ritual.
+          The ritual breaks if the Priest is killed, if the Priest leaves the Nexus, or if any
+          enemy unit steps onto a Nexus square.
         </p>
         <NexusDiagram />
       </>

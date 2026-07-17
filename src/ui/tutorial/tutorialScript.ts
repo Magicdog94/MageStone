@@ -165,7 +165,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'discard',
       title: 'Discard 2 dice',
-      body: 'You must discard 2 dice and keep 3 — those 3 are all you can do this turn. We’ll drop the Mage and Priest dice and keep our three Warrior dice.',
+      body: 'You must discard 2 dice and keep 3 — those 3 are all you can do this turn. Discard the Mage or Priest die and that unit sits the turn out; the Warrior dice are shared by ALL your Warriors. We’ll keep our three Warrior dice.',
       anchor: '.tray',
       placement: 'top',
     });
@@ -191,7 +191,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'moved',
       title: 'It moved!',
-      body: 'A move is an orthogonal path up to the die’s value, through empty squares. Now three of your Warriors surround the enemy.',
+      body: 'A move is an orthogonal path (never diagonal) up to the die’s value, and it may bend. Units block the way — MageStones and gravestones don’t. Now three of your Warriors surround the enemy.',
       placement: 'center',
     });
 
@@ -241,12 +241,69 @@ export async function runTutorial(onDone: () => void) {
       placement: 'bottom',
     });
 
-    // ---- Priest: resurrect + Ritual victory --------------------------------
+    // ---- A coordinated attack that FAILS (and what happens next) -----------
+    stage((st) => {
+      st.units.find((u) => u.id === 'blue-w1')!.cell = { r: 5, c: 10 };
+      st.units.find((u) => u.id === 'red-w1')!.cell = { r: 4, c: 10 };
+      st.units.find((u) => u.id === 'red-w2')!.cell = { r: 6, c: 10 };
+      st.units.find((u) => u.id === 'red-p')!.cell = { r: 4, c: 8 };
+      st.dice = mkDice(['warrior', 'warrior', 'priest'], [3, 3, 2]);
+    });
+    await wait(700);
+    await note({
+      id: 'fail-stage',
+      title: 'Attacks can fail',
+      body: 'A new example: TWO Red Warriors flank a Blue Warrior — a Double Attack, 2d6 vs d6, 90% to win. But 90% is not 100%. Watch this one hit the unlucky side…',
+      placement: 'bottom',
+    });
+    g().selectUnit('red-w1');
+    await wait(250);
+    {
+      // rigged to LOSE: 1+1 = 2 vs the defender's 6
+      const failRig = [0, 0, 0.99];
+      let fi = 0;
+      g().attack('blue-w1', ['red-w1', 'red-w2'], () => failRig[Math.min(fi++, failRig.length - 1)]);
+    }
+    await until(() => g().combatRoll !== null, 5000);
+    await wait(400);
+    {
+      const roll = g().combatRoll;
+      const a = roll?.attackRoll ?? 2;
+      const d = roll?.defenseRoll ?? 6;
+      await note({
+        id: 'fail-result',
+        title: 'The attack fails',
+        body: `Red rolled ${a}, Blue rolled ${d} — the defender wins. When a coordinated attack fails, only ONE attacker falls (never the whole group), and it leaves a gravestone where it stood.`,
+        anchor: '.combat-announce',
+        placement: 'bottom',
+      });
+    }
+
+    // ---- Priest: repel rule + a real resurrection ---------------------------
     await note({
       id: 'priest',
       title: 'The Priest',
-      body: 'Priests never attack — and if one WINS its defence it only repels the attacker (no one dies). Their power: stand a Priest on any gravestone to RESURRECT a Warrior there (up to 6 alive).',
-      placement: 'center',
+      body: 'Priests never attack — and if one WINS its defence it only repels the attacker (no one dies). Their real power: resurrection. Red’s Priest stands two squares from that fresh gravestone. Watch.',
+      placement: 'bottom',
+    });
+    g().selectUnit('red-p');
+    await wait(250);
+    g().moveTo({ r: 4, c: 10 });
+    await wait(800);
+    await note({
+      id: 'resurrect-press',
+      title: 'Resurrect',
+      body: 'Standing on ANY gravestone — no matter whose Warrior fell there — unlocks RESURRECT.',
+      anchor: '.unit-actions',
+      placement: 'top',
+    });
+    g().doResurrect();
+    await wait(900);
+    await note({
+      id: 'resurrect-done',
+      title: 'A Warrior returns',
+      body: 'The Warrior revives on the gravestone square and the Priest politely steps back the way it came. The gravestone returns to the bank. You can never have more than 6 Warriors alive.',
+      placement: 'bottom',
     });
     // ---- MageStones (explained here; the victory is DEMONSTRATED later) ----
     await note({
@@ -270,7 +327,7 @@ export async function runTutorial(onDone: () => void) {
       id: 'collect-stage',
       title: 'Try it: collect a stone',
       body: 'Red’s Mage stands beside a MageStone. Watch it step onto the stone’s square…',
-      placement: 'center',
+      placement: 'bottom',
     });
     g().selectUnit('red-m');
     await wait(250);
@@ -313,17 +370,26 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'power-bolt',
       title: 'Bolt — 1 stone',
-      body: 'A ranged strike on ANY enemy within as many squares as the mage die shows (here: 4). Only an enemy Mage may roll to repel — everything else is destroyed outright. Watch.',
+      body: 'A ranged strike on ANY enemy within as many squares as the mage die shows (here: 4). Only an enemy Mage may roll to repel — everything else is destroyed outright.',
       anchor: '.unit-actions',
       placement: 'top',
     });
+    // arm bolt mode so the board highlights every enemy in range
+    g().setBoltMode(true);
+    await wait(350);
+    await note({
+      id: 'power-bolt-range',
+      title: 'Range 4 — targets light up',
+      body: 'With Bolt armed, every enemy within range glows on the board. The Blue Warrior three squares away is in reach. Fire!',
+      placement: 'bottom',
+    });
     g().castBolt('blue-w1');
-    await wait(1400);
+    await wait(1600);
     await note({
       id: 'power-bolt-stone',
       title: 'The stone disperses',
-      body: 'The spent stone lands ON the target’s square — still ACTIVATED (gold). Any Mage can go and claim it.',
-      placement: 'center',
+      body: 'Look at the target’s square: the spent stone landed THERE — still ACTIVATED (gold), waiting for any Mage to claim it. And the cost is real: Red’s Mage dropped from 4 activated stones (d20) to 3 (d12).',
+      placement: 'bottom',
     });
 
     // ---- Mage powers: Nova ---------------------------------------------------
@@ -334,14 +400,15 @@ export async function runTutorial(onDone: () => void) {
       st.units.find((u) => u.id === 'blue-w1')!.cell = { r: 4, c: 5 };
       st.units.find((u) => u.id === 'blue-w2')!.cell = { r: 6, c: 6 }; // diagonal!
       st.units.find((u) => u.id === 'blue-w3')!.cell = { r: 5, c: 6 };
+      st.units.find((u) => u.id === 'red-w1')!.cell = { r: 5, c: 4 }; // friendly — caught too!
       st.dice = mkDice(['mage'], [2]);
     });
     await wait(700);
     await note({
       id: 'power-nova',
       title: 'Nova — 3 stones',
-      body: 'Three enemies crowd Red’s Mage — one of them diagonally. NOVA destroys EVERY unit within 1 square, diagonals included, friend or foe. Nothing can repel it.',
-      placement: 'center',
+      body: 'Three enemies crowd Red’s Mage — one of them DIAGONALLY. NOVA destroys EVERY unit within 1 square of the Mage, diagonals included… and note Red’s own Warrior standing beside it. Nova spares nobody, friend or foe, and nothing can repel it.',
+      placement: 'bottom',
     });
     g().selectUnit('red-m');
     await wait(250);
@@ -350,12 +417,18 @@ export async function runTutorial(onDone: () => void) {
       let ni = 0;
       g().castNova(() => novaRig[Math.min(ni++, novaRig.length - 1)]);
     }
-    await wait(1600);
+    await wait(1800);
+    await note({
+      id: 'power-nova-aftermath',
+      title: 'Everything within 1 square fell',
+      body: 'All three Blue Warriors are gone — and so is Red’s own Warrior. The blast is the full ring around the Mage: use it when you’re mobbed, and keep friends clear.',
+      placement: 'bottom',
+    });
     await note({
       id: 'power-nova-stones',
-      title: 'Three stones scatter',
-      body: 'The three spent stones scatter across the 3×3 blast area — still activated, waiting to be claimed. Spending stones lowers the Mage’s power die, so choose your moment.',
-      placement: 'center',
+      title: 'Watch the stones scatter',
+      body: 'Now look at the board around the Mage: the THREE spent stones lie scattered across the 3×3 blast area — gold, still activated, free for any Mage to walk over and claim. Red’s Mage is down to 0 stones, so its power die is back to a d6. Sorcery is power spent — choose your moment.',
+      placement: 'bottom',
     });
 
     // ---- End turn ----------------------------------------------------------
@@ -397,6 +470,86 @@ export async function runTutorial(onDone: () => void) {
     g().selectUnit(null);
     g().endTurn();
     await wait(500);
+
+    // ---- Sieges: respawns blocked… ------------------------------------------
+    stage((st) => {
+      // Blue's Mage & Priest fell earlier and wait in the respawn queue; a red
+      // Warrior stands ON Blue's base, locking the door. (Staged directly —
+      // an engine step would otherwise respawn them while the base is clear.)
+      st.units = st.units.filter(
+        (u) => u.owner !== 'blue' || u.id === 'blue-w1' || u.id === 'blue-w2',
+      );
+      st.pendingRespawns = [
+        { id: 'tut-sg-m', owner: 'blue', kind: 'mage', activated: 0 },
+        { id: 'tut-sg-p', owner: 'blue', kind: 'priest' },
+      ];
+      st.units.find((u) => u.id === 'red-w1')!.cell = { r: 15, c: 8 };
+      st.units.find((u) => u.id === 'blue-w1')!.cell = { r: 14, c: 8 };
+      st.units.find((u) => u.id === 'blue-w2')!.cell = { r: 13, c: 10 };
+      st.dice = mkDice(['warrior'], [2]);
+    });
+    await wait(700);
+    await note({
+      id: 'siege-intro',
+      title: 'Sieges',
+      body: 'New scene: Blue’s Mage and Priest have fallen. Normally they respawn on Blue’s base — but a RED Warrior is standing on it. Look at the bottom edge of the board.',
+      placement: 'center',
+    });
+    await note({
+      id: 'siege-lock',
+      title: 'Under siege — no respawns',
+      body: 'While ANY enemy stands on a base square, that player’s fallen Mage and Priest CANNOT return — they wait in a queue. Blue’s card shows the waiting Priest (P…) and the SIEGE flag.',
+      anchor: '.siege-alert',
+      placement: 'bottom',
+    });
+    g().endTurn();
+    await wait(600);
+    g().tutorialRoll([3, 3, 6, 3, 2]);
+    await wait(500);
+    {
+      const dice = g().game.dice;
+      g().discard(dice[0].id); // mage die
+      g().discard(dice[1].id); // priest die
+    }
+    await wait(400);
+    await note({
+      id: 'siege-still',
+      title: 'A turn later — still locked out',
+      body: 'Blue’s turn has begun and the queue hasn’t moved: no Mage, no Priest, as long as the base is held. Blue has one way out — break the siege by force.',
+      anchor: '.player-strip',
+      placement: 'bottom',
+    });
+    g().selectUnit('blue-w1');
+    await wait(250);
+    {
+      // rigged so the besieged player wins: 6 vs 1
+      const siegeRig = [0.99, 0];
+      let si = 0;
+      g().attack('red-w1', ['blue-w1'], () => siegeRig[Math.min(si++, siegeRig.length - 1)]);
+    }
+    await until(() => g().combatRoll !== null, 5000);
+    await wait(400);
+    {
+      const roll = g().combatRoll;
+      const a = roll?.attackRoll ?? 6;
+      const d = roll?.defenseRoll ?? 1;
+      await note({
+        id: 'siege-broken',
+        title: 'The besieger falls',
+        body: `Blue rolled ${a}, Red rolled ${d} — the intruder is defeated and Blue’s base is CLEAR. Now watch what happens the moment the turn ends…`,
+        anchor: '.combat-announce',
+        placement: 'bottom',
+      });
+    }
+    g().selectUnit(null);
+    g().endTurn();
+    await wait(1200);
+    await note({
+      id: 'siege-freed',
+      title: 'The queue empties — they’re back!',
+      body: 'The base is free, so Blue’s Mage AND Priest respawn onto it immediately — each on its home square, or the closest free base square if something stands there. That is the whole siege game: hold an enemy base to keep their leaders dead — break the siege to bring yours home.',
+      placement: 'center',
+    });
 
     // ---- The three victories, each STAGED and played out for real ----------
     await note({
@@ -453,7 +606,7 @@ export async function runTutorial(onDone: () => void) {
       id: 'win2-stage',
       title: 'Victory 2 of 3 — Ritual',
       body: 'Fresh board. Red’s Priest stands two squares from the NEXUS — the 2×2 heart of the board. Watch it step in.',
-      placement: 'center',
+      placement: 'bottom',
     });
     g().selectUnit('red-p');
     await wait(250);
@@ -525,7 +678,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'win3-siege',
       title: 'Under siege',
-      body: 'Red now stands ON Blue’s base — Blue is UNDER SIEGE. While any enemy holds a base square, that player’s fallen Mage and Priest CANNOT respawn.',
+      body: 'Red now stands ON Blue’s base — Blue is UNDER SIEGE, and its queued Mage and Priest are locked out, exactly as you saw earlier. This time, nobody is coming to break it.',
       anchor: '.siege-alert',
       placement: 'bottom',
     });

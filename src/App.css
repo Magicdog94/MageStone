@@ -11,10 +11,10 @@
   --gold-line: rgba(201, 162, 74, 0.5);
   /* Dark bronze rim for gold-filled buttons (matches the emblem stroke): a
      pale border disappears against the bright top of the gold gradient, so
-     the rim must be DARKER than the fill to read on all four edges. */
+     the rim must be DARKER than the fill to read on all four edges. Gold
+     buttons are FLAT — fill + rim, no ledge/drop shadow (the old 3D bevel
+     read as a smudged double edge). */
   --gold-rim: #6e521a;
-  /* Bright inner bevel along the top edge keeps the gilded 3D shine. */
-  --gold-bevel: inset 0 1px 0 rgba(255, 243, 214, 0.5);
   /* ---- emerald accents (box-cover theme): deep green leather + gilt ---- */
   --emerald: #1f5138;
   --emerald-deep: #0c2118;
@@ -315,11 +315,7 @@ body:not(.ui-mobile):has(.entry) .fs-toggle {
    mis-ringed after keyboard presses). */
 .hud .primary:focus-visible,
 .winner button:focus-visible {
-  box-shadow:
-    var(--gold-bevel),
-    var(--focus-ring),
-    0 3px 0 #5e4715,
-    0 6px 14px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--focus-ring);
 }
 /* every other control falls back to the themed gold ring, never the browser's
    default white outline (it read as an off-colour ring around gold buttons) */
@@ -341,11 +337,7 @@ button:focus-visible {
 }
 .tut-gotit:focus-visible {
   outline: none;
-  box-shadow:
-    var(--gold-bevel),
-    var(--focus-ring),
-    0 3px 0 #5e4715,
-    0 6px 14px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--focus-ring);
 }
 
 /* All buttons share one height (control-md). Primary/winner read as emphasis
@@ -362,7 +354,7 @@ button:focus-visible {
   color: #2a1c06;
   background: linear-gradient(180deg, var(--gold-bright), var(--gold) 55%, var(--gold-dim));
   border-color: var(--gold-rim);
-  box-shadow: var(--gold-bevel), 0 3px 0 #5e4715, 0 6px 14px rgba(0, 0, 0, 0.5);
+  box-shadow: none;
 }
 .hud .primary:hover,
 .winner button:hover {
@@ -370,14 +362,14 @@ button:focus-visible {
 }
 .hud .primary:active,
 .winner button:active {
-  transform: translateY(2px);
-  box-shadow: var(--gold-bevel), 0 1px 0 #5e4715, 0 3px 8px rgba(0, 0, 0, 0.5);
+  transform: translateY(1px);
+  box-shadow: none;
 }
 .hud .primary:disabled,
 .winner button:disabled {
   cursor: not-allowed;
   filter: grayscale(0.55) brightness(0.72);
-  box-shadow: var(--gold-bevel), 0 2px 0 #3a2c0d, 0 4px 10px rgba(0, 0, 0, 0.4);
+  box-shadow: none;
 }
 .hud .primary:disabled:hover {
   filter: grayscale(0.55) brightness(0.72);
@@ -408,13 +400,13 @@ button:focus-visible {
   cursor: pointer;
   color: #2a1c06;
   background: linear-gradient(180deg, var(--gold-bright), var(--gold) 55%, var(--gold-dim));
-  box-shadow: var(--gold-bevel), 0 3px 0 #5e4715, 0 6px 14px rgba(0, 0, 0, 0.5);
+  box-shadow: none;
 }
 :where(button.primary):hover {
   filter: brightness(1.1);
 }
 :where(button.primary):active {
-  transform: translateY(2px);
+  transform: translateY(1px);
 }
 :where(button.ghost) {
   display: inline-flex;
@@ -440,11 +432,7 @@ button:focus-visible {
 button.primary:focus-visible,
 button.ghost:focus-visible {
   outline: none;
-  box-shadow:
-    var(--gold-bevel),
-    var(--focus-ring),
-    0 3px 0 #5e4715,
-    0 6px 14px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--focus-ring);
 }
 
 /* :not(.primary) — the gold attack buttons share .unit-actions, and the
@@ -1613,14 +1601,14 @@ body.ui-mobile .feedback-btn {
   text-transform: uppercase;
   color: #2a1c06;
   background: linear-gradient(180deg, var(--gold-bright), var(--gold) 55%, var(--gold-dim));
-  box-shadow: var(--gold-bevel), 0 3px 0 #5e4715, 0 6px 14px rgba(0, 0, 0, 0.5);
+  box-shadow: none;
   cursor: pointer;
 }
 .tut-gotit:hover {
   filter: brightness(1.1);
 }
 .tut-gotit:active {
-  transform: translateY(2px);
+  transform: translateY(1px);
 }
 /* the win-% grid borrowed from the Rule Book, sized for the note box */
 .tut-wide {
@@ -3007,7 +2995,7 @@ body.ui-mobile .tut-gotit {
   background: linear-gradient(180deg, #d8b65f, #a9842f);
   color: #1c1407;
   border-color: var(--gold-rim);
-  box-shadow: var(--gold-bevel);
+  box-shadow: none;
   font-weight: 600;
 }
 .entry .ghost {
@@ -3047,10 +3035,7 @@ body.ui-mobile .tut-gotit {
 .entry .primary:hover,
 .entry .ghost:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-}
-.entry .primary:hover {
-  box-shadow: var(--gold-bevel), 0 6px 18px rgba(0, 0, 0, 0.45);
+  box-shadow: none;
 }
 .entry .primary:disabled {
   opacity: 0.5;

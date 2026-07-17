@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
-import { CuboidCollider, Physics, RigidBody, type RapierRigidBody } from '@react-three/rapier';
+import {
+  CuboidCollider,
+  Physics,
+  RigidBody,
+  useRapier,
+  type RapierRigidBody,
+} from '@react-three/rapier';
 import { RoundedBoxGeometry } from 'three-stdlib';
 import {
   FACE_VALUES,
@@ -81,6 +87,54 @@ function upValue(body: RapierRigidBody): number {
     }
   });
   return value;
+}
+
+/** Index (into `normals`) of the LOCAL face pointing most upward under `q`. */
+function upFaceIndex(q: THREE.Quaternion, normals: THREE.Vector3[]): number {
+  let best = -Infinity;
+  let idx = 0;
+  const v = new THREE.Vector3();
+  normals.forEach((n, i) => {
+    v.copy(n).applyQuaternion(q);
+    if (v.y > best) {
+      best = v.y;
+      idx = i;
+    }
+  });
+  return idx;
+}
+
+/** Is the die lying flat (its up face within ~10° of level)? A "calm" die can
+ *  still be leaning mid-topple — settling must wait for flat, or the frozen
+ *  face won't be the face the tumble was heading for. */
+function isFlat(body: RapierRigidBody, normals: THREE.Vector3[]): boolean {
+  const r = body.rotation();
+  const q = new THREE.Quaternion(r.x, r.y, r.z, r.w);
+  const idx = upFaceIndex(q, normals);
+  return normals[idx].clone().applyQuaternion(q).y >= 0.985;
+}
+
+/**
+ * Straighten a landed die IN PLACE: rotate it by the minimal tilt that brings
+ * its landed face exactly upright and drop it to rest height — it stays where
+ * it landed and keeps the face it landed on (no teleport, no re-face). This is
+ * what killed the old "settle → jump into a tidy row" flash.
+ */
+function settleInPlace(
+  body: RapierRigidBody,
+  normals: THREE.Vector3[],
+  restY: number,
+): void {
+  const r = body.rotation();
+  const q = new THREE.Quaternion(r.x, r.y, r.z, r.w);
+  const idx = upFaceIndex(q, normals);
+  const w = normals[idx].clone().applyQuaternion(q).normalize();
+  q.premultiply(new THREE.Quaternion().setFromUnitVectors(w, UP));
+  const t = body.translation();
+  body.setTranslation({ x: t.x, y: restY, z: t.z }, true);
+  body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+  body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+  body.setAngvel({ x: 0, y: 0, z: 0 }, true);
 }
 
 function DieMesh({
@@ -293,27 +347,45 @@ function DiceBodies() {
       // game: a die perched mid-jitter (or a lost body) used to keep `rolling`
       // true forever, freezing bot games. WALL-CLOCK timeout (frame counts scale
       // with fps — a slow machine at 12fps would wait half a minute): after ~8s
-      // of real time, read the faces as they lie.
+      // of real time, read the faces as they lie. Also wait for every die to
+      // lie FLAT — a calm die can still be leaning mid-topple, and reading it
+      // early would freeze the wrong face up (long-wedged dice settle anyway).
+      let allFlat = true;
+      if (slow) {
+        for (const b of bodies.current) {
+          if (b && !isFlat(b, NORMALS)) {
+            allFlat = false;
+            break;
+          }
+        }
+      }
       const timedOut =
         throwAt.current > 0 && performance.now() - throwAt.current > 8000;
-      if ((liveFrames.current > 20 && settleFrames.current > 10) || timedOut) {
+      if ((liveFrames.current > 20 && settleFrames.current > 10 && (allFlat || settleFrames.current > 100)) || timedOut) {
         if (timedOut) console.warn('MageStone: dice settle timed out — forcing a read');
         reported.current = true;
         const values = bodies.current.map((b) => (b ? upValue(b) : 1));
         report(values);
-        // Tidy the tray: lay every die flat in a row, its rolled value face-up, so
-        // a die that settled perched on another never reads as floating. The
-        // orientation is derived from the value just read, so it always matches.
+        // The face each die LANDED on is the result (report() above makes it
+        // the engine's truth), so the die never needs re-facing — it stays
+        // exactly where it fell, just straightened upright in place. Only a
+        // die perched ON another (floating once its prop moves) falls back to
+        // its lane slot, keeping the same face up.
         bodies.current.forEach((b, i) => {
           if (!b) return;
-          const faceIdx = FACE_VALUES.indexOf(values[i]);
-          const q = new THREE.Quaternion().setFromUnitVectors(NORMALS[faceIdx], UP);
-          q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, rand(0, Math.PI * 2)));
-          const [x, z] = trayToWorld(seat, (i - 2) * LANE, 0);
-          b.setTranslation({ x, y: TABLE_SURF + H, z }, true);
-          b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
-          b.setLinvel({ x: 0, y: 0, z: 0 }, true);
-          b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+          const perched = b.translation().y > TABLE_SURF + H + 0.25;
+          if (perched) {
+            const faceIdx = FACE_VALUES.indexOf(values[i]);
+            const q = new THREE.Quaternion().setFromUnitVectors(NORMALS[faceIdx], UP);
+            q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, rand(0, Math.PI * 2)));
+            const [x, z] = trayToWorld(seat, (i - 2) * LANE, 0);
+            b.setTranslation({ x, y: TABLE_SURF + H, z }, true);
+            b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+            b.setLinvel({ x: 0, y: 0, z: 0 }, true);
+            b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+          } else {
+            settleInPlace(b, NORMALS, TABLE_SURF + H);
+          }
         });
       }
     } catch (err) {
@@ -457,18 +529,100 @@ interface CombatRun {
 
 let combatRunSeq = 0;
 
+/** Geometry-local normals of a die's faces, by value-1 (cube via FACE_VALUES). */
+function faceNormalsOf(faces: number): THREE.Vector3[] {
+  if (faces === 6) return FACE_VALUES.map((_, v) => NORMALS[FACE_VALUES.indexOf(v + 1)]);
+  return polyDef(faces as 12 | 20).faces.map((f) => f.normal);
+}
+const restHeight = (faces: number) => (faces === 6 ? H : faces === 12 ? 0.42 : 0.47);
+
 function CombatDice() {
   const rolling = useGame((s) => s.rolling);
   const showCombatRoll = useGame((s) => s.showCombatRoll);
+  const { world } = useRapier();
 
   const [run, setRun] = useState<CombatRun | null>(null);
   const bodies = useRef<(RapierRigidBody | null)[]>([]);
+  /** Inner visual group per die — its "skin". Counter-rotated after the
+   *  pre-simulation so the face that will PHYSICALLY land upward carries the
+   *  engine's number: the die lands showing the right value first time. */
+  const skins = useRef<(THREE.Group | null)[]>([]);
+  /** Predicted landed face index per die (into faceNormalsOf), for the
+   *  settle-time verification. */
+  const predicted = useRef<number[]>([]);
   const thrown = useRef(false);
   const thrownAt = useRef(0);
   const settled = useRef(false);
   const liveFrames = useRef(0);
   const calmFrames = useRef(0);
+  const lastPredictAt = useRef(0);
   const hideTimer = useRef<number | undefined>(undefined);
+
+  /**
+   * Look into the future: save every die's exact state, step the physics
+   * world silently until the dice rest, read which face each will LAND on,
+   * rewind — then dress each die's skin so that landing face carries the
+   * engine's number. Called at the throw and again every few frames of the
+   * tumble: physics replay isn't perfectly deterministic (contact caches),
+   * but each re-prediction starts from the live state, so by the time a die
+   * slows down the forecast is exact — it lands showing the right value
+   * first time, and any skin swap happens mid-spin where it can't be seen.
+   */
+  const repredict = (active: (RapierRigidBody | null)[], spec: CombatDieSpec[]) => {
+    try {
+      const saved = active.map((b) => {
+        if (!b) return null;
+        const t = b.translation();
+        const q = b.rotation();
+        const lv = b.linvel();
+        const av = b.angvel();
+        return {
+          t: { x: t.x, y: t.y, z: t.z },
+          q: { x: q.x, y: q.y, z: q.z, w: q.w },
+          lv: { x: lv.x, y: lv.y, z: lv.z },
+          av: { x: av.x, y: av.y, z: av.z },
+        };
+      });
+      // minimum horizon of a full sim-second: a die can be "calm" yet mid
+      // slow-topple — run long enough for every topple to finish
+      for (let step = 0, calm = 0; step < 900 && (calm < 8 || step < 60); step++) {
+        world.step();
+        let allCalm = true;
+        for (const b of active) {
+          if (!b) continue;
+          const lv = b.linvel();
+          const av = b.angvel();
+          if (Math.hypot(lv.x, lv.y, lv.z) > 0.18 || Math.hypot(av.x, av.y, av.z) > 0.25) {
+            allCalm = false;
+            break;
+          }
+        }
+        calm = allCalm ? calm + 1 : 0;
+      }
+      active.forEach((b, i) => {
+        if (!b) return;
+        const d = spec[i];
+        const normals = faceNormalsOf(d.faces);
+        const r = b.rotation();
+        const landed = upFaceIndex(new THREE.Quaternion(r.x, r.y, r.z, r.w), normals);
+        if (predicted.current[i] !== landed) {
+          predicted.current[i] = landed;
+          const skin = skins.current[i];
+          if (skin) skin.quaternion.setFromUnitVectors(normals[d.value - 1], normals[landed]);
+        }
+      });
+      saved.forEach((s, i) => {
+        const b = active[i];
+        if (!b || !s) return;
+        b.setTranslation(s.t, true);
+        b.setRotation(s.q, true);
+        b.setLinvel(s.lv, true);
+        b.setAngvel(s.av, true);
+      });
+    } catch (err) {
+      console.warn('MageStone: dice pre-simulation skipped.', err);
+    }
+  };
 
   // Subscribe to the store: a NEW CombatResult (by identity) arms a fresh
   // throw on every client — actor and online spectators alike.
@@ -480,6 +634,7 @@ function CombatDice() {
       settled.current = false;
       liveFrames.current = 0;
       calmFrames.current = 0;
+      lastPredictAt.current = 0;
       window.clearTimeout(hideTimer.current);
       showCombatRoll(null); // hide any prior result until THESE dice settle
       // Each side's dice land on that side's OWN tray (seats captured now,
@@ -544,6 +699,8 @@ function CombatDice() {
         b.setLinvel({ x: rand(-1, 1), y: 1, z: rand(-1.2, 1.2) }, true);
         b.setAngvel({ x: rand(-14, 14), y: rand(-14, 14), z: rand(-14, 14) }, true);
       });
+      predicted.current = [];
+      repredict(active, run.spec);
       thrown.current = true;
       thrownAt.current = performance.now();
       return;
@@ -560,27 +717,82 @@ function CombatDice() {
       }
     }
     calmFrames.current = calm ? calmFrames.current + 1 : 0;
-    // Wall-clock safety net (frame counts stretch on slow machines).
-    const timedOut = thrownAt.current > 0 && performance.now() - thrownAt.current > 5000;
-    if ((liveFrames.current > 20 && calmFrames.current > 10) || timedOut) {
+    // Refresh the landing forecast while the dice still tumble — predictions
+    // from the live state converge as the throw slows. Wall-clock cadence
+    // (frame counts stretch on slow machines), tightening once the dice are
+    // slow — the final flops decide the face, so the endgame gets covered
+    // densely — plus one last confirm the instant everything goes calm.
+    const active = bodies.current.slice(0, run.spec.length);
+    let slow = true;
+    for (const b of active) {
+      if (!b) continue;
+      const lv = b.linvel();
+      const av = b.angvel();
+      if (Math.hypot(lv.x, lv.y, lv.z) > 1.6 || Math.hypot(av.x, av.y, av.z) > 3.5) {
+        slow = false;
+        break;
+      }
+    }
+    const now = performance.now();
+    if (!calm && now - lastPredictAt.current > (slow ? 45 : 150)) {
+      lastPredictAt.current = now;
+      repredict(active, run.spec);
+    } else if (calm && calmFrames.current === 1) {
+      repredict(active, run.spec);
+    }
+    // Settle only once every die lies FLAT — a calm die may still be leaning
+    // mid-topple, and freezing it early would fix the wrong face up. A die
+    // wedged leaning for a long while (against another die) settles anyway
+    // and gets straightened. Wall-clock safety net regardless.
+    let allFlat = true;
+    if (calm) {
+      for (let i = 0; i < run.spec.length; i++) {
+        const b = bodies.current[i];
+        if (!b) continue;
+        if (!isFlat(b, faceNormalsOf(run.spec[i].faces))) {
+          allFlat = false;
+          break;
+        }
+      }
+    }
+    const timedOut = thrownAt.current > 0 && performance.now() - thrownAt.current > 6500;
+    if ((liveFrames.current > 20 && calmFrames.current > 10 && (allFlat || calmFrames.current > 100)) || timedOut) {
       settled.current = true;
-      // Lay each die flat in a row showing the ENGINE's value (the same
-      // value-face-up snap the turn dice perform after reading).
+      // The pre-simulation already dressed each die so its landing face shows
+      // the engine's value — the dice stay exactly where they fell, only
+      // straightened upright. Verify the replay landed as predicted (physics
+      // is fixed-step deterministic, but never bet the result on it): on a
+      // divergence the skin is corrected in this same frame — no delay.
       bodies.current.slice(0, run.spec.length).forEach((b, i) => {
         if (!b) return;
         const d = run.spec[i];
-        const normal =
-          d.faces === 6
-            ? NORMALS[FACE_VALUES.indexOf(d.value)]
-            : polyDef(d.faces as 12 | 20).faces[d.value - 1].normal;
-        const q = new THREE.Quaternion().setFromUnitVectors(normal, UP);
-        q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, rand(0, Math.PI * 2)));
-        const [x, z] = trayToWorld(d.seat, (d.slot - (d.slots - 1) / 2) * LANE, 0);
-        const rest = d.faces === 6 ? H : d.faces === 12 ? 0.42 : 0.47; // face-to-centre
-        b.setTranslation({ x, y: TABLE_SURF + rest, z }, true);
-        b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
-        b.setLinvel({ x: 0, y: 0, z: 0 }, true);
-        b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        const normals = faceNormalsOf(d.faces);
+        const rest = restHeight(d.faces);
+        const r = b.rotation();
+        const landed = upFaceIndex(new THREE.Quaternion(r.x, r.y, r.z, r.w), normals);
+        if (landed !== predicted.current[i]) {
+          const skin = skins.current[i];
+          if (skin) skin.quaternion.setFromUnitVectors(normals[d.value - 1], normals[landed]);
+          if (predicted.current[i] !== undefined) {
+            const qq = new THREE.Quaternion(r.x, r.y, r.z, r.w);
+            const tilt = normals[landed].clone().applyQuaternion(qq).y;
+            console.warn(
+              `MageStone: combat die replay diverged — corrected at settle. tilt=${tilt.toFixed(3)}`,
+            );
+          }
+        }
+        if (b.translation().y > TABLE_SURF + rest + 0.25) {
+          // perched on another die — lay it flat in its lane, same face up
+          const q = new THREE.Quaternion().setFromUnitVectors(normals[landed], UP);
+          q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, rand(0, Math.PI * 2)));
+          const [x, z] = trayToWorld(d.seat, (d.slot - (d.slots - 1) / 2) * LANE, 0);
+          b.setTranslation({ x, y: TABLE_SURF + rest, z }, true);
+          b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+          b.setLinvel({ x: 0, y: 0, z: 0 }, true);
+          b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        } else {
+          settleInPlace(b, normals, TABLE_SURF + rest);
+        }
       });
       // The dice are now face-up on the table — NOW announce the numbers.
       showCombatRoll(run.roll);
@@ -619,11 +831,19 @@ function CombatDice() {
           linearDamping={0.3}
           position={[0, -4 - i, 0]}
         >
-          {d.faces === 6 ? (
-            <DieMesh kind={d.kind} />
-          ) : (
-            <PolyDieMesh faces={d.faces as 12 | 20} kind={d.kind} />
-          )}
+          {/* the visual "skin" — counter-rotated by the pre-simulation so the
+              face that will land upward carries the engine's number */}
+          <group
+            ref={(g) => {
+              skins.current[i] = g;
+            }}
+          >
+            {d.faces === 6 ? (
+              <DieMesh kind={d.kind} />
+            ) : (
+              <PolyDieMesh faces={d.faces as 12 | 20} kind={d.kind} />
+            )}
+          </group>
         </RigidBody>
       ))}
     </group>

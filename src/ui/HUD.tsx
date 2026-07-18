@@ -30,6 +30,9 @@ import { FeedbackModal } from './FeedbackModal';
 import { BookIcon, CameraLockIcon, CogIcon, GraveIcon } from './Icons';
 
 const KIND_LABEL = { warrior: 'Warrior', mage: 'Mage', priest: 'Priest' } as const;
+/** The die colours, lifted for text on the dark tray — the kind labels under
+ *  the dice wear their die's colour (mirrors ui/Die.tsx STYLE). */
+const DIE_LABEL_COLOR = { mage: '#7ba4e4', priest: '#55bd80', warrior: '#e07a75' } as const;
 const KIND_ABILITY = {
   warrior: 'Attacks adjacent enemies · coordinates 1–3d6',
   mage: 'Collects & activates stones · power die d6→d12→d20',
@@ -333,33 +336,53 @@ export function HUD() {
       <div className="hud-bottom">
         <div className="tray">
           <div className="dice">
-            {game.dice.map((d) => {
-              const state = d.discarded
-                ? 'discarded'
-                : d.usedBy
-                  ? 'used'
-                  : d.id === selectedDieId
-                    ? 'selected'
-                    : 'idle';
-              const click = !myTurn
-                ? undefined
-                : phase === 'discard' && !d.discarded
-                  ? () => discard(d.id)
-                  : phase === 'act' && !d.discarded && !d.usedBy
-                    ? () => selectDie(d.id)
-                    : undefined;
-              return (
-                <PipDie
-                  key={d.id}
-                  value={d.value}
-                  kind={d.kind}
-                  state={state}
-                  onClick={click}
-                  size={mobile ? 34 : 48}
-                  title={`${d.kind[0].toUpperCase()}${d.kind.slice(1)} die`}
-                />
-              );
-            })}
+            {(() => {
+              // Kind labels under the dice, in each die's colour — "Warrior"
+              // written ONCE, under the middle of the warrior dice.
+              const warriorIdx = game.dice
+                .map((d, i) => (d.kind === 'warrior' ? i : -1))
+                .filter((i) => i >= 0);
+              const midWarrior = warriorIdx[Math.floor((warriorIdx.length - 1) / 2)];
+              return game.dice.map((d, i) => {
+                const state = d.discarded
+                  ? 'discarded'
+                  : d.usedBy
+                    ? 'used'
+                    : d.id === selectedDieId
+                      ? 'selected'
+                      : 'idle';
+                const click = !myTurn
+                  ? undefined
+                  : phase === 'discard' && !d.discarded
+                    ? () => discard(d.id)
+                    : phase === 'act' && !d.discarded && !d.usedBy
+                      ? () => selectDie(d.id)
+                      : undefined;
+                const label =
+                  d.kind === 'mage'
+                    ? 'Mage'
+                    : d.kind === 'priest'
+                      ? 'Priest'
+                      : i === midWarrior
+                        ? 'Warrior'
+                        : '';
+                return (
+                  <div className="die-col" key={d.id}>
+                    <PipDie
+                      value={d.value}
+                      kind={d.kind}
+                      state={state}
+                      onClick={click}
+                      size={mobile ? 34 : 48}
+                      title={`${d.kind[0].toUpperCase()}${d.kind.slice(1)} die`}
+                    />
+                    <span className="die-label" style={{ color: DIE_LABEL_COLOR[d.kind] }}>
+                      {label}
+                    </span>
+                  </div>
+                );
+              });
+            })()}
           </div>
         </div>
 

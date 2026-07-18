@@ -62,6 +62,11 @@ export function BotDriver() {
   // fresh state each tick, so it survives bot-to-bot turn handoffs untouched.
   const enabled = useGame((s) => !!s.bots[s.game.current] && s.botController && !s.game.winner);
   const lastStep = useRef(0);
+  // A momentous play (attack, sorcery, ritual) is HELD briefly before it is
+  // executed — the pause reads as the bot weighing the decision, like a human
+  // hovering before committing. The action is chosen once and cached; `sig`
+  // drops it if the game state moved on underneath.
+  const pending = useRef<{ action: BotAction; at: number; sig: string } | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
@@ -94,9 +99,33 @@ export function BotDriver() {
           return;
         }
         // act
+        const sig = `${g.current}:${g.turnPhase}:${g.dice.filter((d) => !d.discarded && !d.usedBy).length}:${g.units.length}`;
+        if (pending.current) {
+          if (pending.current.sig !== sig) {
+            pending.current = null; // the board moved on — re-decide
+          } else if (now < pending.current.at) {
+            return; // still "thinking" over the big play
+          } else {
+            const a = pending.current.action;
+            pending.current = null;
+            executeAction(a);
+            if (useGame.getState().game === g) s.endTurn();
+            return;
+          }
+        }
         const action = chooseAction(g, lvl);
         if (!action) {
           s.endTurn();
+          return;
+        }
+        // Hold the dramatic plays for a human-length beat before committing.
+        const big =
+          action.type === 'attack' ||
+          action.type === 'bolt' ||
+          action.type === 'nova' ||
+          action.type === 'ritual';
+        if (big) {
+          pending.current = { action, at: now + 900 + Math.random() * 900, sig };
           return;
         }
         executeAction(action);

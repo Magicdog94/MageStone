@@ -34,9 +34,7 @@ const ALL_COLORS: PlayerColor[] = TEAM_OPTIONS.map((t) => t.value);
 type SeatKind = 'human' | BotLevel;
 const SEAT_OPTIONS: { value: SeatKind; label: string }[] = [
   { value: 'human', label: 'Human' },
-  { value: 'easy', label: 'Easy' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'hard', label: 'Hard' },
+  { value: 'hard', label: 'AI Bot' },
 ];
 
 /** Per-team seat picker: each playing colour is a human or a bot (with level). */
@@ -59,7 +57,7 @@ function BotPicker({
           </span>
           <Segmented<SeatKind>
             options={SEAT_OPTIONS}
-            value={value[color] ?? 'human'}
+            value={value[color] ? 'hard' : 'human'}
             onChange={(v) => {
               const next = { ...value };
               if (v === 'human') delete next[color];
@@ -195,7 +193,7 @@ function NewGameModal() {
     setTurnSeconds(timer === 0 ? null : timer);
     // Only the colours actually playing keep their bot setting.
     const bots: Partial<Record<PlayerColor, BotLevel>> = {};
-    for (const c of teams) if (botSel[c]) bots[c] = botSel[c];
+    for (const c of teams) if (botSel[c]) bots[c] = 'hard'; // one AI strength
     newGame(teams, layout, bots);
   };
 
@@ -227,7 +225,7 @@ function NewGameModal() {
       >
         <TeamPicker value={teams} onChange={setDuo} max={2} locked={mode === 4} />
       </Field>
-      <Field label="Bots" hint="Let the AI play any seat — pick a difficulty">
+      <Field label="Bots" hint="Let the AI play any seat">
         <BotPicker teams={teams} value={botSel} onChange={setBotSel} />
       </Field>
       <Field

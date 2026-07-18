@@ -47,7 +47,7 @@ export function PlayerStrip() {
               </span>
             ) : (
               bots[p] && (
-                <span className="pstat-badge tip" data-tip={`AI bot — ${bots[p]}`}>
+                <span className="pstat-badge tip" data-tip="AI bot">
                   BOT
                 </span>
               )

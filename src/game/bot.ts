@@ -60,8 +60,15 @@ import { NEXUS_CELLS, allCells, edgeRotation, sameCell } from './board';
 import type { Cell, Die, GameState, PlayerColor, Unit, UnitKind } from './types';
 
 export type BotLevel = 'easy' | 'medium' | 'hard';
-export const BOT_LEVELS: BotLevel[] = ['easy', 'medium', 'hard'];
-export const BOT_LABEL: Record<BotLevel, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+/** The ONE difficulty offered in the UI — every AI seat runs the full search
+ *  brain. ('easy'/'medium' remain as internal levels: the greedy fallback,
+ *  legacy saved games and old online clients still resolve.) */
+export const BOT_LEVELS: BotLevel[] = ['hard'];
+export const BOT_LABEL: Record<BotLevel, string> = {
+  easy: 'AI Bot',
+  medium: 'AI Bot',
+  hard: 'AI Bot',
+};
 
 /** One step of a bot's act phase. `null` = nothing worth doing → end the turn. */
 export type BotAction =
@@ -494,8 +501,13 @@ interface BrainOpts {
   rollouts: boolean;
   /** Wider root shortlist + beams (the classic brain's were tuned for 110ms). */
   wide: boolean;
+  /** Human variety: a whisper of noise (±2 eval points) among near-equal
+   *  plays, so the bot doesn't repeat identical lines game after game.
+   *  Genuine value differences are far larger — strength is unaffected
+   *  (arena-checked). */
+  jitter: boolean;
 }
-const BRAIN: BrainOpts = { rollouts: true, wide: true };
+const BRAIN: BrainOpts = { rollouts: true, wide: true, jitter: true };
 export function setBrainOpts(o: Partial<BrainOpts>): void {
   Object.assign(BRAIN, o);
 }
@@ -1016,7 +1028,8 @@ function searchAction(state: GameState): BotAction | null {
     // unless literally every option (including passing) loses anyway
     const d = deeps.get(f.c);
     if (d !== undefined && d <= LOSS_BAR && endDeep > LOSS_BAR) continue;
-    const vv = f.v + f.c.score * 0.01;
+    const noise = BRAIN.jitter ? Math.random() * 4 - 2 : 0;
+    const vv = f.v + f.c.score * 0.01 + noise;
     if (vv > bestV) {
       bestV = vv;
       bestA = f.c.a;

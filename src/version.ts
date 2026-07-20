@@ -1,8 +1,9 @@
 // Bumped with each notable alpha update — shown in the landing footer.
-export const VERSION = 'v0.6.5-alpha';
+export const VERSION = 'v0.7.0-alpha';
 export const UPDATED = '18 July 2026';
 
 export const PATCH_NOTES = [
+  'v0.7 — The tutorial is now HANDS-ON: you roll, discard, move, fight, resurrect, collect, cast Bolt & Nova and win by MageStone and Ritual yourself, coached step by step. Dice tags are now M · P · W1 W2 W3. Feedback submissions are readable by everyone. Ranked is paused during the playtest.',
   'v0.6.5 — The dice tray now names each die (Mage · Priest · Warrior, in their colours). One AI strength: Easy and Medium are gone — every bot is the full AI Bot brain, with more human pacing (it visibly weighs its big attacks) and varied play from game to game.',
   'v0.6.4 — Undo button: discarded the wrong die? Take it back — available until any unit moves or acts that turn. Works in online games too.',
   'v0.6.3 — Dice now land showing their actual result first time: no more settling on one number and flicking to another, and they rest where they fall instead of snapping into a row. All gold buttons cleaned up to a flat style with crisp borders.',

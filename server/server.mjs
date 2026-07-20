@@ -704,10 +704,9 @@ async function handle(ws, s, m) {
       return send(ws, { t: 'pnpOk' });
     }
     case 'feedbackList': {
-      // Owner-only: every submission stays viewable on the site (the email
-      // relay is best-effort — this is the reliable path).
-      if (s.username !== FEEDBACK_OWNER)
-        return send(ws, { t: 'error', message: 'Sign in as the game owner to view feedback.' });
+      // PUBLIC: every submission is viewable by anyone on the site — playtest
+      // feedback is community-visible by design. (The print-and-play EMAIL
+      // list below stays owner-only.)
       let rows = [];
       if (pool) {
         const r = await pool.query(

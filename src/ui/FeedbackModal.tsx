@@ -3,8 +3,8 @@ import { useNet } from '../net/useNet';
 import { useGame } from '../store';
 import { Modal } from './controls';
 
-/** Owner-only: every stored submission, straight from the database. The email
- *  relay is best-effort — this list is the guaranteed way to read feedback. */
+/** Every stored submission, straight from the database — public: anyone can
+ *  read what the playtest community has said. */
 function FeedbackList({ onClose }: { onClose: () => void }) {
   const rows = useNet((s) => s.feedbackRows);
   const fetchFeedbackList = useNet((s) => s.fetchFeedbackList);
@@ -59,9 +59,6 @@ function FeedbackList({ onClose }: { onClose: () => void }) {
  *  Opened from the winner panel, the in-game Feedback pill, and the footer. */
 export function FeedbackModal({ onClose }: { onClose: () => void }) {
   const sendFeedback = useNet((s) => s.sendFeedback);
-  const username = useNet((s) => s.username);
-  const guest = useNet((s) => s.guest);
-  const isOwner = !guest && username?.toLowerCase() === 'magicdog94';
   const [showList, setShowList] = useState(false);
   const game = useGame((s) => s.game);
   const [enjoy, setEnjoy] = useState('');
@@ -115,11 +112,9 @@ export function FeedbackModal({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       footer={
         <>
-          {isOwner && (
-            <button className="ghost" onClick={() => setShowList(true)}>
-              View submissions
-            </button>
-          )}
+          <button className="ghost" onClick={() => setShowList(true)}>
+            View submissions
+          </button>
           <button className="primary" onClick={submit} disabled={!enjoy && !confuse && !change && !bug}>
             Send Feedback
           </button>

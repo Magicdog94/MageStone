@@ -681,61 +681,20 @@ function Auth() {
   );
 }
 
-/** Ranked matchmaking: search pairs you with another queued player for a 1v1
- *  with ELO on the line. Shows your current rating + tier (or "Unrated"). */
+/** Ranked matchmaking — CLOSED for the open playtest. The card stays visible
+ *  so players know the mode exists; hovering explains why it's greyed out.
+ *  (The queue/ELO plumbing is intact server-side for when it reopens.) */
 function RankedCard() {
-  const searching = useNet((s) => s.rankedSearching);
-  const findRanked = useNet((s) => s.findRanked);
-  const cancelRanked = useNet((s) => s.cancelRanked);
-  const leaderboard = useNet((s) => s.leaderboard);
-  const fetchLeaderboard = useNet((s) => s.fetchLeaderboard);
-  const guest = useNet((s) => s.guest);
-  const goAuth = useNet((s) => s.goAuth);
-  useEffect(() => {
-    fetchLeaderboard(); // fills `me` (my ELO) for the header line
-  }, [fetchLeaderboard]);
-  const me = leaderboard?.me ?? null;
-  const rated = me?.elo != null;
-
-  // Guests can play casual games freely, but ELO needs a real account.
-  if (guest) {
-    return (
-      <div className="entry-card wide ranked-card">
-        <div className="entry-card-title">Ranked match</div>
-        <div className="ranked-info">Ranked play and ELO ratings need a free account.</div>
-        <button className="ghost lg" onClick={() => goAuth('signup')}>
-          Create an account
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="entry-card wide ranked-card">
+    <div
+      className="entry-card wide ranked-card ranked-off tip"
+      data-tip="Not available during playtesting"
+    >
       <div className="entry-card-title">Ranked match</div>
-      <div className="ranked-info">
-        {rated ? (
-          <>
-            <TierBadge elo={me!.elo!} />
-            <strong className="ranked-elo">{me!.elo}</strong> ELO · {me!.rankedWon ?? 0}W{' '}
-            {me!.rankedLost ?? 0}L
-          </>
-        ) : (
-          <>Unrated — your first Ranked match starts you at 1200 ELO.</>
-        )}
-      </div>
-      {searching ? (
-        <div className="ranked-row">
-          <span className="ranked-searching">Searching for an opponent…</span>
-          <button className="ghost" onClick={cancelRanked}>
-            Cancel
-          </button>
-        </div>
-      ) : (
-        <button className="primary lg" onClick={findRanked}>
-          Search Ranked
-        </button>
-      )}
+      <div className="ranked-info">Ranked play and ELO ratings return after the playtest.</div>
+      <button className="primary lg" disabled>
+        Search Ranked
+      </button>
       <div className="ranked-note">
         1v1 against a real player · ELO (1000–2400) moves only in Ranked
       </div>

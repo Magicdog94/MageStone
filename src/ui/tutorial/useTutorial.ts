@@ -17,6 +17,9 @@ export interface Callout {
   /** Step n of m — shown as a small progress hint. */
   step?: number;
   total?: number;
+  /** 'task': the PLAYER acts — no Got-it button, game clicks pass through the
+   *  coach; the script watches the game state and clears it when done. */
+  mode?: 'note' | 'task';
 }
 
 interface TutorialState {
@@ -28,6 +31,10 @@ interface TutorialState {
   viewIndex: number;
   /** Show a callout and resolve when the user presses "Got it" on it. */
   note: (c: Callout) => Promise<void>;
+  /** Show a TASK callout: no Got-it, the game is live — the player performs
+   *  the described action; the script clears it once the state shows it. */
+  task: (c: Callout) => void;
+  clearTask: () => void;
   gotIt: () => void;
   back: () => void;
   /** Tear down any pending callout (used when the tutorial is skipped/ends). */
@@ -46,6 +53,12 @@ export const useTutorial = create<TutorialState>((set, get) => ({
       resolveGotIt = resolve;
       set((s) => ({ callout: c, history: [...s.history, c], viewIndex: s.history.length }));
     }),
+  task: (c) =>
+    set((s) => {
+      const t = { ...c, mode: 'task' as const };
+      return { callout: t, history: [...s.history, t], viewIndex: s.history.length };
+    }),
+  clearTask: () => set({ callout: null }),
   gotIt: () => {
     const { viewIndex, history } = get();
     // Reviewing an earlier note — step forward through history, don't resolve.

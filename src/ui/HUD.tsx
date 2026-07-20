@@ -337,13 +337,10 @@ export function HUD() {
         <div className="tray">
           <div className="dice">
             {(() => {
-              // Kind labels under the dice, in each die's colour — "Warrior"
-              // written ONCE, under the middle of the warrior dice.
-              const warriorIdx = game.dice
-                .map((d, i) => (d.kind === 'warrior' ? i : -1))
-                .filter((i) => i >= 0);
-              const midWarrior = warriorIdx[Math.floor((warriorIdx.length - 1) / 2)];
-              return game.dice.map((d, i) => {
+              // Kind tags under the dice, in each die's colour: M · P · W1 W2
+              // W3 — so players always know which die drives which unit.
+              let warriorNo = 0;
+              return game.dice.map((d) => {
                 const state = d.discarded
                   ? 'discarded'
                   : d.usedBy
@@ -359,13 +356,7 @@ export function HUD() {
                       ? () => selectDie(d.id)
                       : undefined;
                 const label =
-                  d.kind === 'mage'
-                    ? 'Mage'
-                    : d.kind === 'priest'
-                      ? 'Priest'
-                      : i === midWarrior
-                        ? 'Warrior'
-                        : '';
+                  d.kind === 'mage' ? 'M' : d.kind === 'priest' ? 'P' : `W${++warriorNo}`;
                 return (
                   <div className="die-col" key={d.id}>
                     <PipDie
@@ -486,8 +477,9 @@ export function HUD() {
             </span>
           ) : (
             <>
-              {/* mis-clicked a discard? take it back — until anything moves/acts */}
-              {!tutorial && canUndoDiscard(game) && (
+              {/* mis-clicked a discard? take it back — until anything moves/acts
+                  (available in the hands-on tutorial too — it teaches it) */}
+              {canUndoDiscard(game) && (
                 <button
                   className="ghost"
                   onClick={undoDiscard}

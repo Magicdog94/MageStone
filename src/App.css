@@ -1220,8 +1220,7 @@ body:not(.ui-mobile) .hud:has(.leave-btn) .phase-track {
   min-height: 48px;
   align-items: flex-start;
 }
-/* each die + its kind label ("Mage" / "Priest" / "Warrior" once, centred
-   under the middle warrior die), written in the die's own colour */
+/* each die + its kind tag (M · P · W1 W2 W3), written in the die's colour */
 .die-col {
   display: flex;
   flex-direction: column;
@@ -1521,6 +1520,30 @@ body.ui-mobile .feedback-btn {
   position: absolute;
   inset: 0;
   pointer-events: auto;
+}
+/* task notes: the game is live — a pulsing cue replaces the Got-it button */
+.tut-yourmove {
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-md);
+  padding: 0 var(--space-3);
+  font-family: var(--display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--gold-bright);
+  white-space: nowrap;
+  animation: tut-yourmove-pulse 1.6s ease-in-out infinite;
+}
+@keyframes tut-yourmove-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 /* "Skip tutorial" lives INSIDE every note, left of the gold Got it button */
 .tut-skipbtn {
@@ -2581,6 +2604,15 @@ body.ui-mobile .tut-gotit {
   opacity: 0.85;
 }
 /* Sign In + Leaderboard side-by-side on the Play Online screen */
+/* Ranked is closed for the playtest — greyed, with the hover tip explaining */
+.ranked-off {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.ranked-off button {
+  pointer-events: none;
+}
+
 .online-extras {
   display: flex;
   gap: var(--space-3);

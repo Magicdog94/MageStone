@@ -136,19 +136,24 @@ export function TutorialCoach() {
   const spot = rect
     ? ({ top: rect.top - 6, left: rect.left - 6, width: rect.right - rect.left + 12, height: rect.bottom - rect.top + 12 } as CSSProperties)
     : null;
+  // The DISPLAYED callout is the live task (not a Back-review) → the game is
+  // playable: the blocker lets clicks through and the footer says "your move".
+  const liveTask = !!live && live.mode === 'task' && callout === live;
 
   return (
     <div className="tut-root">
-      {/* full-screen click blocker so the guided game isn't disturbed */}
-      <div className="tut-blocker" />
+      {/* full-screen click blocker so the guided game isn't disturbed — except
+          during a live TASK, when the player is the one playing */}
+      <div className="tut-blocker" style={liveTask ? { pointerEvents: 'none' } : undefined} />
       {live && callout && (
         <>
           {spot && <div className="tut-spot" style={spot} />}
           <div
-            className={`tut-box tut-${placement}${callout.showOdds ? ' tut-wide' : ''}`}
+            className={`tut-box tut-${placement}${callout.showOdds ? ' tut-wide' : ''}${liveTask ? ' tut-task' : ''}`}
             style={box}
             role="dialog"
             aria-live="polite"
+            data-tut-id={callout.id}
           >
             {arrow && <span className="tut-arrow" style={arrow} />}
             {callout.title && <div className="tut-title">{callout.title}</div>}
@@ -167,9 +172,13 @@ export function TutorialCoach() {
               <button className="tut-skipbtn tut-back" onClick={goBack} disabled={viewIndex === 0}>
                 Back
               </button>
-              <button className="primary tut-gotit" onClick={gotIt}>
-                {callout.gotItLabel ?? 'Got it'}
-              </button>
+              {liveTask ? (
+                <span className="tut-yourmove">Your move…</span>
+              ) : (
+                <button className="primary tut-gotit" onClick={gotIt}>
+                  {callout.gotItLabel ?? 'Got it'}
+                </button>
+              )}
             </div>
           </div>
         </>

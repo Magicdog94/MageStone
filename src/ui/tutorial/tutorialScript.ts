@@ -1,5 +1,5 @@
 import { useGame, type TutRestrict } from '../../store';
-import { legalMoves, unitById, warriorCount } from '../../game/rules';
+import { legalMoves, siegedPlayers, unitById, warriorCount } from '../../game/rules';
 import { NEXUS_CELLS } from '../../game/board';
 import { createGame } from '../../game/setup';
 import type { Callout } from './useTutorial';
@@ -125,8 +125,9 @@ function scriptMove(unitId: string, dest: Cell): void {
 
 /**
  * The guided game — HANDS-ON. The player rolls, discards, moves, fights,
- * resurrects, collects, casts and WINS, coached step by step; only the scenes
- * that need both sides acting (Blue's replies, the siege) play themselves.
+ * resurrects, collects, casts, lays and breaks a siege (briefly playing Blue)
+ * and WINS all three ways, coached step by step; only Blue's routine beats
+ * (its roll/discard) play themselves.
  */
 let running = false;
 
@@ -611,31 +612,47 @@ export async function runTutorial(onDone: () => void) {
       placement: 'left',
     });
 
-    // ---- Sieges (watch — both sides act) -----------------------------------
-    stage((st) => {
-      st.units = st.units.filter(
-        (u) => u.owner !== 'blue' || u.id === 'blue-w1' || u.id === 'blue-w2',
-      );
-      st.pendingRespawns = [
-        { id: 'tut-sg-m', owner: 'blue', kind: 'mage', activated: 0 },
-        { id: 'tut-sg-p', owner: 'blue', kind: 'priest' },
-      ];
-      st.units.find((u) => u.id === 'red-w1')!.cell = { r: 15, c: 8 };
-      st.units.find((u) => u.id === 'blue-w1')!.cell = { r: 14, c: 8 };
-      st.units.find((u) => u.id === 'blue-w2')!.cell = { r: 13, c: 10 };
-      st.dice = mkDice(['warrior'], [2]);
-    });
+    // ---- Sieges (HANDS-ON: you lay one, then swap sides and break it) ------
+    const BLUE_BASE: Cell[] = Array.from({ length: 8 }, (_, i) => ({ r: 15, c: 4 + i }));
+    const stageSiege = () =>
+      stage((st) => {
+        st.units = st.units.filter((u) => u.owner !== 'blue' || u.id === 'blue-w1');
+        st.pendingRespawns = [
+          { id: 'tut-sg-m', owner: 'blue', kind: 'mage', activated: 0 },
+          { id: 'tut-sg-p', owner: 'blue', kind: 'priest' },
+        ];
+        st.units.find((u) => u.id === 'red-w1')!.cell = { r: 14, c: 8 };
+        st.units.find((u) => u.id === 'blue-w1')!.cell = { r: 15, c: 9 }; // guards its base
+        st.dice = mkDice(['warrior'], [2]);
+      });
+    stageSiege();
     await wait(700);
     await note({
       id: 'siege-intro',
-      title: 'Sieges (sit back for this one)',
-      body: 'Blue’s Mage and Priest have fallen. Normally they respawn on Blue’s base — but a RED Warrior is standing on it. Look at the bottom edge of the board.',
+      title: 'Sieges — starve the respawns',
+      body: 'Blue’s Mage and Priest have fallen and wait in the respawn queue — see the P… on Blue’s card. They return to Blue’s base squares… unless someone is STANDING there. Your Warrior is one step away.',
       placement: 'center',
     });
+    await playerTask(
+      stageSiege,
+      {
+        id: 'task-siege-hold',
+        title: 'Lay a siege',
+        body: 'CLICK your Warrior by Blue’s base and march it ONTO a base square — plant your boots in their front door.',
+        placement: 'bottom',
+      },
+      () => siegedPlayers(g().game).includes('blue'),
+      () => {
+        scriptMove('red-w1', { r: 15, c: 8 });
+      },
+      // Only that Warrior, only onto Blue's base squares.
+      { restrict: { units: ['red-w1'], dests: BLUE_BASE, actions: [] } },
+    );
+    await wait(600);
     await note({
       id: 'siege-lock',
       title: 'Under siege — no respawns',
-      body: 'While ANY enemy stands on a base square, that player’s fallen Mage and Priest CANNOT return — they wait in a queue. Blue’s card shows the waiting Priest (P…) and the SIEGE flag.',
+      body: 'That’s a SIEGE: while ANY enemy stands on a base square, the fallen Mage and Priest CANNOT return — the queue is frozen. Blue’s card carries the SIEGE flag for as long as you hold the square.',
       anchor: '.siege-alert',
       placement: 'bottom',
     });
@@ -652,18 +669,38 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'siege-still',
       title: 'A turn later — still locked out',
-      body: 'Blue’s turn has begun and the queue hasn’t moved: no Mage, no Priest, as long as the base is held. Blue has one way out — break the siege by force.',
+      body: 'Blue’s turn has begun and the queue hasn’t moved: no Mage, no Priest, as long as the base is held. There is one way out — and for this move, YOU play Blue.',
       anchor: '.player-strip',
       placement: 'bottom',
     });
-    g().selectUnit('blue-w1');
-    await wait(250);
-    {
-      const siegeRig = [0.99, 0];
-      let si = 0;
-      g().attack('red-w1', ['blue-w1'], () => siegeRig[Math.min(si++, siegeRig.length - 1)]);
-    }
-    await until(() => g().combatRoll !== null, 5000);
+    await playerTask(
+      null,
+      {
+        id: 'task-siege-break',
+        title: 'Break the siege — as Blue',
+        body: 'Blue’s last Warrior guards the base. CLICK it, then press ATTACK and throw the intruder out.',
+        placement: 'bottom',
+      },
+      () => !unitById(g().game, 'red-w1'),
+      () => {
+        const siegeRig = [0.99, 0];
+        let si = 0;
+        g().selectUnit('blue-w1');
+        g().attack('red-w1', ['blue-w1'], () => siegeRig[Math.min(si++, siegeRig.length - 1)]);
+      },
+      // Only Blue's Warrior, only the intruder — with scripted dice so the
+      // lesson's fight always lands.
+      {
+        restrict: {
+          units: ['blue-w1'],
+          dests: [],
+          actions: ['attack'],
+          targets: ['red-w1'],
+          rig: [0.99, 0],
+        },
+      },
+    );
+    await until(() => g().combatRoll !== null, 6000);
     await wait(400);
     {
       const roll = g().combatRoll;
@@ -672,61 +709,97 @@ export async function runTutorial(onDone: () => void) {
       await note({
         id: 'siege-broken',
         title: 'The besieger falls',
-        body: `Blue rolled ${a}, Red rolled ${d} — the intruder is defeated and Blue’s base is CLEAR. Now watch what happens the moment the turn ends…`,
+        body: `Blue rolled ${a}, Red rolled ${d} — the intruder is defeated and Blue’s base is CLEAR. Look at the base: the queue emptied INSTANTLY.`,
         anchor: '.combat-announce',
         placement: 'bottom',
       });
     }
-    g().selectUnit(null);
-    g().endTurn();
-    await wait(1200);
+    await wait(600);
     await note({
       id: 'siege-freed',
       title: 'The queue empties — they’re back!',
-      body: 'The base is free, so Blue’s Mage AND Priest respawn onto it immediately — each on its home square, or the closest free base square if something stands there. Hold an enemy base to keep their leaders dead; break the siege to bring yours home.',
+      body: 'The moment the base cleared, Blue’s Mage AND Priest respawned onto it — each on its home square, or the closest free base square if something stands there. Hold an enemy base to keep their leaders dead; break the siege to bring yours home.',
       placement: 'center',
     });
 
-    // ---- Conquest (watch) --------------------------------------------------
-    stage((st) => {
-      st.units = st.units.filter((u) => u.owner !== 'blue' || u.id === 'blue-w1');
-      const bw = st.units.find((u) => u.id === 'blue-w1')!;
-      bw.cell = { r: 12, c: 8 };
-      st.units.find((u) => u.id === 'red-w1')!.cell = { r: 11, c: 8 };
-      st.units.find((u) => u.id === 'red-w2')!.cell = { r: 12, c: 7 };
-      st.units.find((u) => u.id === 'red-w4')!.cell = { r: 14, c: 5 };
-      st.pendingRespawns = [
-        { id: 'tut-pr-m', owner: 'blue', kind: 'mage', activated: 0 },
-        { id: 'tut-pr-p', owner: 'blue', kind: 'priest' },
-      ];
-      st.dice = mkDice(['warrior', 'warrior', 'warrior'], [3, 4, 2]);
-    });
+    // ---- Conquest (HANDS-ON: you seal the door and finish it) --------------
+    // `sealed` restores the post-siege arrangement — the kill task's re-stage
+    // must come back with the base already held, or the kill wouldn't eliminate.
+    const stageWin3 = (sealed = false) =>
+      stage((st) => {
+        st.units = st.units.filter((u) => u.owner !== 'blue' || u.id === 'blue-w1');
+        const bw = st.units.find((u) => u.id === 'blue-w1')!;
+        bw.cell = { r: 12, c: 8 };
+        st.units.find((u) => u.id === 'red-w1')!.cell = { r: 11, c: 8 };
+        st.units.find((u) => u.id === 'red-w2')!.cell = { r: 12, c: 7 };
+        st.units.find((u) => u.id === 'red-w4')!.cell = sealed ? { r: 15, c: 5 } : { r: 14, c: 5 };
+        st.pendingRespawns = [
+          { id: 'tut-pr-m', owner: 'blue', kind: 'mage', activated: 0 },
+          { id: 'tut-pr-p', owner: 'blue', kind: 'priest' },
+        ];
+        st.dice = mkDice(['warrior', 'warrior', 'warrior'], [3, 4, 2]);
+      });
+    stageWin3();
     await wait(700);
     await note({
       id: 'win3-stage',
       title: 'Victory 3 of 3 — Conquest',
-      body: 'Blue is down to ONE Warrior; its fallen Mage and Priest are queued. Watch Red seal the door and finish it.',
+      body: 'Blue is down to ONE Warrior; its fallen Mage and Priest are queued. YOU finish this: first seal the door, then destroy the last unit. Kill it too soon and the leaders respawn — the siege must come FIRST.',
       placement: 'center',
     });
-    g().selectUnit('red-w4');
-    await wait(250);
-    g().moveTo({ r: 15, c: 5 });
+    await playerTask(
+      stageWin3,
+      {
+        id: 'task-win3-siege',
+        title: 'Seal the base',
+        body: 'CLICK your southern Warrior and march it ONTO Blue’s base — with the queue locked out, nobody is coming back.',
+        placement: 'bottom',
+      },
+      () => siegedPlayers(g().game).includes('blue'),
+      async () => {
+        g().selectUnit('red-w4');
+        await wait(250);
+        g().moveTo({ r: 15, c: 5 });
+      },
+      // Only the sealing Warrior, only onto Blue's base squares.
+      { restrict: { units: ['red-w4'], dests: BLUE_BASE, actions: [] } },
+    );
     await wait(800);
     await note({
       id: 'win3-siege',
       title: 'Under siege',
-      body: 'Red stands ON Blue’s base — the queued Mage and Priest are locked out, exactly as you saw. This time, nobody is coming to break it.',
+      body: 'You stand ON Blue’s base — the queued Mage and Priest are locked out, exactly like the siege you laid before. This time, nobody is coming to break it.',
       anchor: '.siege-alert',
       placement: 'bottom',
     });
-    g().selectUnit('red-w1');
-    await wait(250);
-    {
-      const rig3 = [0.99, 0.99, 0];
-      let i3 = 0;
-      g().attack('blue-w1', ['red-w1', 'red-w2'], () => rig3[Math.min(i3++, rig3.length - 1)]);
-    }
-    await until(() => g().combatRoll !== null, 5000);
+    await playerTask(
+      () => stageWin3(true),
+      {
+        id: 'task-win3-kill',
+        title: 'Destroy the last unit',
+        body: 'Two of your Warriors flank Blue’s survivor. CLICK one, then press DOUBLE ATTACK — no units left and no way to respawn is ELIMINATION.',
+        placement: 'bottom',
+      },
+      () => !unitById(g().game, 'blue-w1'),
+      async () => {
+        const rig3 = [0.99, 0.99, 0];
+        let i3 = 0;
+        g().selectUnit('red-w1');
+        g().attack('blue-w1', ['red-w1', 'red-w2'], () => rig3[Math.min(i3++, rig3.length - 1)]);
+      },
+      // The two flankers, the one survivor, DOUBLE only — scripted dice land it.
+      {
+        restrict: {
+          units: ['red-w1', 'red-w2'],
+          dests: [],
+          actions: ['attack'],
+          targets: ['blue-w1'],
+          minAttackers: 2,
+          rig: [0.99, 0.99, 0],
+        },
+      },
+    );
+    await until(() => g().combatRoll !== null, 6000);
     await wait(400);
     {
       const roll = g().combatRoll;
@@ -735,7 +808,7 @@ export async function runTutorial(onDone: () => void) {
       await note({
         id: 'win3-kill',
         title: 'The last unit falls',
-        body: `Red rolled ${a}, Blue rolled ${d} — the final Blue Warrior is defeated. Zero units on the board and every respawn besieged: Blue is ELIMINATED.`,
+        body: `You rolled ${a} against Blue’s ${d} — the final Blue Warrior is defeated. Zero units on the board and every respawn besieged: Blue is ELIMINATED.`,
         anchor: '.combat-announce',
         placement: 'bottom',
       });
@@ -743,7 +816,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'win3-done',
       title: 'Conquest Victory!',
-      body: 'Last player standing takes the game — the third road to victory.',
+      body: 'Last player standing takes the game — the third road to victory. You sealed it and you struck it.',
       anchor: '.winner',
       placement: 'left',
     });
@@ -752,7 +825,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'wrap',
       title: 'You’ve played it all',
-      body: 'You rolled, moved, fought, resurrected, collected, cast Bolt and Nova, and won by MageStone and Ritual yourself. The Rule Book (golden book, top right) has every detail. Go play!',
+      body: 'You rolled, moved, fought, resurrected, collected, cast Bolt and Nova, laid a siege and broke one, and won by MageStone, Ritual AND Conquest yourself. The Rule Book (golden book, top right) has every detail. Go play!',
       placement: 'center',
       gotItLabel: 'Finish',
     });

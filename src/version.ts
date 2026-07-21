@@ -1,8 +1,9 @@
 // Bumped with each notable alpha update — shown in the landing footer.
-export const VERSION = 'v0.7.2-alpha';
+export const VERSION = 'v0.7.3-alpha';
 export const UPDATED = '21 July 2026';
 
 export const PATCH_NOTES = [
+  'v0.7.3 — Siege and Conquest are now hands-on in the tutorial: you lay the siege yourself, switch sides to break it as Blue (freeing the respawn queue the instant the intruder falls), then seal Blue’s base and land the finishing blow for a Conquest victory. Every scene of the tutorial is now played, not watched.',
   'v0.7.2 — Tutorial guardrails: during each hands-on step only the taught move works. Wrong units, wrong squares and wrong buttons simply don’t respond, so you can’t derail the lesson — walk the Priest only onto the gravestone, launch only the Triple Attack, step the Mage only onto your base.',
   'v0.7.1 — Real orchestral soundtrack: a cinematic fantasy theme on the main menu and a calm magical score during matches (licensed from the Ultimate Game Music Collection), replacing the old synthesised tune. Crossfades between screens; the music toggle works as before.',
   'v0.7 — The tutorial is now HANDS-ON: you roll, discard, move, fight, resurrect, collect, cast Bolt & Nova and win by MageStone and Ritual yourself, coached step by step. Dice tags are now M · P · W1 W2 W3. Feedback submissions are readable by everyone. Ranked is paused during the playtest.',

@@ -68,6 +68,10 @@ export interface TutRestrict {
   targets?: string[];
   /** A coordinated attack must bring at least this many attackers. */
   minAttackers?: number;
+  /** Scripted dice for the task's combat (attacker rolls first, defender
+   *  last) — staged demo fights must land the taught outcome even when the
+   *  PLAYER throws the punch. Omitted = real dice. */
+  rig?: number[];
 }
 
 /** Does the restriction (if any) allow this action? */
@@ -602,7 +606,15 @@ export const useGame = create<UIState>((set, get) => ({
           defenseFaces: target.kind === 'mage' ? `d${magePowerDie(target.activated)}` : 'd6',
         };
       }
-      const game2 = resolveAttack(game, ids, targetId, rng);
+      // Tutorial rig: a task's staged fight rolls its scripted dice when the
+      // player triggers it through the UI (script callers pass rng directly).
+      let rngUsed = rng;
+      if (!rngUsed && r?.rig) {
+        const seq = r.rig;
+        let i = 0;
+        rngUsed = () => seq[Math.min(i++, seq.length - 1)];
+      }
+      const game2 = resolveAttack(game, ids, targetId, rngUsed);
       if (game2 === game) return {};
       const out: Partial<UIState> = {
         game: game2,

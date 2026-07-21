@@ -1,8 +1,9 @@
 // Bumped with each notable alpha update — shown in the landing footer.
-export const VERSION = 'v0.7.1-alpha';
+export const VERSION = 'v0.7.2-alpha';
 export const UPDATED = '21 July 2026';
 
 export const PATCH_NOTES = [
+  'v0.7.2 — Tutorial guardrails: during each hands-on step only the taught move works. Wrong units, wrong squares and wrong buttons simply don’t respond, so you can’t derail the lesson — walk the Priest only onto the gravestone, launch only the Triple Attack, step the Mage only onto your base.',
   'v0.7.1 — Real orchestral soundtrack: a cinematic fantasy theme on the main menu and a calm magical score during matches (licensed from the Ultimate Game Music Collection), replacing the old synthesised tune. Crossfades between screens; the music toggle works as before.',
   'v0.7 — The tutorial is now HANDS-ON: you roll, discard, move, fight, resurrect, collect, cast Bolt & Nova and win by MageStone and Ritual yourself, coached step by step. Dice tags are now M · P · W1 W2 W3. Feedback submissions are readable by everyone. Ranked is paused during the playtest.',
   'v0.6.5 — The dice tray now names each die (Mage · Priest · Warrior, in their colours). One AI strength: Easy and Medium are gone — every bot is the full AI Bot brain, with more human pacing (it visibly weighs its big attacks) and varied play from game to game.',

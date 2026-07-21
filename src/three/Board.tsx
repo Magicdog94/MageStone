@@ -396,15 +396,16 @@ export function Board() {
   const game = useGame((s) => s.game);
   const selUnit = useGame((s) => s.selectedUnitId);
   const selDie = useGame((s) => s.selectedDieId);
+  const tutRestrict = useGame((s) => s.tutRestrict);
 
   const legalKeys = useMemo(
-    () => new Set(moveDestinations(game, selUnit, selDie).map(cellKey)),
-    [game, selUnit, selDie],
+    () => new Set(moveDestinations(game, selUnit, selDie, tutRestrict).map(cellKey)),
+    [game, selUnit, selDie, tutRestrict],
   );
   const targetKeys = useMemo(() => {
-    const ids = attackTargetIds(game, selUnit);
+    const ids = attackTargetIds(game, selUnit, tutRestrict);
     return new Set(game.units.filter((u) => ids.has(u.id)).map((u) => cellKey(u.cell)));
-  }, [game, selUnit]);
+  }, [game, selUnit, tutRestrict]);
 
   // Home-base tiles get their seated team's colour. Seats are decoupled from
   // colour, so look up which playing colour occupies each edge this game.

@@ -1,5 +1,6 @@
-import { useGame } from '../../store';
+import { useGame, type TutRestrict } from '../../store';
 import { legalMoves, unitById, warriorCount } from '../../game/rules';
+import { NEXUS_CELLS } from '../../game/board';
 import { createGame } from '../../game/setup';
 import type { Callout } from './useTutorial';
 import type { Cell, Die, DieKind, GameState } from '../../game/types';
@@ -31,29 +32,42 @@ const dist = (a: Cell, b: Cell) => Math.abs(a.r - b.r) + Math.abs(a.c - b.c);
 // through), watch the game state until the player has done it, and NEVER
 // wedge — after two patient attempts (re-staging the board in case they broke
 // the setup) the script quietly performs the step itself and moves on.
+//
+// Each task also carries GUARDRAILS (store.tutRestrict): while the task is
+// live, only the interaction the step teaches is accepted — wrong units,
+// wrong squares, wrong actions and End Turn simply don't respond, so the
+// player can explore clicks freely without ever wrecking the staged lesson.
 
 async function playerTask(
   setup: (() => void) | null,
   c: Callout,
   pred: () => boolean,
   fallback: () => void | Promise<void>,
-  timeoutMs = 90000,
+  opts: { timeoutMs?: number; restrict?: TutRestrict } = {},
 ): Promise<void> {
+  const timeoutMs = opts.timeoutMs ?? 90000;
   guard();
-  for (let attempt = 0; attempt < 2; attempt++) {
-    if (attempt > 0) setup?.(); // the board may have drifted — line it up again
-    await wait(attempt > 0 ? 700 : 0);
-    guard();
-    useTutorial.getState().task(
-      attempt === 0 ? c : { ...c, body: `No rush — here it is again. ${c.body}` },
-    );
-    const t0 = Date.now();
-    while (!pred() && Date.now() - t0 < timeoutMs) {
-      await wait(150);
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) setup?.(); // the board may have drifted — line it up again
+      await wait(attempt > 0 ? 700 : 0);
       guard();
+      g().setTutRestrict(opts.restrict ?? null);
+      useTutorial.getState().task(
+        attempt === 0 ? c : { ...c, body: `No rush — here it is again. ${c.body}` },
+      );
+      const t0 = Date.now();
+      while (!pred() && Date.now() - t0 < timeoutMs) {
+        await wait(150);
+        guard();
+      }
+      g().setTutRestrict(null);
+      useTutorial.getState().clearTask();
+      if (pred()) return;
     }
-    useTutorial.getState().clearTask();
-    if (pred()) return;
+  } finally {
+    // Skips/cancellations mid-task must lift the guardrails too.
+    useGame.getState().setTutRestrict(null);
   }
   await fallback(); // the show must go on
   await until(pred, 8000);
@@ -155,7 +169,7 @@ export async function runTutorial(onDone: () => void) {
       },
       () => g().game.turnPhase !== 'roll' && !g().rolling,
       () => g().roll(),
-      120000,
+      { timeoutMs: 120000, restrict: { units: [], dests: [], actions: ['roll'] } },
     );
     await until(() => !g().rolling, 15000);
     await wait(400);
@@ -184,6 +198,8 @@ export async function runTutorial(onDone: () => void) {
         const worst = [...live].sort((a, b) => a.value - b.value).slice(0, 2);
         for (const d of worst) g().discard(d.id);
       },
+      // Any two dice are a fine choice — but ONLY discarding (and its Undo).
+      { restrict: { units: [], dests: [], actions: ['discard', 'undo'] } },
     );
     await wait(300);
     await note({
@@ -212,6 +228,8 @@ export async function runTutorial(onDone: () => void) {
         );
         if (w) stepToward(w.id, { r: 8, c: 8 });
       },
+      // Any unit, any legal square — but movement only (no ending the turn).
+      { restrict: { actions: [] } },
     );
     await wait(500);
     await note({
@@ -260,7 +278,18 @@ export async function runTutorial(onDone: () => void) {
         g().selectUnit('red-w1');
         g().attack('blue-w1', ['red-w1', 'red-w2', 'red-w3'], () => rig[Math.min(i++, rig.length - 1)]);
       },
-      120000,
+      {
+        timeoutMs: 120000,
+        // The three surrounding Warriors, the one enemy, TRIPLE only — no
+        // wandering off and breaking the ring.
+        restrict: {
+          units: ['red-w1', 'red-w2', 'red-w3'],
+          dests: [],
+          actions: ['attack'],
+          targets: ['blue-w1'],
+          minAttackers: 3,
+        },
+      },
     );
     await until(() => g().combatRoll !== null, 6000);
     await wait(400);
@@ -319,6 +348,8 @@ export async function runTutorial(onDone: () => void) {
         g().selectUnit('red-p');
         g().doResurrect();
       },
+      // Only the Priest, only the gravestone square, only Resurrect.
+      { restrict: { units: ['red-p'], dests: [{ r: 5, c: 11 }], actions: ['resurrect'] } },
     );
     await wait(600);
     await note({
@@ -354,6 +385,8 @@ export async function runTutorial(onDone: () => void) {
         g().selectUnit('red-m');
         g().collectStones();
       },
+      // Only the Mage, only the stone's square, only Collect.
+      { restrict: { units: ['red-m'], dests: [{ r: 5, c: 8 }], actions: ['collect'] } },
     );
     await note({
       id: 'carried',
@@ -384,6 +417,8 @@ export async function runTutorial(onDone: () => void) {
         g().selectUnit('red-m');
         g().activateStones();
       },
+      // The Mage stays home: no movement, just Activate.
+      { restrict: { units: ['red-m'], dests: [], actions: ['activate'] } },
     );
     await note({
       id: 'gold',
@@ -417,7 +452,11 @@ export async function runTutorial(onDone: () => void) {
         g().selectUnit('red-m');
         g().castBolt('blue-w1');
       },
-      120000,
+      {
+        timeoutMs: 120000,
+        // Only the Mage, no walking, only Bolt at the staged target.
+        restrict: { units: ['red-m'], dests: [], actions: ['bolt'], targets: ['blue-w1'] },
+      },
     );
     await wait(1200);
     await note({
@@ -462,6 +501,8 @@ export async function runTutorial(onDone: () => void) {
         g().selectUnit('red-m');
         g().castNova(() => novaRig[Math.min(ni++, novaRig.length - 1)]);
       },
+      // Only the Mage, standing its ground, only Nova.
+      { restrict: { units: ['red-m'], dests: [], actions: ['nova'] } },
     );
     await wait(1800);
     await note({
@@ -496,7 +537,16 @@ export async function runTutorial(onDone: () => void) {
         g().selectUnit('red-m');
         g().activateStones();
       },
-      120000,
+      {
+        timeoutMs: 120000,
+        // Only the Mage, only home-base squares, only Activate. (Occupied base
+        // squares never glow — legalMoves filters them before this list does.)
+        restrict: {
+          units: ['red-m'],
+          dests: Array.from({ length: 8 }, (_, i) => ({ r: 0, c: 4 + i })),
+          actions: ['activate'],
+        },
+      },
     );
     await wait(600);
     await note({
@@ -531,6 +581,8 @@ export async function runTutorial(onDone: () => void) {
         g().selectUnit('red-p');
         g().doRitual();
       },
+      // Only the Priest, only into the Nexus, only Begin Ritual.
+      { restrict: { units: ['red-p'], dests: [...NEXUS_CELLS], actions: ['ritual'] } },
     );
     await wait(400);
     await note({
@@ -707,6 +759,7 @@ export async function runTutorial(onDone: () => void) {
   } catch (e) {
     if (e !== CANCELLED) throw e;
   } finally {
+    useGame.getState().setTutRestrict(null); // never leak guardrails into real play
     running = false;
     onDone();
   }

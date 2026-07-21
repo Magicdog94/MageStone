@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { attackOptions, unitActions, useGame } from '../store';
+import { attackOptions, tutAllows, unitActions, useGame } from '../store';
 import { useNet } from '../net/useNet';
 import { usePlayerLabel } from './playerNames';
 import { COLORS } from '../three/coords';
@@ -246,8 +246,10 @@ export function HUD() {
   }, [game.players.length]);
 
   const selectedUnit = selectedUnitId ? unitById(game, selectedUnitId) : undefined;
-  const actions = unitActions(game, selectedUnitId);
-  const attackOpts = myTurn ? attackOptions(game, selectedUnitId) : [];
+  // Tutorial guardrails: during a hands-on task only the taught buttons render.
+  const tutRestrict = useGame((s) => s.tutRestrict);
+  const actions = unitActions(game, selectedUnitId, tutRestrict);
+  const attackOpts = myTurn ? attackOptions(game, selectedUnitId, tutRestrict) : [];
   const phase = game.turnPhase;
 
   const dleft = phase === 'discard' ? discardsLeft(game) : 0;
@@ -394,6 +396,8 @@ export function HUD() {
               {(() => {
                 const die = game.dice.find((d) => d.id === selectedDieId);
                 const moved = game.unitsMovedThisTurn.includes(selectedUnit.id);
+                // A task with no movement in it hides the "move up to N" hint.
+                if (tutRestrict?.dests && tutRestrict.dests.length === 0) return null;
                 return die && !moved ? (
                   <div className="muted">
                     die {die.value} — move up to {die.value} squares
@@ -417,7 +421,7 @@ export function HUD() {
                 ))}
                 {/* Mage sorcery: BOLT (ranged, 1 stone) arms click-to-target
                     mode; NOVA (3 stones) blasts everything within 1 square. */}
-                {myTurn && selectedUnit.kind === 'mage' && canBolt(game, selectedUnit.id) && (
+                {myTurn && selectedUnit.kind === 'mage' && canBolt(game, selectedUnit.id) && tutAllows(tutRestrict, 'bolt') && (
                   <button
                     className={`primary attack-btn${boltMode ? ' arming' : ''}`}
                     onClick={() => setBoltMode(!boltMode)}
@@ -432,7 +436,7 @@ export function HUD() {
                     <small>1 stone · range {mageActionDieValue(game, selectedUnit.id)}</small>
                   </button>
                 )}
-                {myTurn && selectedUnit.kind === 'mage' && canNova(game, selectedUnit.id) && (
+                {myTurn && selectedUnit.kind === 'mage' && canNova(game, selectedUnit.id) && tutAllows(tutRestrict, 'nova') && (
                   <button
                     className="primary attack-btn"
                     onClick={() => castNova()}
@@ -479,7 +483,7 @@ export function HUD() {
             <>
               {/* mis-clicked a discard? take it back — until anything moves/acts
                   (available in the hands-on tutorial too — it teaches it) */}
-              {canUndoDiscard(game) && (
+              {canUndoDiscard(game) && tutAllows(tutRestrict, 'undo') && (
                 <button
                   className="ghost"
                   onClick={undoDiscard}
@@ -493,7 +497,7 @@ export function HUD() {
                   Roll Dice
                 </button>
               )}
-              {phase === 'act' && (
+              {phase === 'act' && tutAllows(tutRestrict, 'endTurn') && (
                 <button className="primary" onClick={endTurn}>
                   End Turn
                 </button>

@@ -29,12 +29,50 @@ import {
   setRolledValues,
   unitById,
 } from './game/rules';
+import { sameCell } from './game/board';
 import type { Cell, GameState, PlayerColor, UnitKind } from './game/types';
 import type { BotLevel } from './game/bot';
 
 export type HealthBarMode = 'off' | 'always' | 'hover';
 export type LayoutMode = 'desktop' | 'mobile';
 export type ModalId = 'newGame' | 'settings' | null;
+
+// ---- Tutorial task guardrails ----------------------------------------------
+// While a hands-on tutorial task is live, only the interaction the step
+// teaches is accepted: the UI hides every other choice and the store refuses
+// it, so a stray click can never wreck the staged lesson (move the Priest away
+// from the gravestone, single-attack instead of triple, end the turn…).
+// Null — the usual case — means no restriction.
+
+export type TutActionName =
+  | 'roll'
+  | 'discard'
+  | 'undo'
+  | 'attack'
+  | 'bolt'
+  | 'nova'
+  | 'collect'
+  | 'activate'
+  | 'resurrect'
+  | 'ritual'
+  | 'endTurn';
+
+export interface TutRestrict {
+  /** Unit ids the player may select (deselecting is always allowed). */
+  units?: string[];
+  /** Allowed move destinations; [] = this step involves no movement. */
+  dests?: Cell[];
+  /** Action verbs allowed this step ([] = none). */
+  actions?: TutActionName[];
+  /** Attack / bolt target unit ids allowed. */
+  targets?: string[];
+  /** A coordinated attack must bring at least this many attackers. */
+  minAttackers?: number;
+}
+
+/** Does the restriction (if any) allow this action? */
+export const tutAllows = (r: TutRestrict | null | undefined, a: TutActionName): boolean =>
+  !r || !r.actions || r.actions.includes(a);
 
 // Compact phone layout: restored from the player's saved choice, else
 // auto-detected once from the device (coarse pointer or a small viewport —
@@ -157,6 +195,9 @@ interface UIState {
   started: boolean;
   /** True while the guided Tutorial mode is running (TutorialCoach drives play). */
   tutorial: boolean;
+  /** Live task guardrails (hands-on tutorial only) — see TutRestrict above. */
+  tutRestrict: TutRestrict | null;
+  setTutRestrict: (r: TutRestrict | null) => void;
 
   /** Online multiplayer: true for a networked match; `myColor` is the colour this
    *  client controls (null = local hot-seat, where every colour is controllable). */
@@ -277,6 +318,7 @@ export const useGame = create<UIState>((set, get) => ({
   modal: 'newGame',
   started: false,
   tutorial: false,
+  tutRestrict: null,
   online: false,
   myColor: null,
   bots: {},
@@ -291,6 +333,7 @@ export const useGame = create<UIState>((set, get) => ({
       botController: isHost,
       started: true,
       tutorial: false,
+      tutRestrict: null,
       modal: null,
       selectedUnitId: null,
       selectedDieId: null,
@@ -306,6 +349,7 @@ export const useGame = create<UIState>((set, get) => ({
       botController: true,
       started: false,
       tutorial: false,
+      tutRestrict: null,
       modal: 'newGame',
       game: createGame(s.playerColors, s.stoneLayoutId),
       selectedUnitId: null,
@@ -321,6 +365,7 @@ export const useGame = create<UIState>((set, get) => ({
       botController: true,
       started: true,
       tutorial: true,
+      tutRestrict: null,
       modal: null,
       game: createTutorialGame(),
       selectedUnitId: null,
@@ -361,8 +406,11 @@ export const useGame = create<UIState>((set, get) => ({
         modal: null,
         started: true,
         tutorial: false,
+        tutRestrict: null,
       };
     }),
+
+  setTutRestrict: (r) => set({ tutRestrict: r }),
 
   openModal: (modal) => set({ modal }),
   closeModal: () => set({ modal: null }),
@@ -420,7 +468,7 @@ export const useGame = create<UIState>((set, get) => ({
 
   roll: () => {
     set((s) => {
-      if (outOfTurn(s)) return {};
+      if (outOfTurn(s) || !tutAllows(s.tutRestrict, 'roll')) return {};
       return {
         game: rollDice(s.game),
         selectedUnitId: null,
@@ -455,11 +503,15 @@ export const useGame = create<UIState>((set, get) => ({
     set((s) => (outOfTurn(s) ? {} : { game: setRolledValues(s.game, values), rolling: false })),
 
   discard: (dieId) =>
-    set((s) => (s.rolling || outOfTurn(s) ? {} : { game: discardDie(s.game, dieId) })),
+    set((s) =>
+      s.rolling || outOfTurn(s) || !tutAllows(s.tutRestrict, 'discard')
+        ? {}
+        : { game: discardDie(s.game, dieId) },
+    ),
 
   undoDiscard: () =>
     set((s) => {
-      if (s.rolling || outOfTurn(s)) return {};
+      if (s.rolling || outOfTurn(s) || !tutAllows(s.tutRestrict, 'undo')) return {};
       const game = undoDiscardRule(s.game);
       return game === s.game ? {} : { game, selectedUnitId: null, selectedDieId: null };
     }),
@@ -470,6 +522,8 @@ export const useGame = create<UIState>((set, get) => ({
       if (outOfTurn(s)) return {};
       const unit = unitById(s.game, unitId);
       if (!unit || unit.owner !== s.game.current) return {};
+      // Tutorial guardrail: only the unit(s) the live task teaches with.
+      if (s.tutRestrict?.units && !s.tutRestrict.units.includes(unitId)) return {};
       const die = s.game.dice.find((d) => d.id === s.selectedDieId);
       let dieId = die && canDieMoveUnit(die, unit, s.game) ? s.selectedDieId : null;
       // Unit-first flow: clicking a unit with no (matching) die selected
@@ -498,6 +552,8 @@ export const useGame = create<UIState>((set, get) => ({
     set((s) => {
       const { selectedUnitId, selectedDieId } = s;
       if (!selectedUnitId || !selectedDieId || outOfTurn(s)) return {};
+      // Tutorial guardrail: only the square(s) the live task points at.
+      if (s.tutRestrict?.dests && !s.tutRestrict.dests.some((c) => sameCell(c, dest))) return {};
       const game = moveUnit(s.game, selectedUnitId, selectedDieId, dest);
       if (game === s.game) return {};
       // Keep the unit selected (it may still act); drop the spent die.
@@ -506,7 +562,7 @@ export const useGame = create<UIState>((set, get) => ({
 
   endTurn: () =>
     set((s) =>
-      outOfTurn(s)
+      outOfTurn(s) || !tutAllows(s.tutRestrict, 'endTurn')
         ? {}
         : { game: endTurn(s.game), selectedUnitId: null, selectedDieId: null, boltMode: false },
     ),
@@ -520,6 +576,15 @@ export const useGame = create<UIState>((set, get) => ({
           ? attackerIds
           : plannedAttackers(game, selectedUnitId, targetId);
       if (ids.length === 0) return {};
+      // Tutorial guardrail: only the taught attack (target + coordination size).
+      const r = s.tutRestrict;
+      if (
+        r &&
+        (!tutAllows(r, 'attack') ||
+          (r.targets && !r.targets.includes(targetId)) ||
+          (r.minAttackers !== undefined && ids.length < r.minAttackers))
+      )
+        return {};
       // Announce the matchup the moment the attack is declared — who, whom,
       // and which dice — so the fight is readable before anything lands.
       const lead = unitById(game, ids[0]);
@@ -559,12 +624,15 @@ export const useGame = create<UIState>((set, get) => ({
       return out;
     }),
 
-  setBoltMode: (on) => set({ boltMode: on }),
+  setBoltMode: (on) => set((s) => (on && !tutAllows(s.tutRestrict, 'bolt') ? {} : { boltMode: on })),
 
   castBolt: (targetId, rng) => {
     const s = get();
     const mageId = s.selectedUnitId;
     if (!mageId || outOfTurn(s)) return;
+    // Tutorial guardrail: only the taught bolt at the taught target.
+    if (!tutAllows(s.tutRestrict, 'bolt')) return;
+    if (s.tutRestrict?.targets && !s.tutRestrict.targets.includes(targetId)) return;
     const game = s.game;
     const mage = unitById(game, mageId);
     const target = unitById(game, targetId);
@@ -606,7 +674,7 @@ export const useGame = create<UIState>((set, get) => ({
   castNova: (rng) => {
     const s = get();
     const mageId = s.selectedUnitId;
-    if (!mageId || outOfTurn(s)) return;
+    if (!mageId || outOfTurn(s) || !tutAllows(s.tutRestrict, 'nova')) return;
     const game = s.game;
     const mage = unitById(game, mageId);
     if (!mage) return;
@@ -646,28 +714,28 @@ export const useGame = create<UIState>((set, get) => ({
 
   collectStones: () =>
     set((s) => {
-      if (!s.selectedUnitId || outOfTurn(s)) return {};
+      if (!s.selectedUnitId || outOfTurn(s) || !tutAllows(s.tutRestrict, 'collect')) return {};
       const game = collect(s.game, s.selectedUnitId);
       return game === s.game ? {} : { game };
     }),
 
   activateStones: () =>
     set((s) => {
-      if (!s.selectedUnitId || outOfTurn(s)) return {};
+      if (!s.selectedUnitId || outOfTurn(s) || !tutAllows(s.tutRestrict, 'activate')) return {};
       const game = activate(s.game, s.selectedUnitId);
       return game === s.game ? {} : { game };
     }),
 
   doResurrect: () =>
     set((s) => {
-      if (!s.selectedUnitId || outOfTurn(s)) return {};
+      if (!s.selectedUnitId || outOfTurn(s) || !tutAllows(s.tutRestrict, 'resurrect')) return {};
       const game = resurrect(s.game, s.selectedUnitId);
       return game === s.game ? {} : { game, selectedUnitId: null };
     }),
 
   doRitual: () =>
     set((s) => {
-      if (!s.selectedUnitId || outOfTurn(s)) return {};
+      if (!s.selectedUnitId || outOfTurn(s) || !tutAllows(s.tutRestrict, 'ritual')) return {};
       const game = beginRitual(s.game, s.selectedUnitId);
       return game === s.game ? {} : { game };
     }),
@@ -689,23 +757,44 @@ useGame.subscribe((s) => {
 
 // ---- Derived helpers used by the 3D view (pure; computed in components) ----
 
-export function moveDestinations(game: GameState, unitId: string | null, dieId: string | null): Cell[] {
+export function moveDestinations(
+  game: GameState,
+  unitId: string | null,
+  dieId: string | null,
+  restrict?: TutRestrict | null,
+): Cell[] {
   if (game.turnPhase !== 'act' || !unitId || !dieId) return [];
   const unit = unitById(game, unitId);
   const die = game.dice.find((d) => d.id === dieId);
   if (!unit || !die || !canDieMoveUnit(die, unit, game)) return [];
-  return legalMoves(game, unit, die.value);
+  const all = legalMoves(game, unit, die.value);
+  // Tutorial guardrail: only the taught square(s) glow.
+  return restrict?.dests ? all.filter((m) => restrict.dests!.some((c) => sameCell(c, m))) : all;
 }
 
-export function attackTargetIds(game: GameState, unitId: string | null): Set<string> {
+export function attackTargetIds(
+  game: GameState,
+  unitId: string | null,
+  restrict?: TutRestrict | null,
+): Set<string> {
   if (game.turnPhase !== 'act' || !unitId) return new Set();
-  return new Set(attackTargets(game, unitId).map((u) => u.id));
+  if (restrict && !tutAllows(restrict, 'attack')) return new Set();
+  let targets = attackTargets(game, unitId);
+  if (restrict?.targets) targets = targets.filter((u) => restrict.targets!.includes(u.id));
+  return new Set(targets.map((u) => u.id));
 }
 
 /** Enemies the selected Mage could BOLT (used while bolt-targeting). */
-export function boltTargetIds(game: GameState, unitId: string | null): Set<string> {
+export function boltTargetIds(
+  game: GameState,
+  unitId: string | null,
+  restrict?: TutRestrict | null,
+): Set<string> {
   if (game.turnPhase !== 'act' || !unitId) return new Set();
-  return new Set(boltTargets(game, unitId).map((u) => u.id));
+  if (restrict && !tutAllows(restrict, 'bolt')) return new Set();
+  let targets = boltTargets(game, unitId);
+  if (restrict?.targets) targets = targets.filter((u) => restrict.targets!.includes(u.id));
+  return new Set(targets.map((u) => u.id));
 }
 
 /** One selectable attack for the action bar: how many attackers coordinate, who
@@ -725,11 +814,17 @@ export interface AttackOption {
  * Single / Double / Triple for a Warrior (as coordinating Warriors + free dice
  * allow) or a lone Attack for a Mage (with its power die — Mages can't coordinate).
  */
-export function attackOptions(game: GameState, unitId: string | null): AttackOption[] {
+export function attackOptions(
+  game: GameState,
+  unitId: string | null,
+  restrict?: TutRestrict | null,
+): AttackOption[] {
   if (game.turnPhase !== 'act' || !unitId) return [];
+  if (restrict && !tutAllows(restrict, 'attack')) return [];
   const unit = unitById(game, unitId);
   if (!unit || unit.kind === 'priest') return [];
-  const targets = attackTargets(game, unitId);
+  let targets = attackTargets(game, unitId);
+  if (restrict?.targets) targets = targets.filter((u) => restrict.targets!.includes(u.id));
   if (targets.length === 0) return [];
   // Pick the single best target: highest win odds at full coordination, breaking
   // ties toward the more valuable enemy (mage > priest > warrior).
@@ -752,7 +847,9 @@ export function attackOptions(game: GameState, unitId: string | null): AttackOpt
   const planned = plannedAttackers(game, unitId, best.id);
   const labels = ['Single Attack', 'Double Attack', 'Triple Attack'];
   const opts: AttackOption[] = [];
-  for (let n = 1; n <= Math.min(3, planned.length); n++) {
+  // Tutorial guardrail: only the taught coordination size(s) are offered.
+  const minN = restrict?.minAttackers ?? 1;
+  for (let n = minN; n <= Math.min(3, planned.length); n++) {
     const attackerIds = planned.slice(0, n);
     opts.push({
       label: labels[n - 1],
@@ -765,13 +862,13 @@ export function attackOptions(game: GameState, unitId: string | null): AttackOpt
   return opts;
 }
 
-export function unitActions(game: GameState, unitId: string | null) {
+export function unitActions(game: GameState, unitId: string | null, restrict?: TutRestrict | null) {
   if (!unitId) return { collect: false, activate: false, resurrect: false, ritual: false };
   return {
-    collect: canCollect(game, unitId),
-    activate: canActivate(game, unitId),
-    resurrect: canResurrect(game, unitId),
-    ritual: canRitual(game, unitId),
+    collect: canCollect(game, unitId) && tutAllows(restrict, 'collect'),
+    activate: canActivate(game, unitId) && tutAllows(restrict, 'activate'),
+    resurrect: canResurrect(game, unitId) && tutAllows(restrict, 'resurrect'),
+    ritual: canRitual(game, unitId) && tutAllows(restrict, 'ritual'),
   };
 }
 

@@ -597,14 +597,15 @@ function UnitPiece({ unit }: { unit: Unit }) {
     game.current === unit.owner && !bots[unit.owner] && (!online || unit.owner === myColor);
   const boltMode = useGame((s) => s.boltMode);
   const castBolt = useGame((s) => s.castBolt);
+  const tutRestrict = useGame((s) => s.tutRestrict);
   // In bolt-targeting mode the Mage's RANGED targets glow instead of melee ones.
   const isBoltTarget = useMemo(
-    () => boltMode && boltTargetIds(game, selectedUnitId).has(unit.id),
-    [boltMode, game, selectedUnitId, unit.id],
+    () => boltMode && boltTargetIds(game, selectedUnitId, tutRestrict).has(unit.id),
+    [boltMode, game, selectedUnitId, tutRestrict, unit.id],
   );
   const isMeleeTarget = useMemo(
-    () => attackTargetIds(game, selectedUnitId).has(unit.id),
-    [game, selectedUnitId, unit.id],
+    () => attackTargetIds(game, selectedUnitId, tutRestrict).has(unit.id),
+    [game, selectedUnitId, tutRestrict, unit.id],
   );
   const isTarget = boltMode ? isBoltTarget : isMeleeTarget;
   // Pre-attack chance of victory for the attack the selected unit would launch.

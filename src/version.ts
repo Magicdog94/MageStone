@@ -1,8 +1,9 @@
 // Bumped with each notable alpha update — shown in the landing footer.
-export const VERSION = 'v0.7.0-alpha';
-export const UPDATED = '18 July 2026';
+export const VERSION = 'v0.7.1-alpha';
+export const UPDATED = '21 July 2026';
 
 export const PATCH_NOTES = [
+  'v0.7.1 — Real orchestral soundtrack: a cinematic fantasy theme on the main menu and a calm magical score during matches (licensed from the Ultimate Game Music Collection), replacing the old synthesised tune. Crossfades between screens; the music toggle works as before.',
   'v0.7 — The tutorial is now HANDS-ON: you roll, discard, move, fight, resurrect, collect, cast Bolt & Nova and win by MageStone and Ritual yourself, coached step by step. Dice tags are now M · P · W1 W2 W3. Feedback submissions are readable by everyone. Ranked is paused during the playtest.',
   'v0.6.5 — The dice tray now names each die (Mage · Priest · Warrior, in their colours). One AI strength: Easy and Medium are gone — every bot is the full AI Bot brain, with more human pacing (it visibly weighs its big attacks) and varied play from game to game.',
   'v0.6.4 — Undo button: discarded the wrong die? Take it back — available until any unit moves or acts that turn. Works in online games too.',

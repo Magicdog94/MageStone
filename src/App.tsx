@@ -46,6 +46,12 @@ export default function App() {
     return () => window.removeEventListener('pointerdown', begin);
   }, []);
 
+  // Route the score: the title theme on the entry screens, the adventure loop
+  // once a match is on the board (crossfades inside audio/music).
+  useEffect(() => {
+    useMusic.getState().setScene(screen === 'game' ? 'game' : 'menu');
+  }, [screen]);
+
   // Sound effects: UI clicks + game events (moves, clashes, dice, horns…).
   useEffect(() => initSfx(), []);
 

@@ -1394,13 +1394,12 @@ body.ui-mobile .die-label {
 .entry-footer-links .link-btn {
   font-size: var(--text-xs);
 }
-/* On the landing COVER the box art is the page, and its bottom plaque reads
-   "FANTASY STRATEGY BOARD GAME" — lift the footer clear of it so no artwork
-   wording is ever covered (the plaque's top sits ~12% up the art on 16:9-ish
-   desktop viewports; on phones the plaque is cropped off and the mobile
-   override below re-anchors the footer to the bottom edge). */
+/* On the landing COVER the emblem art is the page: the MAGESTONE wordmark's
+   underline flourish ends ~89% down the art, and the baked gold frame line
+   sits ~2% from the bottom — a small lift parks the footer in the plain dark
+   band between them so no artwork is ever covered on 16:9-ish desktops. */
 .entry--cover .entry-footer {
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 13vh);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 3vh);
 }
 /* Non-cover entry screens (sign-in / lobby / room): the gilt panel's
    backdrop-filter makes it the containing block for fixed descendants, so the
@@ -2914,35 +2913,36 @@ body.ui-mobile .tut-gotit {
   inset: 0;
   overflow: hidden;
   pointer-events: none;
-  /* Emerald matte matching the colour the cover art is padded with, so it reads
-     as the green field continuing seamlessly beyond the gold border (and it's
-     what shows for the split-second before the image decodes). */
-  background: #212411;
+  /* Near-black emerald matte matching the emblem cover art's corner tone, so
+     it reads as the dark field continuing beyond the frame (and it's what
+     shows for the split-second before the image decodes). */
+  background: #050807;
 }
 .entry-photo {
   width: 100%;
   height: 100%;
   /* Cover so the hero fills the whole screen edge-to-edge on any aspect ratio
      (e.g. 16:10 laptops at 125% scale — no letterbox bars). A sliver of the
-     art's outer frame may crop on non-16:9 screens; the centred title and
-     duel stay in frame. */
+     art's outer frame may crop on non-16:9 screens; the centred emblem and
+     wordmark stay in frame. */
   object-fit: cover;
   object-position: 50% 50%;
-  /* The 1920×1080 cover art has a ~20-25px dark MARGIN baked around its gilt
-     border (measured per side). Overscan per-axis (clipped by the wrap's
-     overflow:hidden) so that margin is cropped and the ornate border reaches
-     the screen edge on all four sides — non-uniform because the equal-pixel
-     margins are a smaller % on the wide axis. The .entry--cover::after gold
-     frame backstops whichever axis object-fit:cover crops on non-16:9 screens. */
-  transform: scale(1.028, 1.046);
+  /* The 1672×941 emblem cover has a thin dark margin outside its baked gold
+     frame line (~1.5-2% per side). A light uniform overscan (clipped by the
+     wrap's overflow:hidden) crops most of that margin so the art's frame sits
+     just inside the screen edge; the .entry--cover::after gold frame backstops
+     whichever axis object-fit:cover crops on non-16:9 screens. */
+  transform: scale(1.033);
 }
 /* gentle scrim: keep the art bright, only darken the bottom for the controls */
 .entry-photo-wrap::after {
   content: '';
   position: absolute;
   inset: 0;
-  /* Only a faint darkening at the very bottom so the controls stay legible. */
-  background: linear-gradient(180deg, rgba(3, 8, 5, 0) 70%, rgba(3, 8, 5, 0.5) 100%);
+  /* Only a faint darkening at the very bottom so the footer stays legible —
+     kept below the art's MAGESTONE wordmark (ends ~89%) so the gold lettering
+     is never dulled. */
+  background: linear-gradient(180deg, rgba(3, 8, 5, 0) 82%, rgba(3, 8, 5, 0.45) 100%);
 }
 .entry-castle {
   opacity: 0.9;
@@ -3728,11 +3728,17 @@ body.ui-mobile .menu-subitem {
 body.ui-mobile .menu-sub {
   margin-left: 18px;
 }
-/* On phones the art is top-anchored, so its bottom plaque is cropped off —
-   the footer can sit right on the bottom edge (the desktop cover rule lifts
-   it 13vh to clear the "FANTASY STRATEGY BOARD GAME" plaque). */
+/* On phones the crop window ends just past the wordmark flourish, so the
+   footer sits on the bottom edge over the thin flourish tail only (its text
+   shadows keep it legible; the desktop cover rule lifts it 3vh instead). */
 body.ui-mobile .entry--cover .entry-footer {
   bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+}
+/* The short viewport can't fit the trust line without it sitting on the
+   MAGESTONE wordmark's feet — keep just the links row on the phone cover
+   (the line still shows on desktop and on every non-cover entry screen). */
+body.ui-mobile .entry--cover .entry-footer-line {
+  display: none;
 }
 /* Entry screens on mobile: the music/fullscreen pills leave the bottom-left
    (they sat on the Early Alpha footer note) and ride top-right instead, over
@@ -3751,14 +3757,14 @@ body.ui-mobile.on-entry .fs-toggle {
   right: calc(env(safe-area-inset-right, 0px) + 8px);
 }
 /* Cover art on phones: a phone in landscape is far wider (≈2.16) than the 16:9
-   art, so object-fit:cover would crop a big band off the TOP and bottom — hiding
-   the gold star + "MageStone" wordmark the user wants visible. Anchor the art to
-   the TOP so the emblem, wordmark and top border always show (the extra height
-   is shed off the BOTTOM instead), and overscan only HORIZONTALLY so the side
-   dark margins are cropped and the gilt side borders still reach the edge. */
+   art, so object-fit:cover crops ~18% of the art's height. The emblem's tip
+   sits ~8% down and the wordmark flourish ends ~89%, so anchor the crop window
+   at 42% — both stay in frame on a 2.16 phone (the window shows ~7.5%–89.7%).
+   Overscan only HORIZONTALLY so the side dark margins crop and the art's gilt
+   side frame stays near the edge. */
 body.ui-mobile .entry-photo {
-  object-position: 50% 0%;
-  transform: scale(1.028, 1);
+  object-position: 50% 42%;
+  transform: scale(1.033, 1);
 }
 body.ui-mobile .modal {
   max-height: 96vh;

@@ -1,8 +1,9 @@
 // Bumped with each notable alpha update — shown in the landing footer.
-export const VERSION = 'v0.7.4-alpha';
-export const UPDATED = '21 July 2026';
+export const VERSION = 'v0.7.5-alpha';
+export const UPDATED = '22 July 2026';
 
 export const PATCH_NOTES = [
+  'v0.7.5 — Cleaner main menu: the castle towers, corner scrollwork and gold frame are gone from the cover — just the green fade around the MageStone emblem and wordmark now. Mobile menu re-checked: every button sits clear of the art on phones and desktops.',
   'v0.7.4 — New main-menu artwork: the gold MageStone emblem cover now fronts the game, tuned for desktop and phones (the emblem and wordmark stay in frame at any screen shape). Same menu, same controls, grander door.',
   'v0.7.3 — Siege and Conquest are now hands-on in the tutorial: you lay the siege yourself, switch sides to break it as Blue (freeing the respawn queue the instant the intruder falls), then seal Blue’s base and land the finishing blow for a Conquest victory. Every scene of the tutorial is now played, not watched.',
   'v0.7.2 — Tutorial guardrails: during each hands-on step only the taught move works. Wrong units, wrong squares and wrong buttons simply don’t respond, so you can’t derail the lesson — walk the Priest only onto the gravestone, launch only the Triple Attack, step the Mage only onto your base.',

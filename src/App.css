@@ -2520,22 +2520,9 @@ body.ui-mobile .tut-gotit {
 .entry--cover {
   place-items: stretch;
 }
-/* Gilt frame flush with the SCREEN EDGE on the main menu. The cover art's own
-   painted border gets cropped by object-fit:cover on non-16:9 screens, so this
-   CSS frame guarantees the gold border's OUTER edge meets the screen edge with
-   no bleed on every aspect ratio, in fullscreen, on desktop AND mobile. Inset
-   box-shadows can never overflow, so the outer edge is always exactly inset 0. */
-.entry--cover::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 3;
-  box-shadow:
-    inset 0 0 0 3px var(--gold),
-    inset 0 0 0 4px rgba(10, 8, 4, 0.55),
-    inset 0 0 0 5px rgba(236, 203, 120, 0.45);
-}
+/* (No screen-edge gilt frame any more: the cover art lost its baked border
+   when the background scenery was removed — the menu floats on the clean
+   green fade, so a CSS frame would reintroduce the very detail that went.) */
 .entry-cover {
   position: relative;
   z-index: 1;
@@ -2913,26 +2900,19 @@ body.ui-mobile .tut-gotit {
   inset: 0;
   overflow: hidden;
   pointer-events: none;
-  /* Near-black emerald matte matching the emblem cover art's corner tone, so
-     it reads as the dark field continuing beyond the frame (and it's what
-     shows for the split-second before the image decodes). */
-  background: #050807;
+  /* Near-black emerald matte matching the emblem cover art's corner tone
+     (what shows for the split-second before the image decodes). */
+  background: #060c09;
 }
 .entry-photo {
   width: 100%;
   height: 100%;
   /* Cover so the hero fills the whole screen edge-to-edge on any aspect ratio
-     (e.g. 16:10 laptops at 125% scale — no letterbox bars). A sliver of the
-     art's outer frame may crop on non-16:9 screens; the centred emblem and
-     wordmark stay in frame. */
+     (e.g. 16:10 laptops at 125% scale — no letterbox bars). The art is now a
+     frameless green fade around the emblem + wordmark, so whatever a non-16:9
+     screen crops is plain background — no overscan needed. */
   object-fit: cover;
   object-position: 50% 50%;
-  /* The 1672×941 emblem cover has a thin dark margin outside its baked gold
-     frame line (~1.5-2% per side). A light uniform overscan (clipped by the
-     wrap's overflow:hidden) crops most of that margin so the art's frame sits
-     just inside the screen edge; the .entry--cover::after gold frame backstops
-     whichever axis object-fit:cover crops on non-16:9 screens. */
-  transform: scale(1.033);
 }
 /* gentle scrim: keep the art bright, only darken the bottom for the controls */
 .entry-photo-wrap::after {
@@ -3759,12 +3739,9 @@ body.ui-mobile.on-entry .fs-toggle {
 /* Cover art on phones: a phone in landscape is far wider (≈2.16) than the 16:9
    art, so object-fit:cover crops ~18% of the art's height. The emblem's tip
    sits ~8% down and the wordmark flourish ends ~89%, so anchor the crop window
-   at 42% — both stay in frame on a 2.16 phone (the window shows ~7.5%–89.7%).
-   Overscan only HORIZONTALLY so the side dark margins crop and the art's gilt
-   side frame stays near the edge. */
+   at 42% — both stay in frame on a 2.16 phone (the window shows ~7.5%–89.7%). */
 body.ui-mobile .entry-photo {
   object-position: 50% 42%;
-  transform: scale(1.033, 1);
 }
 body.ui-mobile .modal {
   max-height: 96vh;

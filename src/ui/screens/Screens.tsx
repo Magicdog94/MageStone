@@ -54,7 +54,7 @@ function Mage({ color, glow, flip }: { color: string; glow: string; flip?: boole
 // art (so the SVG never flashes underneath while the real image is loading).
 // Bump COVER_VER whenever the cover image changes — the filename stays the same,
 // so the version query is what stops browsers serving a stale cached copy.
-const COVER_VER = 4;
+const COVER_VER = 5;
 const COVER_SRCS = ['/cover-art.webp', '/cover-art.png', '/cover-art.jpg'].map((s) => `${s}?v=${COVER_VER}`);
 function EntryPhoto() {
   const [idx, setIdx] = useState(0);

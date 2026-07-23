@@ -1,8 +1,9 @@
 // Bumped with each notable alpha update — shown in the landing footer.
-export const VERSION = 'v0.7.5-alpha';
-export const UPDATED = '22 July 2026';
+export const VERSION = 'v0.8.0-alpha';
+export const UPDATED = '23 July 2026';
 
 export const PATCH_NOTES = [
+  'v0.8 — The AI Bot got meaner. It now thinks half a second per move, plays out your best possible reply turn (including when your dice roll WELL) before committing to a line, hunts down any Mage a stone away from winning like it would a live Ritual, prices a besieged respawn as the near-elimination it is, and plans its dice keeps a whole turn deep. Verified: 30-0 sweep vs the old Medium brain, and it never plays weaker than the previous champion. No cheating — it sees only what you see.',
   'v0.7.5 — Cleaner main menu: the castle towers, corner scrollwork and gold frame are gone from the cover — just the green fade around the MageStone emblem and wordmark now. Mobile menu re-checked: every button sits clear of the art on phones and desktops.',
   'v0.7.4 — New main-menu artwork: the gold MageStone emblem cover now fronts the game, tuned for desktop and phones (the emblem and wordmark stay in frame at any screen shape). Same menu, same controls, grander door.',
   'v0.7.3 — Siege and Conquest are now hands-on in the tutorial: you lay the siege yourself, switch sides to break it as Blue (freeing the respawn queue the instant the intruder falls), then seal Blue’s base and land the finishing blow for a Conquest victory. Every scene of the tutorial is now played, not watched.',

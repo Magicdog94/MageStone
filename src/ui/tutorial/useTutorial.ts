@@ -43,6 +43,10 @@ interface TutorialState {
 
 // Kept outside the store: the resolver for the currently-awaited note.
 let resolveGotIt: (() => void) | null = null;
+// When the current callout appeared — a double-click on "Got it" must not
+// dismiss the NEXT note before it was ever read (back-to-back notes mount
+// within the same microtask chain, under the same button position).
+let shownAt = 0;
 
 export const useTutorial = create<TutorialState>((set, get) => ({
   callout: null,
@@ -51,15 +55,18 @@ export const useTutorial = create<TutorialState>((set, get) => ({
   note: (c) =>
     new Promise<void>((resolve) => {
       resolveGotIt = resolve;
+      shownAt = Date.now();
       set((s) => ({ callout: c, history: [...s.history, c], viewIndex: s.history.length }));
     }),
   task: (c) =>
     set((s) => {
       const t = { ...c, mode: 'task' as const };
+      shownAt = Date.now();
       return { callout: t, history: [...s.history, t], viewIndex: s.history.length };
     }),
   clearTask: () => set({ callout: null }),
   gotIt: () => {
+    if (Date.now() - shownAt < 280) return; // the tail of a double-click
     const { viewIndex, history } = get();
     // Reviewing an earlier note — step forward through history, don't resolve.
     if (viewIndex < history.length - 1) {

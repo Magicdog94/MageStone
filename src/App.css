@@ -1252,6 +1252,10 @@ body.ui-mobile .die-label {
 .actions:empty {
   display: none;
 }
+/* status text ("No plays left") must not sit flush against the buttons */
+.actions > span.muted {
+  margin-left: 8px;
+}
 .selinfo strong {
   font-size: var(--text-md);
   letter-spacing: 1px;
@@ -1566,6 +1570,11 @@ body.ui-mobile .feedback-btn {
   opacity: 0.4;
   cursor: default;
 }
+/* first tap arms the skip — the label turns into a warm confirm */
+.tut-skipbtn.tut-skiparmed {
+  color: #e8b0a0;
+  border-color: #b0604a;
+}
 /* the highlight ring; its huge box-shadow dims everything else on screen */
 .tut-spot {
   position: absolute;
@@ -1615,6 +1624,17 @@ body.ui-mobile .feedback-btn {
   color: var(--gold-bright);
   letter-spacing: 0.5px;
   margin-bottom: var(--space-2);
+  margin-right: 44px; /* clear of the step counter in the corner */
+}
+/* "12 / 46" step counter, tucked in the box's top-right corner */
+.tut-progress {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-family: var(--display);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: var(--ink-dim);
 }
 .tut-body {
   font-family: var(--serif);
@@ -1695,6 +1715,25 @@ body.ui-mobile .feedback-btn {
 body.ui-mobile .tut-box {
   --tut-box-w: 340px;
   padding: var(--space-3);
+}
+/* docked boxes (phones, and no-room anchor fallbacks) hug the LEFT band so the
+   board in the centre of the landscape screen stays fully visible */
+body.ui-mobile .tut-box.tut-dock {
+  --tut-box-w: 272px;
+}
+/* the odds grid keeps its width on phones but must never overflow the short
+   landscape viewport — cap and scroll it instead */
+body.ui-mobile .tut-box.tut-wide {
+  width: min(420px, calc(100vw - 16px));
+}
+body.ui-mobile .tut-odds {
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+/* while a READING note is up, the touch arrow pad is dead weight under the
+   click blocker — hide it so it can never overlap the note box */
+body.tut-note-up .dpad {
+  display: none;
 }
 body.ui-mobile .tut-title {
   font-size: var(--text-md);

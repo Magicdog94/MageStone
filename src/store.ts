@@ -416,7 +416,9 @@ export const useGame = create<UIState>((set, get) => ({
 
   setTutRestrict: (r) => set({ tutRestrict: r }),
 
-  openModal: (modal) => set({ modal }),
+  // No modals during the guided tutorial — Settings' Main Menu / New Game
+  // would cancel the run out from under the coach (Skip is the exit).
+  openModal: (modal) => set((s) => (s.tutorial ? {} : { modal })),
   closeModal: () => set({ modal: null }),
   setHealthBars: (mode) => set((s) => ({ settings: { ...s.settings, healthBars: mode } })),
   setTurnSeconds: (seconds) => set((s) => ({ settings: { ...s.settings, turnSeconds: seconds } })),

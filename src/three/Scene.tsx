@@ -180,6 +180,21 @@ function ArenaEnvironment() {
   useFrame((_, dt) => {
     if (motes.current) motes.current.rotation.y += dt * 0.014;
   });
+  // Soft round sprite for the motes — an untextured Points quad renders as a
+  // hard opaque SQUARE whenever a mote drifts near the camera (it read as a
+  // stuck pixel over the tabletop). A radial-alpha map keeps them glows.
+  const moteMap = useMemo(() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 32;
+    const ctx = c.getContext('2d')!;
+    const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.55, 'rgba(255,255,255,0.5)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 32, 32);
+    return new THREE.CanvasTexture(c);
+  }, []);
 
   return (
     <group>
@@ -211,6 +226,7 @@ function ArenaEnvironment() {
           sizeAttenuation
           transparent
           opacity={0.5}
+          map={moteMap}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />

@@ -307,9 +307,13 @@ export function HUD() {
       )}
       <SiegeBanner />
       <EliminationToast />
-      <button className="gear" onClick={() => openModal('settings')} aria-label="Settings">
-        <CogIcon size={20} />
-      </button>
+      {/* no Settings during the guided tutorial — its Main Menu / New Game
+          buttons would strand the coach; "Skip tutorial" is the exit */}
+      {!tutorial && (
+        <button className="gear" onClick={() => openModal('settings')} aria-label="Settings">
+          <CogIcon size={20} />
+        </button>
+      )}
       {/* golden Rule Book — sits in the top-right row with music/fullscreen */}
       <button className="book-toggle" onClick={() => setShowRules(true)} aria-label="Rule Book" title="Rule Book">
         <BookIcon size={20} />

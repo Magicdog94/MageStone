@@ -7,23 +7,46 @@ import type { Cell, Die, DieKind, GameState } from '../../game/types';
 import { useTutorial } from './useTutorial';
 
 const g = () => useGame.getState();
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const CANCELLED = Symbol('tutorial-cancelled');
+/** Run epoch: bumped whenever a NEW guided run starts. Every await in the old
+ *  run captures its epoch and throws CANCELLED the moment a newer run exists —
+ *  so a skip-then-restart can never leave a zombie script driving the fresh
+ *  board (the old `running` flag silently DROPPED the restart instead). */
+let epoch = 0;
+async function wait(ms: number) {
+  const e = epoch;
+  await new Promise((r) => setTimeout(r, ms));
+  if (e !== epoch) throw CANCELLED;
+}
 function guard() {
   if (!useGame.getState().tutorial) throw CANCELLED;
 }
+
+/** Total coached steps — keep in sync with tut-verify.mjs EXPECT. */
+const TOTAL_STEPS = 46;
+let stepNo = 0;
+/** Stamp "step n of m" onto a callout (shown as the box's progress counter). */
+function stamp(c: Callout): Callout {
+  stepNo += 1;
+  return { ...c, step: Math.min(stepNo, TOTAL_STEPS), total: TOTAL_STEPS };
+}
+
 async function note(c: Callout) {
   guard();
-  await useTutorial.getState().note(c);
+  const e = epoch;
+  await useTutorial.getState().note(stamp(c));
+  if (e !== epoch) throw CANCELLED;
   guard();
 }
+/** Poll until `pred` holds (or time out) — TRUE when it held in time. */
 async function until(pred: () => boolean, timeout = 5000, interval = 120) {
   const t0 = Date.now();
   while (!pred() && Date.now() - t0 < timeout) {
     await wait(interval);
     guard();
   }
+  return pred();
 }
 const dist = (a: Cell, b: Cell) => Math.abs(a.r - b.r) + Math.abs(a.c - b.c);
 
@@ -47,6 +70,8 @@ async function playerTask(
 ): Promise<void> {
   const timeoutMs = opts.timeoutMs ?? 90000;
   guard();
+  const myEpoch = epoch;
+  const stamped = stamp(c); // one step number, even across retries
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
       if (attempt > 0) setup?.(); // the board may have drifted — line it up again
@@ -54,23 +79,35 @@ async function playerTask(
       guard();
       g().setTutRestrict(opts.restrict ?? null);
       useTutorial.getState().task(
-        attempt === 0 ? c : { ...c, body: `No rush — here it is again. ${c.body}` },
+        attempt === 0 ? stamped : { ...stamped, body: `No rush — here it is again. ${c.body}` },
       );
       const t0 = Date.now();
-      while (!pred() && Date.now() - t0 < timeoutMs) {
+      let done = false;
+      while (!done && Date.now() - t0 < timeoutMs) {
         await wait(150);
         guard();
+        if (pred()) {
+          // Let a just-dispatched click (e.g. an allowed Undo) land BEFORE the
+          // guardrails lift, then confirm the state still reads done — else a
+          // last-instant reversal leaves the next task facing a board this
+          // one's restrict would have prevented.
+          await wait(140);
+          guard();
+          done = pred();
+        }
       }
       g().setTutRestrict(null);
       useTutorial.getState().clearTask();
-      if (pred()) return;
+      if (done || pred()) return;
     }
   } finally {
-    // Skips/cancellations mid-task must lift the guardrails too.
-    useGame.getState().setTutRestrict(null);
+    // Skips/cancellations mid-task must lift the guardrails too — but never
+    // strip a NEWER run's live restrict (this run may be a cancelled zombie).
+    if (epoch === myEpoch) useGame.getState().setTutRestrict(null);
   }
   await fallback(); // the show must go on
-  await until(pred, 8000);
+  const ok = await until(pred, 8000);
+  if (!ok && import.meta.env.DEV) console.warn('tutorial: fallback failed for', c.id);
 }
 
 // ---- staging ---------------------------------------------------------------
@@ -92,7 +129,17 @@ function stage(build: (st: GameState) => void): void {
   const st = createGame(['red', 'blue'], 'diamond');
   st.turnPhase = 'act';
   build(st);
-  useGame.setState({ game: st, selectedUnitId: null, selectedDieId: null, rolling: false });
+  // Also clear transient combat/sorcery UI from the previous lesson — an armed
+  // bolt or a lingering roll announcement must not leak onto the fresh board.
+  useGame.setState({
+    game: st,
+    selectedUnitId: null,
+    selectedDieId: null,
+    rolling: false,
+    boltMode: false,
+    combatIntro: null,
+    combatRoll: null,
+  });
 }
 
 /** Move `unitId` as far toward `target` as this turn's matching die allows. */
@@ -129,16 +176,15 @@ function scriptMove(unitId: string, dest: Cell): void {
  * and WINS all three ways, coached step by step; only Blue's routine beats
  * (its roll/discard) play themselves.
  */
-let running = false;
-
 export async function runTutorial(onDone: () => void) {
-  if (running) return; // never run two guided sequences at once
-  running = true;
+  const myEpoch = ++epoch; // cancels any still-unwinding previous run
+  stepNo = 0;
   try {
     // Wait for the 3D board to finish loading so the spotlights have something
-    // to point at.
+    // to point at — then give the first frame a real beat to render (the note
+    // must not appear over a still-materialising board).
     await until(() => !document.querySelector('.loading-gate'), 22000);
-    await wait(400);
+    await wait(1200);
     guard();
 
     await note({
@@ -150,8 +196,15 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'header',
       title: 'Your scoreboard',
-      body: 'One card per team — Red is you. Silver stone = MageStones carried, gold = activated (6 activated on your base wins), the sword counts kills, W your living Warriors. Above: the round number and the shared gravestone bank.',
+      body: 'One card per team — Red is you. Silver stone = MageStones carried, gold = activated, the sword counts kills, W your living Warriors.',
       anchor: '.player-strip',
+      placement: 'bottom',
+    });
+    await note({
+      id: 'chips',
+      title: 'Round & gravestones',
+      body: 'These chips track the round number and the shared gravestone bank — fallen Warriors will draw on it later.',
+      anchor: '.grave-bank',
       placement: 'bottom',
     });
 
@@ -206,7 +259,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'kept',
       title: 'Three dice, three plays',
-      body: 'Your kept dice are your whole turn: each one can move its unit, and a moved unit may then take ONE action — attack, collect, resurrect… Let’s move.',
+      body: 'Your kept dice are your whole turn: each die can move its matching unit, and each unit may also take ONE action — attack, collect, resurrect… Let’s move.',
       placement: 'bottom',
     });
 
@@ -221,6 +274,13 @@ export async function runTutorial(onDone: () => void) {
       },
       () => g().game.unitsMovedThisTurn.length >= 1,
       () => {
+        // The player may have Undone back into the discard phase after the
+        // previous task was accepted — finish the discards first, then move.
+        if (g().game.turnPhase === 'discard') {
+          const live = g().game.dice.filter((d) => !d.discarded);
+          const worst = [...live].sort((a, b) => a.value - b.value).slice(0, live.length - 3);
+          for (const d of worst) g().discard(d.id);
+        }
         const st = g().game;
         const w = st.units.find(
           (u) =>
@@ -229,8 +289,9 @@ export async function runTutorial(onDone: () => void) {
         );
         if (w) stepToward(w.id, { r: 8, c: 8 });
       },
-      // Any unit, any legal square — but movement only (no ending the turn).
-      { restrict: { actions: [] } },
+      // Any unit, any legal square — movement (plus discard/undo, in case the
+      // player just Undid back into the discard phase), but no ending the turn.
+      { restrict: { actions: ['discard', 'undo'] } },
     );
     await wait(500);
     await note({
@@ -260,7 +321,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'oddsgrid',
       title: 'Know your odds',
-      body: 'Your roll (row) against the defender’s die (column). Defenders roll a d6 — except a Mage, which defends with its power die. Ties always re-roll, so every fight ends decisively.',
+      body: 'Your roll (row) against the defender’s die (column). Defenders roll a d6 — except a Mage, whose defence die grows with its stones (more on that soon). Ties always re-roll, so every fight ends decisively.',
       placement: 'center',
       showOdds: true,
     });
@@ -295,15 +356,18 @@ export async function runTutorial(onDone: () => void) {
     await until(() => g().combatRoll !== null, 6000);
     await wait(400);
     {
+      // The 3D dice report the roll; if they ever don't (scene fallback), the
+      // ENGINE's result is authoritative — never narrate "rolled 0 against 0".
       const roll = g().combatRoll;
-      const a = roll?.attackRoll ?? 0;
-      const d = roll?.defenseRoll ?? 0;
+      const lc = g().game.lastCombat;
+      const a = roll?.attackRoll ?? lc?.attackRoll ?? 15;
+      const d = roll?.defenseRoll ?? lc?.defenseRoll ?? 2;
       const won = !unitById(g().game, 'blue-w1');
       await note({
         id: 'fight-result',
         title: won ? 'Down he goes' : 'The 1-in-100 upset!',
         body: won
-          ? `Your three dice rolled ${a} against Blue’s ${d} — the defender falls. Stacking attackers is how Warriors win fights.`
+          ? `Your three dice rolled ${a} against Blue’s ${d} — the defender falls. Stack attackers to win fights; even when a gang-up fails, only ONE attacker falls, never the group.`
           : `Your ${a} lost to Blue’s ${d} — the 1%! When a coordinated attack fails only ONE attacker falls, never the group. That’s dice — and why you stack the odds.`,
         anchor: '.combat-announce',
         placement: 'bottom',
@@ -312,7 +376,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'graverules',
       title: 'A gravestone drops',
-      body: 'The fallen Warrior left a gravestone — while the shared bank has stock (3 per player), and never on the Nexus. Gravestones matter, because…',
+      body: 'A fallen Warrior leaves a gravestone — but only while the shared bank (3 per player) has stock, and never on the Nexus. Gravestones matter, because…',
       anchor: '.grave-bank',
       placement: 'bottom',
     });
@@ -639,7 +703,7 @@ export async function runTutorial(onDone: () => void) {
         id: 'task-siege-hold',
         title: 'Lay a siege',
         body: 'CLICK your Warrior by Blue’s base and march it ONTO a base square — plant your boots in their front door.',
-        placement: 'bottom',
+        placement: 'top', // the action is on the NEAR board rows — box sits high
       },
       () => siegedPlayers(g().game).includes('blue'),
       () => {
@@ -678,8 +742,8 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-siege-break',
         title: 'Break the siege — as Blue',
-        body: 'Blue’s last Warrior guards the base. CLICK it, then press ATTACK and throw the intruder out.',
-        placement: 'bottom',
+        body: 'Blue’s last Warrior guards the base. CLICK it, then press SINGLE ATTACK and throw the intruder out.',
+        placement: 'top', // the fight is on the near base row — keep it visible
       },
       () => !unitById(g().game, 'red-w1'),
       () => {
@@ -704,8 +768,9 @@ export async function runTutorial(onDone: () => void) {
     await wait(400);
     {
       const roll = g().combatRoll;
-      const a = roll?.attackRoll ?? 6;
-      const d = roll?.defenseRoll ?? 1;
+      const lc = g().game.lastCombat;
+      const a = roll?.attackRoll ?? lc?.attackRoll ?? 6;
+      const d = roll?.defenseRoll ?? lc?.defenseRoll ?? 1;
       await note({
         id: 'siege-broken',
         title: 'The besieger falls',
@@ -718,8 +783,8 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'siege-freed',
       title: 'The queue empties — they’re back!',
-      body: 'The moment the base cleared, Blue’s Mage AND Priest respawned onto it — each on its home square, or the closest free base square if something stands there. Hold an enemy base to keep their leaders dead; break the siege to bring yours home.',
-      placement: 'center',
+      body: 'The moment the base cleared, Blue’s Mage AND Priest respawned onto it. Hold an enemy base to keep their leaders dead; break a siege to bring yours home.',
+      placement: 'top', // their respawned leaders stand on the near base row
     });
 
     // ---- Conquest (HANDS-ON: you seal the door and finish it) --------------
@@ -745,15 +810,15 @@ export async function runTutorial(onDone: () => void) {
       id: 'win3-stage',
       title: 'Victory 3 of 3 — Conquest',
       body: 'Blue is down to ONE Warrior; its fallen Mage and Priest are queued. YOU finish this: first seal the door, then destroy the last unit. Kill it too soon and the leaders respawn — the siege must come FIRST.',
-      placement: 'center',
+      placement: 'top', // the staged endgame sits on the near half of the board
     });
     await playerTask(
       stageWin3,
       {
         id: 'task-win3-siege',
         title: 'Seal the base',
-        body: 'CLICK your southern Warrior and march it ONTO Blue’s base — with the queue locked out, nobody is coming back.',
-        placement: 'bottom',
+        body: 'CLICK your Warrior standing beside Blue’s base and march it ONTO a base square — with the queue locked out, nobody is coming back.',
+        placement: 'top',
       },
       () => siegedPlayers(g().game).includes('blue'),
       async () => {
@@ -778,7 +843,7 @@ export async function runTutorial(onDone: () => void) {
         id: 'task-win3-kill',
         title: 'Destroy the last unit',
         body: 'Two of your Warriors flank Blue’s survivor. CLICK one, then press DOUBLE ATTACK — no units left and no way to respawn is ELIMINATION.',
-        placement: 'bottom',
+        placement: 'top',
       },
       () => !unitById(g().game, 'blue-w1'),
       async () => {
@@ -803,14 +868,16 @@ export async function runTutorial(onDone: () => void) {
     await wait(400);
     {
       const roll = g().combatRoll;
-      const a = roll?.attackRoll ?? 12;
-      const d = roll?.defenseRoll ?? 1;
+      const lc = g().game.lastCombat;
+      const a = roll?.attackRoll ?? lc?.attackRoll ?? 12;
+      const d = roll?.defenseRoll ?? lc?.defenseRoll ?? 1;
       await note({
         id: 'win3-kill',
         title: 'The last unit falls',
+        // The winner panel is already up — sit BESIDE it, never on top of it.
         body: `You rolled ${a} against Blue’s ${d} — the final Blue Warrior is defeated. Zero units on the board and every respawn besieged: Blue is ELIMINATED.`,
-        anchor: '.combat-announce',
-        placement: 'bottom',
+        anchor: '.winner',
+        placement: 'left',
       });
     }
     await note({
@@ -825,15 +892,21 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'wrap',
       title: 'You’ve played it all',
-      body: 'You rolled, moved, fought, resurrected, collected, cast Bolt and Nova, laid a siege and broke one, and won by MageStone, Ritual AND Conquest yourself. The Rule Book (golden book, top right) has every detail. Go play!',
-      placement: 'center',
+      // Anchored beside the winner panel (its position names vary by layout —
+      // the golden book button lives top right on desktop, bottom left on
+      // phones, so the text names the BUTTON, not a corner).
+      body: 'You rolled, moved, fought, resurrected, collected, cast Bolt and Nova, laid a siege and broke one, and won by MageStone, Ritual AND Conquest yourself. The golden Rule Book button has every detail. Go play!',
+      anchor: '.winner',
+      placement: 'left',
       gotItLabel: 'Finish',
     });
   } catch (e) {
     if (e !== CANCELLED) throw e;
   } finally {
-    useGame.getState().setTutRestrict(null); // never leak guardrails into real play
-    running = false;
-    onDone();
+    // A cancelled run must not tear down the NEWER run that replaced it.
+    if (epoch === myEpoch) {
+      useGame.getState().setTutRestrict(null); // never leak guardrails into real play
+      onDone();
+    }
   }
 }

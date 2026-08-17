@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import {
@@ -135,6 +135,110 @@ function settleInPlace(
   body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
   body.setLinvel({ x: 0, y: 0, z: 0 }, true);
   body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+}
+
+/** Tray-local (lat, rad) direction to a world (x, z) direction. */
+function trayDir(seat: number, lat: number, rad: number): [number, number] {
+  const [dx, dz] = SEAT_OUT[seat] ?? SEAT_OUT[0];
+  return [-dz * lat + dx * rad, dx * lat + dz * rad];
+}
+
+/** World to tray-local (lat, rad) - the inverse of `trayToWorld`. */
+function worldToTray(seat: number, x: number, z: number): [number, number] {
+  const [dx, dz] = SEAT_OUT[seat] ?? SEAT_OUT[0];
+  const px = x - dx * TRAY_CENTER;
+  const pz = z - dz * TRAY_CENTER;
+  return [px * -dz + pz * dx, px * dx + pz * dz];
+}
+
+/**
+ * Final layout pass: no two dice may share a footprint.
+ *
+ * Settling teleports every die down to rest height where it landed, which can
+ * drop one die straight into another. Rapier resolves that overlap the only
+ * cheap way it can - by pushing one die UP - and because the settle loop has
+ * already stopped running, the loser is left hanging in mid-air for the rest of
+ * the turn (the "floating Mage die"). A few relaxation passes shove overlapping
+ * pairs apart in the table plane and clamp them back inside the tray, so dice
+ * keep the spot they actually landed on but can never stack.
+ */
+function separateInTray(
+  bodies: (RapierRigidBody | null)[],
+  seatOf: (i: number) => number,
+  restOf: (i: number) => number,
+): void {
+  // Dice keep the yaw they landed with, so two squares can still overlap at a
+  // centre distance of DIE*sqrt(2) (0.99). Separate to just beyond that and no
+  // rotation can leave a pair touching - a touching pair gets pushed apart by
+  // the solver, and one of them rides up onto an edge.
+  const MIN = DIE * 1.45;
+  const pts = bodies.map((b) => {
+    if (!b) return null;
+    const t = b.translation();
+    return { x: t.x, z: t.z };
+  });
+  // A settled die keeps its yaw, so its footprint reaches H*sqrt(2) (0.495 on a
+  // 0.7 cube) from its centre, NOT H. Clamping with a smaller margin let a die
+  // sit inside the tray wall; the wall then shoved it out and tipped it onto an
+  // edge, leaving it resting ~0.13 proud of the table.
+  const REACH = H * 1.5;
+  const latMax = TRAY_LAT - REACH;
+  const radMax = TRAY_RAD - REACH;
+  // Separation and the tray bounds are solved TOGETHER: clamping only at the
+  // end can shave a pair back under MIN when a die is pushed against the wall.
+  for (let pass = 0; pass < 12; pass++) {
+    let moved = false;
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        const a = pts[i];
+        const c = pts[j];
+        if (!a || !c) continue;
+        let dx = c.x - a.x;
+        let dz = c.z - a.z;
+        let d = Math.hypot(dx, dz);
+        if (d >= MIN) continue;
+        if (d < 1e-4) {
+          dx = 1;
+          dz = 0;
+          d = 1; // exactly coincident - pick any axis
+        }
+        const push = (((MIN - d) / 2) * 1.02) / d;
+        a.x -= dx * push;
+        a.z -= dz * push;
+        c.x += dx * push;
+        c.z += dz * push;
+        moved = true;
+      }
+    }
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      if (!p) continue;
+      const seat = seatOf(i);
+      const [lat0, rad0] = worldToTray(seat, p.x, p.z);
+      const lat = Math.max(-latMax, Math.min(latMax, lat0));
+      const rad = Math.max(-radMax, Math.min(radMax, rad0));
+      if (lat !== lat0 || rad !== rad0) {
+        const [cx, cz] = trayToWorld(seat, lat, rad);
+        p.x = cx;
+        p.z = cz;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  pts.forEach((p, i) => {
+    const b = bodies[i];
+    if (!b || !p) return;
+    b.setTranslation({ x: p.x, y: restOf(i), z: p.z }, true);
+    b.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    // Put the die to SLEEP so the solver stops touching it. Zeroing the
+    // velocities is not enough: a hair of contact penetration keeps getting
+    // pushed out, which nudges a settled die off its rest height and shows as
+    // a faint jitter (or a die sitting slightly proud). Any throw, park or
+    // re-lay call passes wakeUp = true, so they come back when needed.
+    b.sleep();
+  });
 }
 
 function DieMesh({
@@ -282,6 +386,8 @@ function DiceBodies() {
   const reported = useRef(false);
   const settleFrames = useRef(0);
   const liveFrames = useRef(0);
+  /** Frames left in the post-settle hold (see the enforcement block below). */
+  const holdFrames = useRef(0);
   const throwAt = useRef(0);
   const remoteSig = useRef('');
 
@@ -297,24 +403,31 @@ function DiceBodies() {
     reported.current = false;
     settleFrames.current = 0;
     liveFrames.current = 0;
+    holdFrames.current = 0;
     throwAt.current = performance.now();
     try {
+      // One cast direction for the whole handful, like a real throw: the dice
+      // are released LOW just above the tray and sent across it with downward
+      // pace, instead of being lobbed upward and floating down from height.
+      const castSign = Math.random() < 0.5 ? 1 : -1;
       bodies.current.forEach((b, i) => {
         if (!b) return;
         // Launch each die in its own lane (not a tight column) so they land spread
-        // out and flat instead of piling on top of each other.
+        // out and flat instead of piling on top of each other, offset upwind so
+        // the cast carries them across the tray.
         const [x, z] = trayToWorld(
           seat,
-          (i - 2) * 0.9 + rand(-0.15, 0.15),
-          rand(-TRAY_RAD * 0.55, TRAY_RAD * 0.55),
+          (i - 2) * 0.82 - castSign * 0.9 + rand(-0.12, 0.12),
+          rand(-TRAY_RAD * 0.45, TRAY_RAD * 0.45),
         );
+        const [vx, vz] = trayDir(seat, castSign * rand(1.6, 2.6), rand(-0.9, 0.9));
         b.setGravityScale(1, true); // un-park (hidden dice wait weightless below)
-        b.setTranslation({ x, y: 2.8 + (i % 2) * 0.5, z }, true);
+        b.setTranslation({ x, y: 1.4 + (i % 2) * 0.22, z }, true);
         const e = new THREE.Euler(rand(0, 6.28), rand(0, 6.28), rand(0, 6.28));
         const q = new THREE.Quaternion().setFromEuler(e);
         b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
-        b.setLinvel({ x: rand(-1, 1), y: 1, z: rand(-1.2, 1.2) }, true);
-        b.setAngvel({ x: rand(-13, 13), y: rand(-13, 13), z: rand(-13, 13) }, true);
+        b.setLinvel({ x: vx, y: rand(-2.8, -1.6), z: vz }, true);
+        b.setAngvel({ x: rand(-17, 17), y: rand(-17, 17), z: rand(-17, 17) }, true);
       });
     } catch (err) {
       console.warn('MageStone: dice throw hit a dead physics world.', err);
@@ -324,8 +437,33 @@ function DiceBodies() {
     }
   }, [rollNonce, rolling, seat, report]);
 
+  /** Pin every die flat, level and separated. Used at settle and for a short
+   *  hold afterwards. */
+  const enforceRest = () => {
+    bodies.current.forEach((b) => {
+      if (b) settleInPlace(b, NORMALS, TABLE_SURF + H);
+    });
+    separateInTray(bodies.current, () => seat, () => TABLE_SURF + H);
+  };
+
   useFrame(() => {
-    if (!rolling || reported.current) return;
+    // Settling once is not quite enough: a die can still be nudged in the
+    // frames right after (a wall push-out, a neighbour's contact), and it
+    // only takes one to leave a die tipped up on an edge or corner. So hold
+    // the arrangement for a few frames, re-asserting flat + rest height +
+    // separation, and only then leave the dice alone (asleep) for good.
+    if (reported.current) {
+      if (holdFrames.current > 0) {
+        holdFrames.current -= 1;
+        try {
+          enforceRest();
+        } catch {
+          holdFrames.current = 0; // dead physics world — the settle already reported
+        }
+      }
+      return;
+    }
+    if (!rolling) return;
     if (!throwAt.current) throwAt.current = performance.now(); // effect raced — clock from first frame
     liveFrames.current++;
     let slow = true;
@@ -337,7 +475,7 @@ function DiceBodies() {
         }
         const lv = b.linvel();
         const av = b.angvel();
-        if (Math.hypot(lv.x, lv.y, lv.z) > 0.18 || Math.hypot(av.x, av.y, av.z) > 0.25) {
+        if (Math.hypot(lv.x, lv.y, lv.z) > 0.28 || Math.hypot(av.x, av.y, av.z) > 0.4) {
           slow = false;
           break;
         }
@@ -360,8 +498,8 @@ function DiceBodies() {
         }
       }
       const timedOut =
-        throwAt.current > 0 && performance.now() - throwAt.current > 8000;
-      if ((liveFrames.current > 20 && settleFrames.current > 10 && (allFlat || settleFrames.current > 100)) || timedOut) {
+        throwAt.current > 0 && performance.now() - throwAt.current > 4500;
+      if ((liveFrames.current > 12 && settleFrames.current > 6 && (allFlat || settleFrames.current > 60)) || timedOut) {
         if (timedOut) console.warn('MageStone: dice settle timed out — forcing a read');
         reported.current = true;
         const values = bodies.current.map((b) => (b ? upValue(b) : 1));
@@ -371,22 +509,11 @@ function DiceBodies() {
         // exactly where it fell, just straightened upright in place. Only a
         // die perched ON another (floating once its prop moves) falls back to
         // its lane slot, keeping the same face up.
-        bodies.current.forEach((b, i) => {
-          if (!b) return;
-          const perched = b.translation().y > TABLE_SURF + H + 0.25;
-          if (perched) {
-            const faceIdx = FACE_VALUES.indexOf(values[i]);
-            const q = new THREE.Quaternion().setFromUnitVectors(NORMALS[faceIdx], UP);
-            q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, rand(0, Math.PI * 2)));
-            const [x, z] = trayToWorld(seat, (i - 2) * LANE, 0);
-            b.setTranslation({ x, y: TABLE_SURF + H, z }, true);
-            b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
-            b.setLinvel({ x: 0, y: 0, z: 0 }, true);
-            b.setAngvel({ x: 0, y: 0, z: 0 }, true);
-          } else {
-            settleInPlace(b, NORMALS, TABLE_SURF + H);
-          }
-        });
+        // Every die straightens upright where it fell and drops to rest height;
+        // the separation pass then guarantees no two share a footprint, so none
+        // can be shoved on top of another and left hanging in the air.
+        enforceRest();
+        holdFrames.current = 24;
       }
     } catch (err) {
       // A Rapier panic poisons the whole world (every later call throws).
@@ -429,30 +556,51 @@ function DiceBodies() {
   // `discard` after the dice were already parked — lays the rolled dice back
   // out in their lanes, values face-up (the values are unchanged; only the
   // presentation returns).
+  const layOutDice = useCallback(
+    (why: string) => {
+      try {
+        bodies.current.forEach((b, i) => {
+          if (!b) return;
+          b.setGravityScale(1, true);
+          const v = dice[i]?.value ?? 1;
+          const faceIdx = FACE_VALUES.indexOf(v);
+          const q = new THREE.Quaternion().setFromUnitVectors(NORMALS[faceIdx], UP);
+          q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, (i * 1.1) % (Math.PI * 2)));
+          const [x, z] = trayToWorld(seat, (i - 2) * LANE, 0);
+          b.setTranslation({ x, y: TABLE_SURF + H, z }, true);
+          b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+          b.setLinvel({ x: 0, y: 0, z: 0 }, true);
+          b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        });
+      } catch (err) {
+        console.warn('MageStone: physics failed laying out dice (' + why + ').', err);
+        useGame.getState().bumpPhysicsEpoch();
+      }
+    },
+    [dice, seat],
+  );
+
   const prevShow = useRef(false);
   useEffect(() => {
     const was = prevShow.current;
     prevShow.current = show;
     if (!show || was || rolling || isRemoteViewer) return;
-    try {
-      bodies.current.forEach((b, i) => {
-        if (!b) return;
-        b.setGravityScale(1, true);
-        const v = dice[i]?.value ?? 1;
-        const faceIdx = FACE_VALUES.indexOf(v);
-        const q = new THREE.Quaternion().setFromUnitVectors(NORMALS[faceIdx], UP);
-        q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, (i * 1.1) % (Math.PI * 2)));
-        const [x, z] = trayToWorld(seat, (i - 2) * LANE, 0);
-        b.setTranslation({ x, y: TABLE_SURF + H, z }, true);
-        b.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
-        b.setLinvel({ x: 0, y: 0, z: 0 }, true);
-        b.setAngvel({ x: 0, y: 0, z: 0 }, true);
-      });
-    } catch (err) {
-      console.warn('MageStone: physics failed relaying dice after undo.', err);
-      useGame.getState().bumpPhysicsEpoch();
-    }
-  }, [show, rolling, isRemoteViewer, dice, seat]);
+    layOutDice('undo');
+  }, [show, rolling, isRemoteViewer, layOutDice]);
+
+  // The roll can also be completed by the STORE's watchdog rather than by the
+  // settle pass below — a stalled tab or a cold scene load can starve
+  // `useFrame` for long enough that the watchdog reports the engine's values
+  // first. When that happens the dice are left wherever they happened to be:
+  // mid-tumble in the air, or fallen clean through the table. Lay them out at
+  // their rolled values so the tray always matches the engine.
+  const prevRolling = useRef(false);
+  useEffect(() => {
+    const was = prevRolling.current;
+    prevRolling.current = rolling;
+    if (rolling || !was || reported.current || isRemoteViewer) return;
+    layOutDice('watchdog');
+  }, [rolling, isRemoteViewer, layOutDice]);
 
   // Park hidden dice below the table (weightless) so their invisible bodies
   // never collide with the combat dice thrown onto the tray during act phase;
@@ -492,10 +640,10 @@ function DiceBodies() {
               bodies.current[i] = r;
             }}
             colliders="cuboid"
-            restitution={0.3}
-            friction={0.9}
-            angularDamping={0.55}
-            linearDamping={0.3}
+            restitution={0.16}
+            friction={1}
+            angularDamping={0.72}
+            linearDamping={0.5}
             position={[trayToWorld(seat, i * 1.2 - 2.4, 0)[0], TABLE_SURF + H, trayToWorld(seat, i * 1.2 - 2.4, 0)[1]]}
           >
             <DieMesh
@@ -721,6 +869,7 @@ function CombatDice() {
           (d.slot - (d.slots - 1) / 2) * 1.1 + rand(-0.12, 0.12),
           rand(-TRAY_RAD * 0.5, TRAY_RAD * 0.5),
         );
+        // NOTE: keep the arc — the forecast needs air time (see above).
         b.setTranslation({ x, y: 3 + (i % 2) * 0.5, z }, true);
         const e = new THREE.Euler(rand(0, 6.28), rand(0, 6.28), rand(0, 6.28));
         const q = new THREE.Quaternion().setFromEuler(e);
@@ -810,6 +959,11 @@ function CombatDice() {
             );
           }
         }
+        // NOTE: deliberately NOT the turn dice's separation pass. That pass
+        // also sleeps the bodies, and a slept/moved die leaves the solver in a
+        // state the NEXT combat's forecast has to rewind through — which cost
+        // accuracy on the pre-simulated landing face. Combat dice are cleared
+        // after a short linger anyway, so they keep the original handling.
         if (b.translation().y > TABLE_SURF + rest + 0.25) {
           // perched on another die — lay it flat in its lane, same face up
           const q = new THREE.Quaternion().setFromUnitVectors(normals[landed], UP);

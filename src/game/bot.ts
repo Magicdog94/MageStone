@@ -565,6 +565,12 @@ interface BrainOpts {
   /** Deeper discard planning: screen every keep-set shallow, then re-plan the
    *  best few a whole turn deep. */
   plan2: boolean;
+  /** Price progress toward the six-stone MageStone victory as a fraction of a
+   *  win rather than as material, so the Mage actually runs the race. */
+  race: boolean;
+  /** Worth of a COMPLETE six-stone race, spread over the climb toward it.
+   *  Exposed so the arena can A/B how hard the Mage should chase stones. */
+  raceValue: number;
 }
 const BRAIN: BrainOpts = {
   rollouts: true,
@@ -573,6 +579,10 @@ const BRAIN: BrainOpts = {
   reply: true,
   eval2: true,
   plan2: true,
+  race: true,
+  // 480 -> 700 gained 56%; 1000 REGRESSED to 40% (the Mage chased stones at
+  // the expense of the board). 700 is the measured sweet spot.
+  raceValue: 700,
 };
 
 /** Adversarial rollouts pay off only when the budget has a real tail to spend
@@ -596,6 +606,29 @@ function worth(u: Unit): number {
  *  d20 tier at 4, the brink of 6 — on top of the linear per-stone worth. (At 6
  *  the walking-home terms take over.) */
 const TIER_RAMP = [0, 0, 9, 13, 26, 42, 0];
+
+/**
+ * How far along the MageStone victory this Mage is, priced as a fraction of a
+ * win rather than as material.
+ *
+ * Without this the first activated stone was worth 13 points (worth() +13, and
+ * TIER_RAMP starts at 0) — nothing beside the cost of walking a 42-point Mage
+ * into the open, where `expectedDamage` prices it as a fat target. The brain
+ * was therefore right to park the Mage at home, and did: measured over 20 games
+ * it activated a stone once every four games, peaked at 0.28 stones, and never
+ * once won by MageStone. Only the +900 cliff at six stones rewarded the race,
+ * and nothing led up to it.
+ *
+ * Carried stones count for a bit over half — they are real progress, but they
+ * are one trip home from being worth anything, and a slain Mage drops them.
+ * Convex, so the climb accelerates and a Mage that is nearly there commits;
+ * mildly so (^1.35), because unlike a ritual gamble each stone is banked
+ * progress and the FIRST step has to be worth taking.
+ */
+function raceScore(activated: number, carried: number): number {
+  const eff = Math.min(STONES_TO_WIN, activated + 0.55 * carried);
+  return BRAIN.raceValue * Math.pow(eff / STONES_TO_WIN, 1.35);
+}
 
 /** Expected value of `vic`'s units that `atk` can destroy on their next turn:
  *  warrior gang-ups, mage melee and bolts, each discounted by the chance the
@@ -708,9 +741,17 @@ function sideScore(state: GameState, p: PlayerColor): number {
       // killing an enemy mage — chase stones far less, play the board more.
       const gate =
         BRAIN.eval2 && mage.activated + mage.carried + stoneCells.length < STONES_TO_WIN ? 0.35 : 1;
-      if (stoneCells.length) s += gate * (22 - 3 * Math.min(minDist(mage.cell, stoneCells), 7));
-      if (mage.carried > 0) s += 10 - 2 * Math.min(dBase, 5);
+      // Pull toward the nearest loose stone, and — once carrying — back home to
+      // activate. The old figures (22 falling 3/step, and a 10-point home pull)
+      // could not pay for the walk, so Mages collected and then wandered:
+      // 1.18 collects per game against 0.25 activations.
+      if (stoneCells.length)
+        s += gate * (BRAIN.race ? 38 - 5 * Math.min(minDist(mage.cell, stoneCells), 7)
+                                : 22 - 3 * Math.min(minDist(mage.cell, stoneCells), 7));
+      if (mage.carried > 0)
+        s += BRAIN.race ? 34 - 5 * Math.min(dBase, 6) : 10 - 2 * Math.min(dBase, 5);
     }
+    if (BRAIN.race) s += raceScore(mage.activated, mage.carried);
     if (BRAIN.eval2) s += TIER_RAMP[Math.min(6, mage.activated)];
   } else {
     s -= 30; // mage off the board (queued respawn) — tempo and vulnerability

@@ -225,10 +225,19 @@ export function woodBumpTexture(): THREE.Texture {
  * pictorial artwork — just stone). Tinted gold flecks + veins tie it to the
  * MageStone box cover (deep green + gilt).
  */
-export function emeraldBoardTexture(): THREE.Texture {
-  const hit = cache.get('emeraldBoard');
+/**
+ * The board's emerald-marble surface with its gold arcane inlay.
+ *
+ * `size` exists so the PRINT pipeline can regenerate this same artwork at
+ * production resolution (tools/recorder/export-board-art.mjs) instead of
+ * upscaling the 2048 game texture — every dimension below is a fraction of S,
+ * so it is resolution-independent. Game rendering always uses the default.
+ */
+export function emeraldBoardTexture(size = 2048): THREE.Texture {
+  const key = size === 2048 ? 'emeraldBoard' : `emeraldBoard@${size}`;
+  const hit = cache.get(key);
   if (hit) return hit;
-  const S = 2048;
+  const S = size;
   const [c, ctx] = canvas(S);
   // deep emerald base
   ctx.fillStyle = '#15321f';
@@ -337,7 +346,7 @@ export function emeraldBoardTexture(): THREE.Texture {
   vg.addColorStop(1, 'rgba(2,10,6,0.55)');
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, S, S);
-  return finish(c, 'emeraldBoard');
+  return finish(c, key);
 }
 
 // ---- Smithy interior surfaces -----------------------------------------------

@@ -1,8 +1,9 @@
 // Bumped with each notable alpha update — shown in the landing footer.
-export const VERSION = 'v0.8.2-alpha';
-export const UPDATED = '30 July 2026';
+export const VERSION = 'v0.8.3-alpha';
+export const UPDATED = '31 July 2026';
 
 export const PATCH_NOTES = [
+  'v0.8.3 — The AI Bot finally plays the MageStone game. Its Mage used to sit at home and leave the stones alone; it now goes and gets them, carries them back to activate, climbs to the d12 and d20 power tiers, and wins by MageStone about as often as by Ritual. Across measured games it activates roughly seven times as many stones as before — and it is stronger for it, not weaker.',
   'v0.8.2 — Dice fix: a die (usually the Mage die) could end up hovering above the table after a roll. Dice now always come to rest flat on the tray, never stacked or floating, and they settle sooner. The throw itself is more natural too — the dice are cast low across the tray and tumble to a stop instead of being lobbed high and drifting down.',
   'v0.8.1 — Tutorial polish, especially on phones: coach notes now dock beside the board instead of on top of it, so every unit, square and glowing target the lesson talks about stays visible while you play it. Victory notes no longer run off the screen edge, a step counter (like 12 / 46) shows your progress, Skip asks before throwing your run away, siege lessons keep the besieged base in view on desktop too, and a dozen wording fixes make every rule read right first time.',
   'v0.8 — The AI Bot got meaner. It now thinks half a second per move, plays out your best possible reply turn (including when your dice roll WELL) before committing to a line, hunts down any Mage a stone away from winning like it would a live Ritual, prices a besieged respawn as the near-elimination it is, and plans its dice keeps a whole turn deep. Verified: 30-0 sweep vs the old Medium brain, and it never plays weaker than the previous champion. No cheating — it sees only what you see.',

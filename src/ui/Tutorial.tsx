@@ -149,17 +149,18 @@ function Divider() {
   );
 }
 
-// Win chances taken straight from the engine's `combatOdds` (rules.ts). TIES GO
-// TO THE ATTACKER, so each cell is P(attack roll >= defence roll), then
-// Math.round(win × 100) — identical to the % badge shown in-game (Pieces.tsx).
-// Rows = the attacker's roll; columns = the defender's die (d6, or a defending
-// Mage's power die). Regenerate with scratchpad/odds.mjs if the combat maths change.
+// Win chances taken straight from the engine's `combatOdds` (rules.ts). A TIE IS
+// RE-ROLLED, so neither side is favoured and each cell is the decisive-outcome
+// chance P(win | not draw), then Math.round(win × 100) — identical to the %
+// badge shown in-game (Pieces.tsx). Note the diagonal: every even matchup is
+// exactly 50%. Rows = the attacker's roll; columns = the defender's die (d6, or
+// a defending Mage's power die).
 const ODDS: { roll: string; vs: [number, number, number] }[] = [
-  { roll: 'd6', vs: [58, 29, 18] },
-  { roll: '2d6', vs: [91, 58, 35] },
-  { roll: '3d6', vs: [99, 83, 52] },
-  { roll: 'd12', vs: [79, 54, 33] },
-  { roll: 'd20', vs: [87, 72, 52] },
+  { roll: 'd6', vs: [50, 23, 13] },
+  { roll: '2d6', vs: [90, 55, 32] },
+  { roll: '3d6', vs: [99, 81, 50] },
+  { roll: 'd12', vs: [77, 50, 29] },
+  { roll: 'd20', vs: [87, 71, 50] },
 ];
 const oddsBand = (v: number) => (v >= 67 ? 'hi' : v >= 34 ? 'mid' : 'lo');
 
@@ -387,13 +388,8 @@ const SECTIONS: Section[] = [
         <ul className="htp-list">
           <li>Resurrects Warriors from Gravestones and performs the Nexus Ritual.</li>
           <li>
-            A Priest that wins its defence never kills its attacker. It repels the attack and may
-            then <span className="htp-em">flee</span> up to the value of its defence roll — as far
-            as it likes, or not at all.
-          </li>
-          <li>
-            A fleeing Priest that lands on a Gravestone may resurrect from it immediately, even
-            outside its own turn.
+            A Priest that wins its defence never kills its attacker — it simply repels the attack.
+            Neither unit moves; a Priest that survives does not retreat.
           </li>
           <li>If defeated, it respawns at your base (no Gravestone).</li>
         </ul>
@@ -407,10 +403,10 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p className="htp-p">
-          Attacker and defender each roll their die — highest wins, and{' '}
-          <span className="htp-em">ties go to the attacker</span>. The loser is defeated, with one
-          exception: a Priest that wins its defence only repels the attack (the attacker survives)
-          and may then flee.
+          Attacker and defender each roll their die — highest wins. Neither side has any
+          advantage: a <span className="htp-em">tie is re-rolled</span> until the result is
+          decisive, so an even fight is exactly 50:50. The loser is defeated, with one exception —
+          a Priest that wins its defence only repels the attack, and neither unit moves.
         </p>
 
         <h4 className="htp-sub">Coordinated Warrior Attacks</h4>
@@ -552,13 +548,24 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p className="htp-p">
-          The Nexus is the 2×2 heart of the board. A Priest standing on it — with no enemy on any
-          of its four squares — may declare the Rite of the Nexus; declaring it is that Priest’s
-          action for the turn. Friendly units may hold the other Nexus squares. Every other player
-          then takes one full turn, and if the Ritual is still standing when play returns to you,
-          you win immediately. It breaks if the Priest is killed, if the Priest leaves or flees out
-          of the Nexus, or if any enemy unit occupies a Nexus square. An attack from outside the
-          Nexus does not by itself stop it.
+          The Nexus is the 2×2 heart of the board, and around it lies the{' '}
+          <span className="htp-em">ritual circle</span> — the ring of 12 squares immediately
+          surrounding it (the two squares outside each of its four sides, plus the four diagonal
+          corners).
+        </p>
+        <p className="htp-p">
+          A Priest standing in the Nexus may declare the{' '}
+          <span className="htp-em">Rite of the Nexus</span>, and declaring it is that Priest’s
+          action. To begin it — and to keep it — <span className="htp-em">all 16 squares</span> of
+          the Nexus and its circle must be free of enemies. Friendly units are welcome there and
+          screening the circle with them is the usual way to hold one.
+        </p>
+        <p className="htp-p">
+          Every other player then gets a complete turn. If the Rite is still standing when play
+          returns to you, you win immediately. Because the starting player rotates each round, an
+          opponent who activates before you next round gets one last chance to break it — a single
+          enemy stepping anywhere into the circle is enough. It also breaks if the Priest is killed
+          or leaves the Nexus.
         </p>
         <NexusDiagram />
       </>

@@ -22,7 +22,6 @@ import {
   plannedAttackers,
   resolveAttack,
   resolveBolt,
-  resolveFlee,
   resolveNova,
   resurrect,
   rollDice,
@@ -53,7 +52,6 @@ export type TutActionName =
   | 'activate'
   | 'resurrect'
   | 'ritual'
-  | 'flee'
   | 'undo'
   | 'endTurn';
 
@@ -269,9 +267,6 @@ interface UIState {
   setBoltMode: (on: boolean) => void;
   castBolt: (targetId: string, rng?: () => number) => void;
   castNova: (rng?: () => number) => void;
-  /** Settle a repelled Priest's retreat. `null` (or its own square) stays put.
-   *  Answered by the DEFENDING side, out of turn. */
-  fleePriest: (dest: Cell | null) => void;
   collectStones: () => void;
   activateStones: () => void;
   doResurrect: () => void;
@@ -280,10 +275,6 @@ interface UIState {
 
 // Rate-limits physics-world rebuilds (see bumpPhysicsEpoch).
 let lastEpochBump = 0;
-
-/** How long a repelled Priest's owner gets to choose a retreat before the
- *  engine holds it in place for them. Purely a liveness guard. */
-const FLEE_TIMEOUT_MS = 15000;
 
 /** In an online match a client may only act on its own colour's turn — except
  *  the bot controller (the host), which also acts for the bot colours. */
@@ -565,20 +556,6 @@ export const useGame = create<UIState>((set, get) => ({
   moveTo: (dest) =>
     set((s) => {
       const { selectedUnitId, selectedDieId } = s;
-      // A repelled Priest's retreat reuses the whole move pipeline: while a
-      // flee is pending the glowing squares ARE the retreat squares (see
-      // moveDestinations), so a tile click lands here and is routed to the
-      // engine's resolveFlee instead of moveUnit.
-      const flee = s.game.pendingFlee;
-      if (flee) {
-        if (!tutAllows(s.tutRestrict, 'flee')) return {};
-        if (s.tutRestrict?.dests && !s.tutRestrict.dests.some((c) => sameCell(c, dest))) return {};
-        // Online: only the Priest's owner (or the host driving that bot) answers.
-        if (s.online && flee.owner !== s.myColor && !(s.botController && s.bots[flee.owner]))
-          return {};
-        const fled = resolveFlee(s.game, dest);
-        return fled === s.game ? {} : { game: fled, selectedUnitId: null, selectedDieId: null };
-      }
       if (!selectedUnitId || !selectedDieId || outOfTurn(s)) return {};
       // Tutorial guardrail: only the square(s) the live task points at.
       if (s.tutRestrict?.dests && !s.tutRestrict.dests.some((c) => sameCell(c, dest))) return {};
@@ -675,18 +652,6 @@ export const useGame = create<UIState>((set, get) => ({
           out.deathNonce = s.deathNonce + 1;
         }
       }
-      // A repelled Priest may retreat, and the answer comes from the DEFENDING
-      // side out of turn. Arm a watchdog so an idle or absent defender can never
-      // stall the match — after this it simply holds its ground. (fleePriest
-      // itself no-ops on clients that aren't entitled to answer, and endTurn
-      // force-declines too, so this is belt-and-braces.)
-      if (game2.pendingFlee) {
-        const armed = game2.pendingFlee.priestId;
-        window.setTimeout(() => {
-          const now = get().game.pendingFlee;
-          if (now && now.priestId === armed) get().fleePriest(null);
-        }, FLEE_TIMEOUT_MS);
-      }
       return out;
     }),
 
@@ -735,18 +700,6 @@ export const useGame = create<UIState>((set, get) => ({
         if (get().combatIntro?.kind === 'bolt') set({ combatIntro: null });
       }, 4200);
     }
-  },
-
-  fleePriest: (dest) => {
-    const s = get();
-    const flee = s.game.pendingFlee;
-    if (!flee) return;
-    if (!tutAllows(s.tutRestrict, 'flee')) return;
-    // Online: only the Priest's owner (or the host driving that bot) answers.
-    if (s.online && flee.owner !== s.myColor && !(s.botController && s.bots[flee.owner])) return;
-    const game = resolveFlee(s.game, dest);
-    if (game === s.game) return;
-    set({ game, selectedUnitId: null, selectedDieId: null });
   },
 
   castNova: (rng) => {
@@ -837,8 +790,7 @@ useGame.subscribe((s, prev) => {
   if (g === p) return; // not a game change (and stops this from re-entering)
   const fought =
     (g.lastCombat !== p.lastCombat && g.lastCombat !== null) ||
-    totalKills(g) !== totalKills(p) ||
-    (g.pendingFlee !== p.pendingFlee && g.pendingFlee !== null);
+    totalKills(g) !== totalKills(p);
   if (fought) {
     if (s.undoPoint) useGame.setState({ undoPoint: null });
     return;
@@ -872,13 +824,6 @@ export function moveDestinations(
   dieId: string | null,
   restrict?: TutRestrict | null,
 ): Cell[] {
-  // A pending Priest retreat takes over the highlight: the glowing squares are
-  // where that Priest may flee to, whoever's turn it is.
-  if (game.pendingFlee) {
-    const priest = unitById(game, game.pendingFlee.priestId);
-    const all = priest ? legalMoves(game, priest, game.pendingFlee.steps) : [];
-    return restrict?.dests ? all.filter((m) => restrict.dests!.some((c) => sameCell(c, m))) : all;
-  }
   if (game.turnPhase !== 'act' || !unitId || !dieId) return [];
   const unit = unitById(game, unitId);
   const die = game.dice.find((d) => d.id === dieId);

@@ -10,6 +10,7 @@ import {
   rotateCell,
   PLAYER_ROTATION,
   NEXUS_CELLS,
+  RITUAL_CIRCLE,
 } from './board';
 import type {
   Cell,
@@ -384,7 +385,6 @@ export function unitDie(state: GameState, unitId: string): Die | undefined {
  *  for the activation already in progress. */
 export function canDieMoveUnit(die: Die, unit: Unit, state: GameState): boolean {
   if (unit.owner !== state.current) return false;
-  if (state.pendingFlee) return false;
   if (state.unitsActedThisTurn.includes(unit.id)) return false;
   if (state.unitsMovedThisTurn.includes(unit.id)) return false;
   if (!canCommitDie(state, die)) return false;
@@ -430,7 +430,6 @@ export function legalMoves(state: GameState, unit: Unit, steps: number): Cell[] 
 
 export function moveUnit(state: GameState, unitId: string, dieId: string, dest: Cell): GameState {
   if (state.turnPhase !== 'act') return state;
-  if (state.pendingFlee) return state; // settle the repelled Priest's retreat first
   const unit = unitById(state, unitId);
   const die = state.dice.find((d) => d.id === dieId);
   if (!unit || !die) return state;
@@ -465,8 +464,6 @@ export function moveUnit(state: GameState, unitId: string, dieId: string, dest: 
 export function canAct(state: GameState, unitId: string): boolean {
   const unit = unitById(state, unitId);
   if (!unit || unit.owner !== state.current) return false;
-  // A repelled Priest's retreat is settled before play continues.
-  if (state.pendingFlee) return false;
   if (state.unitsActedThisTurn.includes(unitId)) return false;
   if (unitDie(state, unitId)) return true;
   return availableDice(state).some((d) => d.kind === unit.kind);
@@ -555,9 +552,11 @@ export function plannedAttackers(state: GameState, attackerId: string, targetId:
  * die — d6, or a defending Mage's power die). Warriors contribute n×d6; a lone
  * Mage attacks with its power die.
  *
- * **Ties go to the ATTACKER**, so the chance of success is simply
- * `P(attack >= defence)` and there is no draw branch. `draw` is always 0 here —
- * kept in the shape for compatibility with existing callers.
+ * Neither side has an edge: a tie is **re-rolled** until the result is decisive,
+ * so the odds are conditioned on a decisive outcome —
+ * `P(win | not draw) = win / (win + lose)`. An even fight (1d6 against 1d6) is
+ * therefore exactly 50:50. `draw` is always 0 here — kept in the shape for
+ * compatibility with existing callers.
  */
 export function combatOdds(
   state: GameState,
@@ -585,20 +584,24 @@ export function combatOdds(
   for (const [a, pa] of dist) {
     for (let d = 1; d <= defFaces; d++) {
       const p = pa / defFaces;
-      // Ties go to the attacker, so `>=` wins outright — no draw branch.
-      if (a >= d) win += p;
-      else lose += p;
+      if (a > d) win += p;
+      else if (a < d) lose += p;
+      // a === d is a draw → re-rolled, so it favours neither side.
     }
   }
-  return { win, draw: 0, lose };
+  // Renormalise over decisive outcomes (draws are re-rolled away).
+  const decisive = win + lose;
+  if (decisive === 0) return { win: 0, draw: 0, lose: 0 };
+  return { win: win / decisive, draw: 0, lose: lose / decisive };
 }
 
 /**
  * Resolve an attack by one or more attackers on a target. Warriors combine
  * (n d6); a lone Mage rolls its power die. The defender rolls 1d6 (a Mage rolls
- * its power die). Higher wins and **ties go to the attacker**; on a loss
- * exactly one attacker falls — except against a Priest, which never kills its
- * attacker but may retreat instead (see `PendingFlee`).
+ * its power die). Higher wins and a **tie is re-rolled**, so neither side has an
+ * advantage and an even fight is 50:50. On a loss exactly one attacker falls —
+ * except against a Priest, which never kills its attacker: it simply repels the
+ * attack and both units stay put.
  */
 export function resolveAttack(
   state: GameState,
@@ -628,19 +631,30 @@ export function resolveAttack(
   dice = scratch.dice;
   const activationDice = withActivation(state, dice);
 
-  // Roll attack vs the defender's die. **Ties go to the attacker**, so a single
-  // roll always settles it — there is no reroll loop. A defending Mage rolls its
-  // own power die (d12/d20 by activated stones), not a d6, so a powered-up Mage
-  // is much harder to kill.
+  // Roll attack vs the defender's die, RE-ROLLING any tie so the fight is always
+  // decisive and neither side is favoured (an even matchup is 50:50). A
+  // defending Mage rolls its own power die (d12/d20 by activated stones), not a
+  // d6, so a powered-up Mage is much harder to kill.
   const attackFaces = isMage ? magePowerDie(attackers[0].activated) : 6;
   const defenseFaces = target.kind === 'mage' ? magePowerDie(target.activated) : 6;
-  const attackDice: number[] = isMage
-    ? [dN(attackFaces, rng)]
-    : Array.from({ length: attackers.length }, () => dN(6, rng));
-  const attackRoll = attackDice.reduce((a, b) => a + b, 0);
-  const defenseRoll = dN(defenseFaces, rng);
+  let attackDice: number[];
+  let attackRoll: number;
+  let defenseRoll: number;
+  // BOUNDED. With real dice a run of ties dies out immediately (a d6 duel ties
+  // 1 time in 6), but `rng` is injectable — the bot's scratch simulations and
+  // the tutorial's staged fights both feed rigged sequences, and a constant one
+  // would tie forever. After the guard the tie falls through to the comparison
+  // below, which resolves it as "the attacker did not beat the defender".
+  let guard = 0;
+  do {
+    attackDice = isMage
+      ? [dN(attackFaces, rng)]
+      : Array.from({ length: attackers.length }, () => dN(6, rng));
+    attackRoll = attackDice.reduce((a, b) => a + b, 0);
+    defenseRoll = dN(defenseFaces, rng);
+  } while (attackRoll === defenseRoll && ++guard < 64);
 
-  // Highest roll wins, the attacker taking ties; the loser is defeated outright.
+  // Highest roll wins; the loser is defeated outright. (Draws never reach here.)
   let outcome: CombatResult['outcome'];
   let defeatedId: string | null = null;
   let next: GameState = {
@@ -652,22 +666,17 @@ export function resolveAttack(
     }, state.unitsActedThisTurn),
   };
 
-  if (attackRoll >= defenseRoll) {
+  if (attackRoll > defenseRoll) {
     outcome = 'win';
     defeatedId = target.id;
     next = bumpKill(defeatUnit(next, target.id), state.current);
   } else {
-    // The defender beat the attacker outright. A Priest never kills its
-    // attacker — winning its defence repels the attack, and the Priest may then
-    // retreat up to its defence roll (offered out of turn, always declinable).
-    // Any other defender defeats exactly one attacker.
+    // attackRoll < defenseRoll (a tie was re-rolled away above). A Priest never
+    // kills its attacker: winning its defence simply REPELS the attack and both
+    // units stay exactly where they are — a Priest that is not defeated does not
+    // move. Any other defender defeats exactly one attacker.
     outcome = 'lose';
-    if (target.kind === 'priest') {
-      next = {
-        ...next,
-        pendingFlee: { priestId: target.id, owner: target.owner, steps: defenseRoll },
-      };
-    } else {
+    if (target.kind !== 'priest') {
       defeatedId = attackers[0].id; // coordinated: only one attacker falls
       next = bumpKill(defeatUnit(next, attackers[0].id), target.owner);
     }
@@ -1090,91 +1099,30 @@ export function resurrect(state: GameState, unitId: string): GameState {
   };
 }
 
-// ---- Priest flee ---------------------------------------------------------
-// A Priest that WINS its defence roll is not merely repelled: it may retreat up
-// to the value of that roll, and does not have to use it all. The retreat is
-// offered out of turn to the DEFENDING player and is always safe to decline —
-// `endTurn` force-clears it, so a match can never wedge waiting on one.
-
-/** Squares a repelled Priest may retreat to, including staying put (its own
- *  cell is always the first entry). Empty when no flee is pending. */
-export function fleeDestinations(state: GameState): Cell[] {
-  const flee = state.pendingFlee;
-  if (!flee) return [];
-  const priest = unitById(state, flee.priestId);
-  if (!priest) return [];
-  return [{ ...priest.cell }, ...legalMoves(state, priest, flee.steps)];
-}
-
 /**
- * Resolve the pending flee. `dest` of `null` (or the Priest's own cell) stays
- * put. Landing on a Gravestone lets the Priest resurrect from it **immediately,
- * outside its own turn** — deliberately exempt from the one-per-turn cap, and
- * from the action economy, because the retreat itself is the opt-in.
+ * The whole area a Rite of the Nexus needs held: the 2x2 Nexus itself plus the
+ * RITUAL CIRCLE, the ring of 12 squares around it. Sixteen squares in all, and
+ * every one of them must be free of enemies — friendly units are welcome.
+ *
+ * This is what makes a ritual a siege rather than a stroll: an enemy anywhere in
+ * that ring breaks it, so the ritualist has to clear and then screen a wide area
+ * for a full round.
  */
-export function resolveFlee(state: GameState, dest: Cell | null): GameState {
-  const flee = state.pendingFlee;
-  if (!flee) return state;
-  const priest = unitById(state, flee.priestId);
-  if (!priest) return { ...state, pendingFlee: null };
+export const RITUAL_AREA: Cell[] = [...NEXUS_CELLS, ...RITUAL_CIRCLE];
 
-  const legal = dest ? fleeDestinations(state).some((c) => sameCell(c, dest)) : true;
-  const to = legal && dest ? dest : priest.cell;
-  const moved = !sameCell(to, priest.cell);
-
-  let next: GameState = {
-    ...state,
-    pendingFlee: null,
-    units: state.units.map((u) =>
-      u.id === priest.id ? { ...u, prevCell: { ...u.cell }, cell: { ...to } } : u,
-    ),
-    log: [
-      ...state.log,
-      moved
-        ? `${priest.owner}'s Priest repels the attack and flees ${manhattan(priest.cell, to)} square(s).`
-        : `${priest.owner}'s Priest repels the attack and holds its ground.`,
-    ],
-  };
-
-  // Landed on a Gravestone? Resurrect there and then, out of turn.
-  const grave = graveAt(next, to);
-  const fled = unitById(next, priest.id)!;
-  if (moved && grave && warriorCount(next, priest.owner) < MAX_WARRIORS) {
-    const back = stepBackCell(next, fled);
-    if (back) {
-      next = {
-        ...next,
-        gravestones: next.gravestones.filter((g) => g.id !== grave.id),
-        units: [
-          ...next.units.map((u) => (u.id === priest.id ? { ...u, cell: back } : u)),
-          {
-            id: `${priest.owner}-w-res${graveCounter++}`,
-            kind: 'warrior' as const,
-            owner: priest.owner,
-            cell: { ...to },
-            carried: 0,
-            activated: 0,
-          },
-        ],
-        log: [
-          ...next.log,
-          `${priest.owner}'s fleeing Priest resurrects a Warrior on the spot — that Gravestone leaves the game.`,
-        ],
-      };
-    }
-  }
-  return checkVictory(pruneRitual(next));
+/** Enemy units standing anywhere in the ritual area (Nexus + circle). */
+export function ritualIntruders(state: GameState, owner: PlayerColor): Unit[] {
+  return state.units.filter(
+    (u) => u.owner !== owner && RITUAL_AREA.some((c) => sameCell(c, u.cell)),
+  );
 }
 
-function nexusClearOfEnemies(state: GameState, owner: PlayerColor): boolean {
-  return NEXUS_CELLS.every((cell) => {
-    const u = unitAt(state, cell);
-    return !u || u.owner === owner;
-  });
+function ritualAreaClear(state: GameState, owner: PlayerColor): boolean {
+  return ritualIntruders(state, owner).length === 0;
 }
 
 /** Is a declared ritual still standing — Priest alive, still in the Nexus, and
- *  no enemy on any Nexus square? */
+ *  no enemy anywhere in the Nexus OR its 12-square circle? */
 export function ritualIntact(state: GameState): boolean {
   const rit = state.ritual;
   if (!rit) return false;
@@ -1182,7 +1130,7 @@ export function ritualIntact(state: GameState): boolean {
   return (
     !!priest &&
     inNexus(priest.cell.r, priest.cell.c) &&
-    nexusClearOfEnemies(state, rit.player)
+    ritualAreaClear(state, rit.player)
   );
 }
 
@@ -1200,7 +1148,8 @@ export function canRitual(state: GameState, unitId: string): boolean {
   if (!u || u.kind !== 'priest' || !canAct(state, unitId)) return false;
   if (!inNexus(u.cell.r, u.cell.c)) return false;
   if (state.ritual) return false;
-  return nexusClearOfEnemies(state, u.owner);
+  // The Nexus AND its 12-square circle must be free of enemies to even begin.
+  return ritualAreaClear(state, u.owner);
 }
 
 export function beginRitual(state: GameState, unitId: string): GameState {
@@ -1213,8 +1162,9 @@ export function beginRitual(state: GameState, unitId: string): GameState {
     ...state,
     dice,
     activationDice,
-    // Stamped with the round it began in — the win is judged one round later,
-    // after every other player has had their complete turn.
+    // Stamped with the round it began in. The win lands when play RETURNS to
+    // this player in a later round — not at the round boundary — so a rival who
+    // activates before them next round gets one last chance to break it.
     ritual: { player: priest.owner, priestId: unitId, round: state.turn },
     unitsActedThisTurn: markActed(state, unitId),
     log: [...state.log, `${priest.owner}'s Priest begins the Ritual in the Nexus!`],
@@ -1285,7 +1235,7 @@ function hasActivationLeft(state: GameState, p: PlayerColor): boolean {
   if (state.passed.includes(p)) return false;
   if (diceLeft(state, p) <= 0) return false;
   if (!state.dice.some((d) => d.owner === p && d.usedBy === null)) return false;
-  return hasPlayLeft({ ...state, current: p, activationDice: [], pendingFlee: null });
+  return hasPlayLeft({ ...state, current: p, activationDice: [] });
 }
 
 /** The next player owed an activation, clockwise from `from` (exclusive), or
@@ -1308,10 +1258,7 @@ function nextActivator(state: GameState, from: PlayerColor): PlayerColor | null 
  */
 export function endActivation(state: GameState): GameState {
   if (state.winner) return state;
-  // An unanswered Priest retreat is declined here (the Priest simply holds its
-  // ground), so an idle defender can never stall the game.
-  const base = state.pendingFlee ? resolveFlee(state, null) : state;
-  if (base.winner) return base;
+  const base = state;
 
   // Ending an activation without having committed anything is a PASS: that
   // player is done for the round and their unused dice are simply ignored.
@@ -1328,16 +1275,41 @@ export function endActivation(state: GameState): GameState {
 
   const next = nextActivator(after, after.current);
   if (next) {
-    return resolveRespawns({
-      ...after,
-      current: next,
-      activationDice: [],
-      pendingFlee: null,
-      lastCombat: null,
-      log: [...after.log, `— ${next} activates (${diceLeft(after, next)} dice left).`],
-    });
+    return claimRitual(
+      resolveRespawns({
+        ...after,
+        current: next,
+        activationDice: [],
+        lastCombat: null,
+        log: [...after.log, `— ${next} activates (${diceLeft(after, next)} dice left).`],
+      }),
+    );
   }
   return newRound(after);
+}
+
+/**
+ * Award the Ritual the moment play RETURNS to the ritualist in a later round.
+ *
+ * The Rite is declared as one of a player's activations; every other player then
+ * gets a complete turn, and if the circle is still held when that player is next
+ * handed an activation, they win. Judging it here rather than at the round
+ * boundary is what gives a rival who activates EARLIER in the following round
+ * one final move to break it.
+ */
+function claimRitual(state: GameState): GameState {
+  const rit = state.ritual;
+  if (!rit || state.winner) return state;
+  if (state.current !== rit.player || state.turn <= rit.round) return state;
+  if (!ritualIntact(state)) {
+    return { ...state, ritual: null, log: [...state.log, `The Ritual was broken.`] };
+  }
+  return {
+    ...state,
+    winner: rit.player,
+    winMethod: 'Ritual',
+    log: [...state.log, `${rit.player} completes the Rite of the Nexus and wins!`],
+  };
 }
 
 /**
@@ -1369,36 +1341,23 @@ function newRound(state: GameState): GameState {
     unitsMovedThisTurn: [],
     unitsActedThisTurn: [],
     resurrectedThisTurn: [],
-    pendingFlee: null,
     lastCombat: null,
     log: [...state.log, `— Round ${turn}. ${starter} starts. Roll the dice.`],
   });
 
-  // Ritual victory is judged at the round boundary: declaring it costs the
-  // Priest's action, every other player then gets a complete turn, and if the
-  // Ritual still stands when play comes back round, it is won.
-  if (s.ritual) {
-    const stands = ritualIntact(s);
-    if (stands && turn > s.ritual.round) {
-      const winner = s.ritual.player;
-      return {
-        ...s,
-        winner,
-        winMethod: 'Ritual',
-        log: [...s.log, `${winner} completes the Ritual and wins!`],
-      };
-    }
-    if (!stands) s = { ...s, ritual: null, log: [...s.log, `The Ritual was broken.`] };
+  // A ritual that has already been broken is cleared here; the WIN itself is
+  // judged by claimRitual when play next reaches the ritualist — which may be
+  // several activations into this new round if a rival starts it.
+  if (s.ritual && !ritualIntact(s)) {
+    s = { ...s, ritual: null, log: [...s.log, `The Ritual was broken.`] };
   }
-
-  return s;
+  return claimRitual(s);
 }
 
 /** Whether the current player can still do anything in this activation — a unit
  *  to act with, or a die left to commit. */
 export function hasPlayLeft(state: GameState): boolean {
   if (state.turnPhase !== 'act') return false;
-  if (state.pendingFlee) return false;
   if (diceLeft(state, state.current) <= 0) return false;
   return state.units.some(
     (u) =>

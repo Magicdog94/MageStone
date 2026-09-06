@@ -188,7 +188,6 @@ function buildGame(players: PlayerColor[], layout: StoneLayout): GameState {
     // Finite shared bank — 4 per participating player. Never replenished.
     graveBank: GRAVES_PER_PLAYER * players.length,
     resurrectedThisTurn: [],
-    pendingFlee: null,
     eliminated: [],
     kills: { red: 0, blue: 0, green: 0, yellow: 0 },
     winner: null,

@@ -72,18 +72,6 @@ export type TurnPhase = 'roll' | 'act' | 'end';
 
 export type ActionKind = 'attack' | 'collect' | 'activate' | 'resurrect' | 'ritual';
 
-/**
- * A Priest that won its defence roll may retreat up to `steps` squares (or stay
- * put). It is offered to the DEFENDING player, out of turn, and is always safe
- * to decline — `endTurn` force-clears it so a match can never wedge on it.
- */
-export interface PendingFlee {
-  priestId: string;
-  owner: PlayerColor;
-  /** The Priest's winning defence roll — the maximum retreat distance. */
-  steps: number;
-}
-
 export interface CombatResult {
   attackerIds: string[];
   defenderId: string;
@@ -97,8 +85,9 @@ export interface CombatResult {
   attackFaces: number; // the die size used by the attacker (6/12/20) — for display
   defenseRoll: number;
   defenseFaces: number; // the defender's die size (6, or a Mage's power die 12/20)
-  /** Ties go to the attacker, so 'draw' never occurs — kept for compatibility
-   *  with stored/broadcast states from before the tie rule changed. */
+  /** A tie is RE-ROLLED until the result is decisive, so neither side is
+   *  favoured and 'draw' never occurs — the field is kept only for states
+   *  broadcast by older clients. */
   outcome: 'win' | 'lose' | 'draw';
   defeatedId: string | null;
   /** The defender's cell at the moment of attack — lets attackers turn to face
@@ -109,8 +98,9 @@ export interface CombatResult {
 export interface Ritual {
   player: PlayerColor;
   priestId: string;
-  /** The round it was declared in. Every other player gets a complete turn, so
-   *  it is judged at the start of the FOLLOWING round. */
+  /** The round it was declared in. Every other player gets a complete turn, and
+   *  the win is claimed when play RETURNS to this player in a later round —
+   *  which may be several activations into that round. */
   round: number;
 }
 
@@ -167,11 +157,8 @@ export interface GameState {
    * never replenished, which is what eventually makes attrition permanent.
    */
   graveBank: number;
-  /** Players who have already used their one normal resurrection this turn.
-   *  The out-of-turn flee-resurrection deliberately bypasses this. */
+  /** Players who have already used their one resurrection this round. */
   resurrectedThisTurn: PlayerColor[];
-  /** A Priest that won its defence and may still retreat (see `PendingFlee`). */
-  pendingFlee: PendingFlee | null;
   /** Players knocked out of the game: reduced to zero units on the board while
    *  their base was besieged. They take no turns and never respawn. */
   eliminated: PlayerColor[];

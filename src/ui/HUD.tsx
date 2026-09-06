@@ -169,33 +169,8 @@ function CombatAnnounce() {
       </span>
       <span className="ca-dot">·</span>
       <span className="ca-faces">
-        {intro.attackFaces} vs {intro.defenseFaces} · ties go to the attacker
+        {intro.attackFaces} vs {intro.defenseFaces} · ties re-roll
       </span>
-    </div>
-  );
-}
-
-/**
- * A Priest that won its defence may retreat up to its defence roll. The legal
- * squares already glow (moveDestinations takes over while a flee is pending),
- * so this is just the prompt plus the "hold ground" opt-out. It self-resolves
- * after a timeout, so it can never block a match.
- */
-function FleePrompt() {
-  const flee = useGame((s) => s.game.pendingFlee);
-  const fleePriest = useGame((s) => s.fleePriest);
-  const label = usePlayerLabel();
-  if (!flee) return null;
-  return (
-    <div className="flee-prompt" style={{ '--accent': COLORS[flee.owner] } as CSSProperties}>
-      <span className="flee-text">
-        <strong>{label(flee.owner)}’s Priest repels the attack.</strong> It may flee up to{' '}
-        {flee.steps} {flee.steps === 1 ? 'square' : 'squares'} — click a glowing square, or hold
-        your ground. Landing on a Gravestone resurrects a Warrior on the spot.
-      </span>
-      <button className="ghost sm" onClick={() => fleePriest(null)}>
-        Hold ground
-      </button>
     </div>
   );
 }
@@ -287,7 +262,6 @@ export function HUD() {
   const attackOpts = myTurn ? attackOptions(game, selectedUnitId, tutRestrict) : [];
   const phase = game.turnPhase;
 
-
   const graveBank = gravestoneBank(game);
   const graveCap = gravestoneCapacity(game);
   const graveUrl = useTokenUrl('gravestone');
@@ -338,7 +312,7 @@ export function HUD() {
           {myTurn ? 'Your turn' : `${label(game.current)}'s turn`}
         </div>
       )}
-      <FleePrompt />
+
       <SiegeBanner />
       <EliminationToast />
       {/* no Settings during the guided tutorial — its Main Menu / New Game

@@ -45,14 +45,14 @@ td,th{border:1px solid rgba(201,162,74,.35);padding:6px 12px;text-align:center}
 
 <h2>Combat</h2>
 <p>Warriors and Mages attack an enemy on an orthogonally adjacent square; Priests never attack. One Warrior rolls 1d6; two or three Warriors adjacent to the same target <strong>coordinate</strong> for 2d6 or 3d6 summed. The Mage rolls its power die — d6 with 0–1 activated MageStones, d12 with 2–3, d20 with 4+.</p>
-<p>The defender rolls 1d6 (a defending Mage rolls its own power die). Higher total wins and <strong>ties go to the attacker</strong>. If the attacker wins, the target is defeated; if the defender wins, one attacker falls — except against a defending Priest, which never kills its attacker and may instead flee up to the value of its defence roll.</p>
+<p>The defender rolls 1d6 (a defending Mage rolls its own power die). Higher total wins, and <strong>a tie is re-rolled</strong> until the result is decisive — neither side has any advantage, so an even fight is exactly 50:50. If the attacker wins, the target is defeated; if the defender wins, one attacker falls — except against a defending Priest, which never kills its attacker. A repelled Priest does not move.</p>
 <table>
 <tr><th>Attacker</th><th>vs d6</th><th>vs d12</th><th>vs d20</th></tr>
-<tr><td>1 Warrior (1d6)</td><td>58%</td><td>29%</td><td>18%</td></tr>
-<tr><td>2 Warriors (2d6)</td><td>91%</td><td>58%</td><td>35%</td></tr>
-<tr><td>3 Warriors (3d6)</td><td>99%</td><td>83%</td><td>52%</td></tr>
-<tr><td>Mage d12</td><td>79%</td><td>54%</td><td>33%</td></tr>
-<tr><td>Mage d20</td><td>87%</td><td>72%</td><td>52%</td></tr>
+<tr><td>1 Warrior (1d6)</td><td>50%</td><td>23%</td><td>13%</td></tr>
+<tr><td>2 Warriors (2d6)</td><td>90%</td><td>55%</td><td>32%</td></tr>
+<tr><td>3 Warriors (3d6)</td><td>99%</td><td>81%</td><td>50%</td></tr>
+<tr><td>Mage d12</td><td>77%</td><td>50%</td><td>29%</td></tr>
+<tr><td>Mage d20</td><td>87%</td><td>71%</td><td>50%</td></tr>
 </table>
 
 <h2>Mage sorcery</h2>
@@ -74,7 +74,12 @@ td,th{border:1px solid rgba(201,162,74,.35);padding:6px 12px;text-align:center}
 <p><strong>Activation is permanent.</strong> Once a MageStone has ever been Activated it can never become Unactivated again — not when it is dropped, not when its Mage is killed, not when it is spent on a spell, and not when an enemy takes it. A Mage that picks up an already-Activated stone counts it immediately and does not need to carry it home. More of the board's stones therefore become instantly useful as a game goes on.</p>
 
 <h2>The Priest</h2>
-<p>A Priest standing on any gravestone may <strong>resurrect</strong> a Warrior there (up to 6 alive), stepping back one square; that gravestone then leaves the game for good. Normally only one gravestone may be resurrected per turn. A Priest that wins its defence roll may flee up to the value of that roll, and if it lands on a gravestone it may resurrect from it immediately, even outside its own turn. A Priest in the Nexus with all four Nexus squares free of enemies may <strong>begin the ritual</strong>.</p>
+<p>A Priest standing on any gravestone may <strong>resurrect</strong> a Warrior there (up to 6 alive), stepping back one square; that gravestone then leaves the game for good. Only one gravestone may be resurrected per turn. A Priest that wins its defence roll repels the attack but does not move.</p>
+
+<h2>The Rite of the Nexus</h2>
+<p>The Nexus is the central 2&times;2, and the <strong>ritual circle</strong> is the ring of 12 squares immediately around it — the two squares outside each of its four sides, plus the four diagonal corners (rows and columns 6&ndash;9, less the Nexus itself).</p>
+<p>A Priest standing in the Nexus may declare the Rite, which costs that Priest's action. To begin it, and to keep it, <strong>all 16 of those squares</strong> — Nexus and circle — must be free of enemy units. Friendly units may stand anywhere in them, and screening the circle is the usual way to hold one.</p>
+<p>Every other player then gets a complete turn. If the Rite is still standing when play returns to the ritualist, they win immediately. Because the starting player rotates each round, an opponent who activates earlier in the following round gets one final chance to break it — a single enemy stepping anywhere into the circle is enough. It also breaks if the Priest is killed or leaves the Nexus.</p>
 
 <h2>Victory</h2>
 <ol>

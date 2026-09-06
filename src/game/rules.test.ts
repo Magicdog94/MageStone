@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { createGame, playerCountFor, playerSet, stoneCells, STONE_LAYOUTS } from './setup';
+import { RITUAL_CIRCLE, inNexus } from './board';
 import { isCurrentStateShape } from './migrate';
 import {
   BOLT_COST,
@@ -15,6 +16,7 @@ import {
   canBolt,
   canNova,
   canResurrect,
+  canRitual,
   carriedStones,
   checkVictory,
   collect,
@@ -28,8 +30,9 @@ import {
   moveUnit,
   resolveAttack,
   resolveBolt,
-  resolveFlee,
   resolveNova,
+  ritualIntact,
+  RITUAL_AREA,
   resurrect,
   rollDice,
   DICE_PER_ROUND,
@@ -785,7 +788,7 @@ describe('TEST 10 — MageStone victory', () => {
 // ---- TEST 11 — Ritual ------------------------------------------------------
 
 describe('TEST 11 — Ritual', () => {
-  /** A Priest on the Nexus with the ritual declared this round, and nobody
+  /** A Priest on the Nexus with the Rite declared this round, and nobody
    *  holding any dice — so the next `endActivation` closes the round. */
   const startRitual = (players: PlayerColor[]) => {
     let g = withDice(acting(players), ['priest'], [2]);
@@ -794,11 +797,21 @@ describe('TEST 11 — Ritual', () => {
     return g;
   };
 
-  it('wins when the round comes back round with the Nexus still held', () => {
+  /** Hand play round and round until somebody wins or the Rite dies. The win no
+   *  longer lands at the round boundary — it lands when play RETURNS to the
+   *  ritualist — so tests drive activations rather than counting rounds. */
+  const playOn = (g: GameState, steps = 12) => {
+    for (let i = 0; i < steps && !g.winner; i++) g = endActivation(g);
+    return g;
+  };
+
+  it('wins once play returns to the ritualist with the circle still held', () => {
     let g = startRitual(['red', 'blue']);
     expect(g.winner).toBeNull();
     g = endActivation(g); // nobody has dice → the round closes
     expect(g.turn).toBe(2);
+    expect(g.winner).toBeNull(); // NOT at the boundary — blue starts round 2
+    g = playOn(g);
     expect(g.winner).toBe('red');
     expect(g.winMethod).toBe('Ritual');
   });
@@ -807,11 +820,12 @@ describe('TEST 11 — Ritual', () => {
     let g = rolled(acting(['red', 'blue']), 2);
     g = place(g, 'red-p', { r: 7, c: 7 });
     g = { ...g, ritual: { player: 'red', priestId: 'red-p', round: g.turn } };
-    // Both sides burn all their activations; the ritual stands but the round
-    // has not turned over yet, so nobody has won.
+    // Both sides burn all their activations; the Rite stands but play has not
+    // come back to red yet, so nobody has won.
     for (let i = 0; i < 8 && g.turn === 1; i++) g = endActivation(g);
     expect(g.turn).toBeGreaterThan(1);
-    expect(g.winner).toBe('red'); // only once the NEW round began
+    expect(g.winner).toBeNull(); // the round turning over is NOT enough
+    expect(playOn(g).winner).toBe('red'); // …only red's next activation is
   });
 
   it('gives every other player a complete turn first (4 players)', () => {
@@ -828,6 +842,88 @@ describe('TEST 11 — Ritual', () => {
     expect(seen.has('green')).toBe(true);
     expect(seen.has('yellow')).toBe(true);
     expect(g.winner).toBe('red');
+  });
+
+  it('needs the 12-square ritual circle clear, not just the Nexus', () => {
+    // The circle is the ring around the Nexus: rows/cols 6-9, less the 2x2.
+    expect(RITUAL_CIRCLE).toHaveLength(12);
+    expect(RITUAL_AREA).toHaveLength(16);
+    for (const c of RITUAL_CIRCLE) {
+      expect(c.r >= 6 && c.r <= 9 && c.c >= 6 && c.c <= 9).toBe(true);
+      expect(inNexus(c.r, c.c)).toBe(false);
+    }
+    // The 8 squares directly outside the Nexus sides, plus the 4 diagonals.
+    for (const c of [
+      { r: 6, c: 7 }, { r: 6, c: 8 }, // north pair
+      { r: 9, c: 7 }, { r: 9, c: 8 }, // south pair
+      { r: 7, c: 6 }, { r: 8, c: 6 }, // west pair
+      { r: 7, c: 9 }, { r: 8, c: 9 }, // east pair
+      { r: 6, c: 6 }, { r: 6, c: 9 }, { r: 9, c: 6 }, { r: 9, c: 9 }, // corners
+    ]) {
+      expect(RITUAL_CIRCLE.some((x) => x.r === c.r && x.c === c.c)).toBe(true);
+    }
+  });
+
+  it('an enemy anywhere in the circle blocks the Rite from even starting', () => {
+    for (const spot of RITUAL_CIRCLE) {
+      let g = withDice(acting(['red', 'blue']), ['priest'], [2]);
+      g = place(g, 'red-p', { r: 7, c: 7 });
+      expect(canRitual(g, 'red-p')).toBe(true); // clear board — fine
+      g = place(g, 'blue-w1', spot);
+      expect(canRitual(g, 'red-p')).toBe(false); // one intruder is enough
+    }
+  });
+
+  it('an enemy stepping into the circle breaks a running Rite', () => {
+    let g = startRitual(['red', 'blue']);
+    expect(ritualIntact(g)).toBe(true);
+    g = place(g, 'blue-w1', { r: 6, c: 6 }); // a far diagonal of the circle
+    expect(ritualIntact(g)).toBe(false);
+    g = endActivation(g);
+    expect(g.winner).toBeNull();
+    expect(g.ritual).toBeNull();
+  });
+
+  it('tolerates FRIENDLY units all over the circle', () => {
+    let g = startRitual(['red', 'blue']);
+    g = place(g, 'red-w1', { r: 6, c: 6 });
+    g = place(g, 'red-w2', { r: 9, c: 9 });
+    g = place(g, 'red-w3', { r: 6, c: 8 });
+    expect(ritualIntact(g)).toBe(true);
+    expect(playOn(g).winner).toBe('red');
+  });
+
+  it('lets an opponent who activates first next round have one last move', () => {
+    // Red declares in round 1. Round 2 starts with BLUE (the starter rotates),
+    // so blue gets an activation before the win can land — and can break it.
+    let g = rolled(acting(['red', 'blue']), 2);
+    g = place(g, 'red-p', { r: 7, c: 7 });
+    g = { ...g, ritual: { player: 'red', priestId: 'red-p', round: g.turn } };
+    // Everyone passes out the round.
+    for (let i = 0; i < 8 && g.turn === 1; i++) g = endActivation(g);
+
+    expect(g.turn).toBe(2);
+    expect(g.roundStarter).toBe('blue');
+    expect(g.current).toBe('blue'); // blue moves FIRST in the new round
+    expect(g.winner).toBeNull(); // …and red has NOT won yet
+    // Blue uses that last activation to step into the circle.
+    g = place(g, 'blue-w1', { r: 6, c: 7 });
+    g = endActivation(g);
+    expect(g.winner).toBeNull();
+    expect(g.ritual).toBeNull();
+  });
+
+  it('lands the win the moment play returns to the ritualist', () => {
+    let g = rolled(acting(['red', 'blue']), 2);
+    g = place(g, 'red-p', { r: 7, c: 7 });
+    g = { ...g, ritual: { player: 'red', priestId: 'red-p', round: g.turn } };
+    for (let i = 0; i < 8 && g.turn === 1; i++) g = endActivation(g);
+    expect(g.current).toBe('blue');
+    expect(g.winner).toBeNull();
+    g = endActivation(g); // blue does nothing → play returns to red
+    expect(g.current).toBe('red');
+    expect(g.winner).toBe('red');
+    expect(g.winMethod).toBe('Ritual');
   });
 
   it('breaks when an enemy occupies a Nexus square', () => {
@@ -850,8 +946,7 @@ describe('TEST 11 — Ritual', () => {
   it('tolerates a friendly unit on another Nexus square', () => {
     let g = startRitual(['red', 'blue']);
     g = place(g, 'red-w1', { r: 8, c: 8 });
-    g = endActivation(g);
-    expect(g.winner).toBe('red');
+    expect(playOn(g).winner).toBe('red');
   });
 });
 
@@ -889,28 +984,55 @@ describe('TEST 12 — Conquest', () => {
   });
 });
 
-// ---- Combat: ties go to the attacker ---------------------------------------
+// ---- Combat: no attacker advantage, an even fight is 50:50 ----------------
 
-describe('Combat — ties go to the attacker', () => {
-  it('an equal roll defeats the defender', () => {
+describe('Combat — neither side is favoured', () => {
+  it('re-rolls a tie instead of awarding it to the attacker', () => {
     let g = withDice(acting(), ['warrior'], [1]);
     g = place(g, 'red-w1', { r: 8, c: 8 });
     g = place(g, 'blue-w1', { r: 8, c: 9 });
-    // Both roll a 1 → a tie, which the attacker takes.
-    g = resolveAttack(g, ['red-w1'], 'blue-w1', seq([LO, LO]));
-    expect(g.lastCombat?.attackRoll).toBe(g.lastCombat?.defenseRoll);
+    // First pair ties on 1s; the re-roll gives the attacker a 6 against a 1.
+    g = resolveAttack(g, ['red-w1'], 'blue-w1', seq([LO, LO, HI, LO]));
+    expect(g.lastCombat?.attackRoll).not.toBe(g.lastCombat?.defenseRoll);
     expect(g.lastCombat?.outcome).toBe('win');
-    expect(unitById(g, 'blue-w1')).toBeUndefined();
   });
 
-  it('prices the odds as P(attack >= defence), with no draw branch', () => {
+  it('lets the DEFENDER take a re-rolled tie just as readily', () => {
+    let g = withDice(acting(), ['warrior'], [1]);
+    g = place(g, 'red-w1', { r: 8, c: 8 });
+    g = place(g, 'blue-w1', { r: 8, c: 9 });
+    // Tie on 1s, then the defender rolls higher — the attacker falls.
+    g = resolveAttack(g, ['red-w1'], 'blue-w1', seq([LO, LO, LO, HI]));
+    expect(g.lastCombat?.outcome).toBe('lose');
+    expect(unitById(g, 'red-w1')).toBeUndefined();
+    expect(unitById(g, 'blue-w1')).toBeDefined();
+  });
+
+  it('prices every EVEN matchup at exactly 50%', () => {
     let g = acting();
     g = place(g, 'red-w1', { r: 8, c: 8 });
     g = place(g, 'blue-w1', { r: 8, c: 9 });
     const o = combatOdds(g, ['red-w1'], 'blue-w1');
     expect(o.draw).toBe(0);
     expect(o.win + o.lose).toBeCloseTo(1, 10);
-    expect(Math.round(o.win * 100)).toBe(58); // 21/36
+    expect(o.win).toBeCloseTo(0.5, 10); // 1d6 vs 1d6 — dead even
+
+    // A Mage on the same power tier as its target is even too.
+    let m = give(acting(), 'red-m', 0, 2); // d12
+    m = give(m, 'blue-m', 0, 2); // d12
+    m = place(m, 'red-m', { r: 8, c: 8 });
+    m = place(m, 'blue-m', { r: 8, c: 9 });
+    expect(combatOdds(m, ['red-m'], 'blue-m').win).toBeCloseTo(0.5, 10);
+  });
+
+  it('matches the Rule Book odds table', () => {
+    let g = acting();
+    g = place(g, 'red-w1', { r: 8, c: 8 });
+    g = place(g, 'red-w2', { r: 7, c: 9 });
+    g = place(g, 'blue-w1', { r: 8, c: 9 });
+    const pct = (ids: string[]) => Math.round(combatOdds(g, ids, 'blue-w1').win * 100);
+    expect(pct(['red-w1'])).toBe(50);
+    expect(pct(['red-w1', 'red-w2'])).toBe(90);
   });
 
   it('a coordinated attack loses only ONE Warrior', () => {
@@ -927,9 +1049,9 @@ describe('Combat — ties go to the attacker', () => {
   });
 });
 
-// ---- The Priest: repel, flee, out-of-turn resurrection ---------------------
+// ---- The Priest: repels, and does NOT move ---------------------------------
 
-describe('Priest — repel and flee', () => {
+describe('Priest — repel only, never flees', () => {
   const attackPriest = (rig: number[]) => {
     let g = withDice(acting(), ['warrior'], [1]);
     g = place(g, 'red-w1', { r: 8, c: 8 });
@@ -937,60 +1059,33 @@ describe('Priest — repel and flee', () => {
     return resolveAttack(g, ['red-w1'], 'blue-p', seq(rig));
   };
 
-  it('never kills its attacker, and offers a retreat of exactly its defence roll', () => {
+  it('never kills its attacker, and neither unit moves', () => {
     const g = attackPriest([LO, HI]); // attacker 1, priest 6
     expect(g.lastCombat?.outcome).toBe('lose');
     expect(unitById(g, 'red-w1')).toBeDefined(); // the attacker survives
-    expect(g.pendingFlee).toEqual({ priestId: 'blue-p', owner: 'blue', steps: 6 });
+    expect(at(g, 'red-w1').cell).toEqual({ r: 8, c: 8 }); // and stays put
+    expect(at(g, 'blue-p').cell).toEqual({ r: 8, c: 9 }); // the Priest does NOT flee
   });
 
-  it('may decline the retreat and hold its ground', () => {
-    let g = attackPriest([LO, HI]);
-    g = resolveFlee(g, null);
-    expect(g.pendingFlee).toBeNull();
-    expect(at(g, 'blue-p').cell).toEqual({ r: 8, c: 9 });
+  it('does not move whatever its winning defence roll was', () => {
+    // A 3 and a 6 both merely repel; the Priest is rooted either way.
+    for (const roll of [0.34, HI]) {
+      const g = attackPriest([LO, roll]);
+      expect(g.lastCombat?.outcome).toBe('lose');
+      expect(at(g, 'blue-p').cell).toEqual({ r: 8, c: 9 });
+    }
   });
 
-  it('may retreat any distance up to the roll, and refuses squares beyond it', () => {
-    let g = attackPriest([LO, seq([0.34])()]); // priest rolls a 3
-    expect(g.pendingFlee?.steps).toBe(3);
-    const tooFar = resolveFlee(g, { r: 12, c: 9 }); // 4 squares — out of reach
-    expect(tooFar.units.find((u) => u.id === 'blue-p')!.cell).toEqual({ r: 8, c: 9 });
-    g = resolveFlee(g, { r: 10, c: 9 }); // 2 of its 3 squares
-    expect(at(g, 'blue-p').cell).toEqual({ r: 10, c: 9 });
-  });
-
-  it('resurrects immediately when it flees onto a Gravestone, even out of turn', () => {
-    let g = withDice(acting(), ['warrior'], [1]);
-    g = { ...g, units: g.units.filter((u) => u.id !== 'blue-w6') }; // room for one more
-    g = place(g, 'red-w1', { r: 8, c: 8 });
-    g = place(g, 'blue-p', { r: 8, c: 9 });
-    g = defeatUnit(place(g, 'blue-w5', { r: 10, c: 9 }), 'blue-w5');
-    const bank = gravestoneBank(g);
-    const before = g.units.filter((u) => u.owner === 'blue' && u.kind === 'warrior').length;
-
-    g = resolveAttack(g, ['red-w1'], 'blue-p', seq([LO, HI]));
-    expect(g.current).toBe('red'); // still red's turn — this is out of turn
-    g = resolveFlee(g, { r: 10, c: 9 }); // land on the grave
-
-    expect(g.units.filter((u) => u.owner === 'blue' && u.kind === 'warrior')).toHaveLength(before + 1);
-    expect(g.gravestones).toHaveLength(0);
-    expect(gravestoneBank(g)).toBe(bank); // still never returns to the bank
-  });
-
-  it('blocks all further play until it is settled, and endTurn force-declines it', () => {
-    let g = attackPriest([LO, HI]);
-    // Red cannot keep playing with the retreat unanswered.
-    const tried = moveUnit(withDice(g, ['warrior'], [2]), 'red-w2', 'd0', { r: 2, c: 5 });
-    expect(tried.pendingFlee).not.toBeNull();
-    g = endActivation(g);
-    expect(g.pendingFlee).toBeNull();
-    expect(g.current).toBe('blue');
+  it('play continues immediately — nothing is left pending after a repel', () => {
+    const g = attackPriest([LO, HI]);
+    // Red's other Warriors can act at once; there is no retreat to settle.
+    const moved = moveUnit(withDice(g, ['warrior'], [2]), 'red-w2', 'd0', { r: 2, c: 5 });
+    expect(moved).not.toBe(g);
+    expect(at(moved, 'red-w2').cell).toEqual({ r: 2, c: 5 });
   });
 
   it('a Priest that loses its defence is defeated and respawns', () => {
     const g = attackPriest([HI, LO]);
-    expect(g.pendingFlee).toBeNull();
     expect(at(g, 'blue-p').cell).toEqual({ r: 15, c: 8 }); // back at blue's base
   });
 });

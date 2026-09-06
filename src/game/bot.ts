@@ -41,7 +41,6 @@ import {
   combatOdds,
 
   endActivation,
-  fleeDestinations,
   graveAt,
   gravestoneBank,
   gravestoneCapacity,
@@ -49,10 +48,12 @@ import {
   magePowerDie,
   moveUnit,
   novaVictims,
+  RITUAL_AREA,
   plannedAttackers,
   resolveAttack,
   resolveBolt,
   resolveNova,
+  ritualIntact,
   resurrect,
   rollDice,
   stonesAt,
@@ -129,26 +130,39 @@ function quickOdds(nd6: number, defFaces: number): number {
     for (const [s, p] of dist) for (let v = 1; v <= 6; v++) next.set(s + v, (next.get(s + v) ?? 0) + p / 6);
     dist = next;
   }
-  // Ties go to the ATTACKER, so a >= d wins outright — no draw branch and no
-  // renormalising. Must track rules.ts::combatOdds exactly.
+  // A tie is RE-ROLLED, so neither side is favoured: the odds are conditioned
+  // on a decisive result. Must track rules.ts::combatOdds exactly.
   let win = 0;
+  let lose = 0;
   for (const [a, pa] of dist) {
-    for (let d = 1; d <= defFaces; d++) if (a >= d) win += pa / defFaces;
+    for (let d = 1; d <= defFaces; d++) {
+      const p = pa / defFaces;
+      if (a > d) win += p;
+      else if (a < d) lose += p;
+    }
   }
-  quickOddsCache.set(key, win);
-  return win;
+  const dec = win + lose;
+  const odds = dec > 0 ? win / dec : 0;
+  quickOddsCache.set(key, odds);
+  return odds;
 }
 
-/** P(attacker wins) for one aF-faced die against one dF-faced die (duels).
- *  Ties go to the attacker. */
+/** P(win | not draw) for one aF-faced die against one dF-faced die (duels) —
+ *  ties are re-rolled, so an even duel is exactly 50:50. */
 const faceOddsCache = new Map<number, number>();
 function faceOdds(aF: number, dF: number): number {
   const key = aF * 100 + dF;
   const hit = faceOddsCache.get(key);
   if (hit !== undefined) return hit;
   let win = 0;
-  for (let a = 1; a <= aF; a++) for (let d = 1; d <= dF; d++) if (a >= d) win++;
-  const odds = win / (aF * dF);
+  let lose = 0;
+  for (let a = 1; a <= aF; a++)
+    for (let d = 1; d <= dF; d++) {
+      if (a > d) win++;
+      else if (a < d) lose++;
+    }
+  const dec = win + lose;
+  const odds = dec > 0 ? win / dec : 0;
   faceOddsCache.set(key, odds);
   return odds;
 }
@@ -638,17 +652,10 @@ function expectedDamage(state: GameState, atk: PlayerColor, vic: PlayerColor): n
   return (items[0] ?? 0) + (items[1] ?? 0) * 0.75 + (items[2] ?? 0) * 0.5;
 }
 
-/** Is the ritual (if any) currently intact — priest alive, in the Nexus, no
- *  enemy standing on a Nexus cell? */
+/** Is the ritual (if any) currently intact — priest alive, in the Nexus, and no
+ *  enemy anywhere in the 16-square ritual area (Nexus + its 12-square circle)? */
 function ritualStands(state: GameState): boolean {
-  const rit = state.ritual;
-  if (!rit) return false;
-  const priest = unitById(state, rit.priestId);
-  if (!priest || !NEXUS_CELLS.some((c) => sameCell(c, priest.cell))) return false;
-  return NEXUS_CELLS.every((c) => {
-    const u = state.units.find((x) => sameCell(x.cell, c));
-    return !u || u.owner === rit.player;
-  });
+  return ritualIntact(state);
 }
 
 /** Chance a standing ritual survives the coming round: every enemy must fail
@@ -659,7 +666,10 @@ function ritualSurvival(state: GameState): number {
   const rit = state.ritual;
   const priest = rit && unitById(state, rit.priestId);
   if (!rit || !priest) return 0;
-  const open = NEXUS_CELLS.filter((c) => !state.units.some((u) => sameCell(u.cell, c)));
+  // ANY free square of the 16-cell ritual area breaks it, not just the Nexus —
+  // that is a far wider perimeter to screen, and the survival odds have to say
+  // so or the bot will keep buying rituals it cannot hold.
+  const open = RITUAL_AREA.filter((c) => !state.units.some((u) => sameCell(u.cell, c)));
   let survive = 1;
   for (const p of state.players) {
     if (p === rit.player || state.eliminated.includes(p)) continue;
@@ -1250,57 +1260,6 @@ function greedyAction(state: GameState, level: BotLevel): BotAction | null {
 
 /** The bot's next play. Easy/medium pick greedily; hard runs the search brain
  *  (falling back to greedy if the search ever throws). `null` ends the turn. */
-/**
- * Answer a repelled Priest's retreat, out of turn.
- *
- * Cheap and self-contained rather than a search: the choice is one move by one
- * unit, and the search machinery is built around the acting player's turn. The
- * priorities, in order: never abandon a live Ritual, take a free Warrior off a
- * Gravestone (worth more the emptier the bank), and otherwise get clear of
- * whatever just swung at it. Returns the destination, or null to hold ground.
- */
-export function chooseFlee(state: GameState, level: BotLevel): Cell | null {
-  const flee = state.pendingFlee;
-  if (!flee) return null;
-  const priest = unitById(state, flee.priestId);
-  if (!priest) return null;
-
-  // A Priest holding a live Ritual never steps off the Nexus — leaving breaks it.
-  if (state.ritual?.priestId === priest.id && NEXUS_CELLS.some((c) => sameCell(c, priest.cell)))
-    return null;
-
-  const scarcity = graveScarcity(state);
-  const canRes = warriorCount(state, priest.owner) < MAX_WARRIORS;
-  const enemies = state.units.filter((u) => u.owner !== priest.owner).map((u) => u.cell);
-  const nexusWanted = !state.ritual;
-
-  const score = (cell: Cell): number => {
-    let v = 0;
-    // A gravestone underfoot is a Warrior for free, on someone else's turn.
-    if (canRes && graveAt(state, cell)) v += 34 + 22 * scarcity;
-    // Distance from the nearest enemy — the whole point of running.
-    if (enemies.length) v += Math.min(minDist(cell, enemies), 5) * 6;
-    v -= adjacentEnemies(state, cell, priest.owner) * 14;
-    // Easy bots barely think about position; medium/hard also drift toward the
-    // Nexus, since a Priest on it is one action from a Ritual.
-    if (level !== 'easy' && nexusWanted) v += 8 - 1.2 * Math.min(minDist(cell, NEXUS_CELLS), 6);
-    return v;
-  };
-
-  const here = score(priest.cell);
-  let best: Cell | null = null;
-  let bestV = here + 0.5; // move only on a real improvement
-  for (const c of fleeDestinations(state)) {
-    if (sameCell(c, priest.cell)) continue;
-    const v = score(c);
-    if (v > bestV) {
-      bestV = v;
-      best = c;
-    }
-  }
-  return best;
-}
-
 export function chooseAction(state: GameState, level: BotLevel): BotAction | null {
   if (state.turnPhase !== 'act' || state.winner) return null;
   if (level !== 'hard') return greedyAction(state, level);
@@ -1315,7 +1274,6 @@ export function chooseAction(state: GameState, level: BotLevel): BotAction | nul
 if (typeof window !== 'undefined' && import.meta.env?.DEV) {
   (window as unknown as { __bot?: object }).__bot = {
     chooseAction,
-    chooseFlee,
     greedyAction,
     setSearchBudget,
     setBrainOpts,

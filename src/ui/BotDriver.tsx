@@ -13,7 +13,7 @@
 // rejected simply ends the turn.
 import { useEffect, useRef } from 'react';
 import { useGame } from '../store';
-import { chooseAction, chooseFlee, type BotAction } from '../game/bot';
+import { chooseAction, type BotAction } from '../game/bot';
 
 /** Pause between bot steps, ms (a touch quicker between discards). */
 const stepDelay = (phase: string) => (phase === 'discard' ? 550 : 800);
@@ -61,37 +61,12 @@ export function BotDriver() {
   // A boolean regime flag (not the game object) — the interval below reads
   // fresh state each tick, so it survives bot-to-bot turn handoffs untouched.
   const enabled = useGame((s) => !!s.bots[s.game.current] && s.botController && !s.game.winner);
-  // A repelled Priest's retreat is answered by its OWNER, who may not be the
-  // player whose turn it is — so it needs its own regime flag. Without this a
-  // bot Priest would sit there until the store's 15s watchdog held it in place.
-  const fleeBot = useGame((s) => {
-    const f = s.game.pendingFlee;
-    return f && s.botController && s.bots[f.owner] && !s.game.winner ? f.owner : null;
-  });
   const lastStep = useRef(0);
   // A momentous play (attack, sorcery, ritual) is HELD briefly before it is
   // executed — the pause reads as the bot weighing the decision, like a human
   // hovering before committing. The action is chosen once and cached; `sig`
   // drops it if the game state moved on underneath.
   const pending = useRef<{ action: BotAction; at: number; sig: string } | null>(null);
-
-  // Resolve a bot Priest's retreat after a short beat, so it reads as a
-  // decision rather than a teleport.
-  useEffect(() => {
-    if (!fleeBot) return;
-    const t = window.setTimeout(() => {
-      const s = useGame.getState();
-      const f = s.game.pendingFlee;
-      if (!f || f.owner !== fleeBot) return;
-      try {
-        s.fleePriest(chooseFlee(s.game, s.bots[f.owner] ?? 'medium'));
-      } catch (e) {
-        console.warn('MageStone: bot flee failed — holding ground.', e);
-        useGame.getState().fleePriest(null);
-      }
-    }, 900);
-    return () => window.clearTimeout(t);
-  }, [fleeBot]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -105,12 +80,6 @@ export function BotDriver() {
       const lvl = s.bots[g.current];
       if (!lvl || !s.botController || g.winner || s.rolling || s.tutorial) {
         dbg.__botLast = `guard:${!lvl ? 'lvl' : !s.botController ? 'ctl' : g.winner ? 'win' : s.rolling ? 'rolling' : 'tutorial'}`;
-        return;
-      }
-      // Wait out a pending Priest retreat rather than treating "no legal action"
-      // as a finished turn — canAct is false for everyone while one is open.
-      if (g.pendingFlee) {
-        dbg.__botLast = 'guard:flee';
         return;
       }
       const now = performance.now();

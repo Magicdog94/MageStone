@@ -324,7 +324,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'oddsgrid',
       title: 'Know your odds',
-      body: 'Your roll (row) against the defender’s die (column). Defenders roll a d6 — except a Mage, whose defence die grows with its stones (more on that soon). TIES GO TO THE ATTACKER, so equal rolls kill.',
+      body: 'Your roll (row) against the defender’s die (column). Defenders roll a d6 — except a Mage, whose defence die grows with its stones (more on that soon). Ties are RE-ROLLED, so nobody gets an edge — an even fight is a straight 50:50.',
       placement: 'center',
       showOdds: true,
     });
@@ -398,7 +398,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'priest',
       title: 'The Priest',
-      body: 'Priests never attack — and a Priest that WINS its defence kills nobody: it repels the attack, then may FLEE up to its defence roll (landing on a gravestone lets it resurrect on the spot, even out of turn). Their gift is RESURRECTION. One of your Warriors is down; there’s the gravestone.',
+      body: 'Priests never attack — and a Priest that WINS its defence kills nobody: it simply repels the attack, and neither unit moves. Their gift is RESURRECTION. One of your Warriors is down; there’s the gravestone.',
       placement: 'bottom',
     });
     await playerTask(

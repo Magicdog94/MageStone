@@ -2,7 +2,7 @@ import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useTexture } from '@react-three/drei';
-import { allCells, cellKey, edgeRotation, N } from '../game/board';
+import { RITUAL_CIRCLE, allCells, cellKey, edgeRotation, N } from '../game/board';
 import type { Cell } from '../game/types';
 import { besiegersOf, siegedPlayers } from '../game/rules';
 import { BOARD, CELL, COLORS, FLOOR_Y, TABLE_HALF, TILE_SURFACE, cellToWorld } from './coords';
@@ -247,12 +247,35 @@ function SiegeGlow({ color }: { color: string }) {
   );
 }
 
+/**
+ * A soft, slow breath over the 12 squares of the RITUAL CIRCLE while a Rite of
+ * the Nexus is running, in the ritualist's colour — the ground they have to
+ * hold, and that everyone else has to break into.
+ *
+ * Deliberately far gentler than SiegeGlow: a siege is an emergency and shouts
+ * at 0.62–0.82 opacity, whereas this is standing information that may sit on
+ * the board for a whole round, so it whispers and breathes at half the rate.
+ */
+function RitualGlow({ color }: { color: string }) {
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
+  useFrame(({ clock }) => {
+    if (mat.current) mat.current.opacity = 0.17 + 0.07 * (0.5 + 0.5 * Math.sin(clock.elapsedTime * 1.5));
+  });
+  return (
+    <mesh position={[0, TILE_TOP + 0.014, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <planeGeometry args={[CELL * TILE_INSET, CELL * TILE_INSET]} />
+      <meshBasicMaterial ref={mat} color={color} transparent opacity={0.2} depthWrite={false} />
+    </mesh>
+  );
+}
+
 function Tile({
   cell,
   legal,
   target,
   baseColor,
   siege,
+  ritual,
   map,
   bump,
 }: {
@@ -263,6 +286,9 @@ function Tile({
   baseColor: string | null;
   /** Besieging team's colour when this base tile's owner is under siege, else null. */
   siege: string | null;
+  /** Ritualist's colour when this cell is in the ritual circle of a RUNNING
+   *  Rite, else null. */
+  ritual: string | null;
   map: THREE.Texture;
   bump: THREE.Texture;
 }) {
@@ -306,8 +332,20 @@ function Tile({
           envMapIntensity={0}
           roughness={1}
           metalness={0}
-          emissive={legal ? BOARD.highlight : siege ? siege : baseColor ? baseColor : '#000000'}
-          emissiveIntensity={legal ? 0.4 : siege ? 0.55 : baseColor ? 0.32 : 0}
+          emissive={
+            legal
+              ? BOARD.highlight
+              : siege
+                ? siege
+                : ritual
+                  ? ritual
+                  : baseColor
+                    ? baseColor
+                    : '#000000'
+          }
+          emissiveIntensity={
+            legal ? 0.4 : siege ? 0.55 : ritual ? 0.16 : baseColor ? 0.32 : 0
+          }
         />
       </mesh>
 
@@ -322,6 +360,7 @@ function Tile({
       )}
 
       {siege && !legal && <SiegeGlow color={siege} />}
+      {ritual && !legal && !siege && <RitualGlow color={ritual} />}
 
       {legal && (
         <mesh position={[0, TILE_TOP + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -415,6 +454,11 @@ export function Board() {
     return byRotation;
   }, [game.players, game.seats]);
 
+  // While a Rite is running, its 12-square circle lights up in the ritualist's
+  // colour. The set is fixed board geometry, so it is built once.
+  const ritualColor = game.ritual ? COLORS[game.ritual.player] : null;
+  const ritualKeys = useMemo(() => new Set(RITUAL_CIRCLE.map(cellKey)), []);
+
   // Seats whose base is under siege → the dominant besieger's colour, so the
   // base glows in the colour of the team claiming it.
   const siegeGlowBySeat = useMemo(() => {
@@ -445,6 +489,7 @@ export function Board() {
             target={targetKeys.has(k)}
             baseColor={baseColor}
             siege={rot !== null ? siegeGlowBySeat.get(rot) ?? null : null}
+            ritual={ritualColor && ritualKeys.has(k) ? ritualColor : null}
           />
         );
       })}

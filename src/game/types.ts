@@ -52,18 +52,23 @@ export interface Gravestone {
 export type DieKind = 'mage' | 'priest' | 'warrior';
 
 /**
- * One of the five dice a player rolls at the start of a round. Nothing is
- * discarded any more: all five stay on the table and visible, and the player
- * simply never gets to spend more than `DICE_PER_ROUND` of them.
+ * One of the five SHARED dice for a round.
+ *
+ * There is a single pool: the player who starts the round rolls five dice, and
+ * every player then draws their three from those same five. Two players may
+ * take the same die — it is not consumed by being used, it is only unavailable
+ * to a player who has already spent it.
  */
 export interface Die {
   id: string;
-  /** Whose die this is. Every player rolls their own five each round. */
-  owner: PlayerColor;
   value: number; // 1..6
   kind: DieKind;
-  /** Unit id this die was spent on (movement/action), if any. */
-  usedBy: string | null;
+  /**
+   * Which unit each player has spent this die on, keyed by colour. A player
+   * appears here at most once per die (you pick three DISTINCT dice), but the
+   * same die can carry an entry for every player in the game.
+   */
+  usedBy: Partial<Record<PlayerColor, string>>;
 }
 
 /** 'roll' = the round's dice have not been thrown yet; 'act' = activations are
@@ -124,13 +129,15 @@ export interface GameState {
   /** Whose ACTIVATION it is. Play alternates: one activation each, in
    *  clockwise order, until nobody has dice left to spend. */
   current: PlayerColor;
-  /** Who activates first this round. Rotates clockwise every round, which in a
-   *  2-player game is strict alternation. */
+  /** Who activates first this round — and who ROLLS the round's five shared
+   *  dice. Rotates clockwise every round, which in a 2-player game is strict
+   *  alternation. */
   roundStarter: PlayerColor;
   /** Round number, starting at 1. A round is one roll plus the alternating
    *  activations that follow it. */
   turn: number;
   turnPhase: TurnPhase;
+  /** The round's five SHARED dice — one pool everybody draws their three from. */
   dice: Die[];
   units: Unit[];
   stones: MageStone[];

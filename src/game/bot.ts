@@ -938,7 +938,8 @@ const newSearch = (deadline: number): Search => ({ deadline, memo: new Map() });
 function fingerprint(state: GameState): string {
   let s = state.current + state.turnPhase;
   for (const u of state.units) s += `|${u.id}:${u.cell.r},${u.cell.c},${u.carried},${u.activated}`;
-  for (const d of state.dice) s += `~${d.owner[0]}${d.kind[0]}${d.value}${d.usedBy ?? '-'}`;
+  for (const d of state.dice)
+    s += `~${d.kind[0]}${d.value}${Object.entries(d.usedBy).map(([p, u]) => p[0] + u).sort().join('')}`;
   for (const st of state.stones) if (!st.carrier) s += `.${st.cell.r},${st.cell.c}`;
   for (const g of state.gravestones) s += `+${g.cell.r},${g.cell.c}`;
   s += `!${state.unitsMovedThisTurn.join(',')};${state.unitsActedThisTurn.join(',')}`;

@@ -10,7 +10,6 @@ import {
   rotateCell,
   PLAYER_ROTATION,
   NEXUS_CELLS,
-  RITUAL_CIRCLE,
 } from './board';
 import type {
   Cell,
@@ -287,19 +286,24 @@ export function gravestoneBank(state: GameState): number {
 
 const DIE_KINDS: DieKind[] = ['mage', 'priest', 'warrior', 'warrior', 'warrior'];
 
-/** Dice a player may spend per round (they roll five and keep the rest). */
+/** How many of the five shared dice each player may spend per round. */
 export const DICE_PER_ROUND = 3;
 
-/** Roll the round's dice — five for EVERY player still in the game. */
+/**
+ * Roll the round's dice — FIVE, shared by everybody.
+ *
+ * The player starting the round throws them, and those same five serve every
+ * player for the whole round: each draws their three from the one pool, and two
+ * players may take the same die. Nothing here is per-seat any more.
+ */
 export function rollDice(state: GameState, rng: RNG = defaultRng): GameState {
   if (state.turnPhase !== 'roll') return state;
-  const dice: Die[] = [];
-  for (const owner of state.players) {
-    if (state.eliminated.includes(owner)) continue;
-    for (const kind of DIE_KINDS) {
-      dice.push({ id: `die-${dieCounter++}`, owner, value: dN(6, rng), kind, usedBy: null });
-    }
-  }
+  const dice: Die[] = DIE_KINDS.map((kind) => ({
+    id: `die-${dieCounter++}`,
+    value: dN(6, rng),
+    kind,
+    usedBy: {},
+  }));
   return {
     ...state,
     dice,
@@ -307,14 +311,20 @@ export function rollDice(state: GameState, rng: RNG = defaultRng): GameState {
     turnPhase: 'act',
     log: [
       ...state.log,
-      `Round ${state.turn}: every player rolls 5 dice. ${state.current} activates first.`,
+      `Round ${state.turn}: ${state.current} rolls the 5 shared dice. Everyone picks 3 of them.`,
     ],
   };
 }
 
+/** The unit `player` spent this die on, or null if they have not used it. Other
+ *  players' claims on the same die are irrelevant — the pool is shared. */
+export function dieSpentBy(die: Die, player: PlayerColor): string | null {
+  return die.usedBy[player] ?? null;
+}
+
 /** Dice `player` has already spent this round (max `DICE_PER_ROUND`). */
 export function diceSpent(state: GameState, player: PlayerColor): number {
-  return state.dice.filter((d) => d.owner === player && d.usedBy !== null).length;
+  return state.dice.filter((d) => dieSpentBy(d, player) !== null).length;
 }
 
 /** Dice `player` may still spend this round. */
@@ -322,9 +332,10 @@ export function diceLeft(state: GameState, player: PlayerColor): number {
   return Math.max(0, DICE_PER_ROUND - diceSpent(state, player));
 }
 
-/** The player's own five dice for this round, spent and unspent. */
-export function diceOf(state: GameState, player: PlayerColor): Die[] {
-  return state.dice.filter((d) => d.owner === player);
+/** The round's dice. Shared, so this is the same five for every player — the
+ *  parameter is kept for call-site clarity about whose view is being drawn. */
+export function diceOf(state: GameState, _player: PlayerColor): Die[] {
+  return state.dice;
 }
 
 /** The kind an activation is locked to once it has begun — only same-kind dice
@@ -336,28 +347,22 @@ export function activationKind(state: GameState): DieKind | null {
   return first?.kind ?? null;
 }
 
-/** Is this die one the current player may commit right now — theirs, unspent,
- *  within their three-dice budget, and matching any activation already begun? */
+/** Is this die one the current player may commit right now — not already spent
+ *  BY THEM (an opponent having used it is fine), within their three-dice
+ *  budget, and matching any activation already begun? */
 export function canCommitDie(state: GameState, die: Die): boolean {
-  if (die.owner !== state.current || die.usedBy !== null) return false;
+  if (dieSpentBy(die, state.current) !== null) return false;
   if (diceLeft(state, state.current) <= 0) return false;
   const kind = activationKind(state);
   return kind === null || kind === die.kind;
 }
 
-/**
- * Replace the CURRENT player's die values with the physically-rolled results,
- * in order. Only their five dice are thrown on the table, so the values must be
- * matched to those — mapping across the whole (all-players) array would write
- * one seat's physical roll onto another seat's dice.
- */
+/** Replace the round's five die values with the physically-rolled results, in
+ *  order. One shared pool, one throw, so this is a straight positional map. */
 export function setRolledValues(state: GameState, values: number[]): GameState {
-  let i = 0;
   return {
     ...state,
-    dice: state.dice.map((d) =>
-      d.owner === state.current ? { ...d, value: values[i++] ?? d.value } : d,
-    ),
+    dice: state.dice.map((d, i) => (values[i] === undefined ? d : { ...d, value: values[i] })),
   };
 }
 
@@ -369,20 +374,21 @@ export function availableDice(state: GameState): Die[] {
   return state.dice.filter((d) => canCommitDie(state, d));
 }
 
-/** The current player's unspent dice, ignoring the same-kind activation lock —
- *  what the tray should still show as "yours this round". */
+/** Dice the current player has not spent yet, ignoring the same-kind activation
+ *  lock — what is still theirs to take from the shared pool this round. */
 export function unspentDice(state: GameState): Die[] {
-  return state.dice.filter((d) => d.owner === state.current && d.usedBy === null);
+  return state.dice.filter((d) => dieSpentBy(d, state.current) === null);
 }
 
-/** The die already spent activating this unit (from a move), if any. */
+/** The die already spent activating this unit (from a move), if any. Unit ids
+ *  carry their colour, so a scan across every player's claims is unambiguous. */
 export function unitDie(state: GameState, unitId: string): Die | undefined {
-  return state.dice.find((d) => d.usedBy === unitId);
+  return state.dice.find((d) => Object.values(d.usedBy).includes(unitId));
 }
 
-/** A die may move/activate only its owner's matching unit kind, only within its
- *  owner's three-dice round budget, and only if it fits the same-colour rule
- *  for the activation already in progress. */
+/** A die may move/activate only the CURRENT player's matching unit kind, only
+ *  within their three-dice round budget, and only if it fits the same-colour
+ *  rule for the activation already in progress. */
 export function canDieMoveUnit(die: Die, unit: Unit, state: GameState): boolean {
   if (unit.owner !== state.current) return false;
   if (state.unitsActedThisTurn.includes(unit.id)) return false;
@@ -446,7 +452,7 @@ export function moveUnit(state: GameState, unitId: string, dieId: string, dest: 
         units: state.units.map((u) =>
           u.id === unitId ? { ...u, prevCell: u.cell, cell: dest } : u,
         ),
-        dice: state.dice.map((d) => (d.id === dieId ? { ...d, usedBy: unitId } : d)),
+        dice: spendDie(state.dice, dieId, state.current, unitId),
         // Committing a die opens (or joins) the current activation. Everything
         // in it must share a kind — that IS the same-colour bundle rule.
         activationDice: state.activationDice.includes(dieId)
@@ -482,7 +488,15 @@ function spendActionDie(state: GameState, unitId: string): Die[] | null {
   if (!unit) return null;
   const free = availableDice(state).find((d) => d.kind === unit.kind);
   if (!free) return null;
-  return state.dice.map((d) => (d.id === free.id ? { ...d, usedBy: unitId } : d));
+  return spendDie(state.dice, free.id, state.current, unitId);
+}
+
+/** Record that `player` has spent `dieId` on `unitId`. Other players' claims on
+ *  that die are untouched — the five dice are shared, not consumed. */
+function spendDie(dice: Die[], dieId: string, player: PlayerColor, unitId: string): Die[] {
+  return dice.map((d) =>
+    d.id === dieId ? { ...d, usedBy: { ...d.usedBy, [player]: unitId } } : d,
+  );
 }
 
 /**
@@ -493,9 +507,9 @@ function spendActionDie(state: GameState, unitId: string): Die[] | null {
 function withActivation(state: GameState, dice: Die[]): string[] {
   const opened = state.activationDice.slice();
   for (const d of dice) {
-    if (d.usedBy === null || opened.includes(d.id)) continue;
+    if (dieSpentBy(d, state.current) === null || opened.includes(d.id)) continue;
     const before = state.dice.find((x) => x.id === d.id);
-    if (before && before.usedBy === null) opened.push(d.id);
+    if (before && dieSpentBy(before, state.current) === null) opened.push(d.id);
   }
   return opened;
 }
@@ -1099,18 +1113,12 @@ export function resurrect(state: GameState, unitId: string): GameState {
   };
 }
 
-/**
- * The whole area a Rite of the Nexus needs held: the 2x2 Nexus itself plus the
- * RITUAL CIRCLE, the ring of 12 squares around it. Sixteen squares in all, and
- * every one of them must be free of enemies — friendly units are welcome.
- *
- * This is what makes a ritual a siege rather than a stroll: an enemy anywhere in
- * that ring breaks it, so the ritualist has to clear and then screen a wide area
- * for a full round.
- */
-export const RITUAL_AREA: Cell[] = [...NEXUS_CELLS, ...RITUAL_CIRCLE];
+/** The area a Rite of the Nexus needs held: the central 2x2 Nexus, and only
+ *  that. Every one of its four squares must be free of enemies — friendly units
+ *  are welcome to stand on the other three. */
+export const RITUAL_AREA: Cell[] = NEXUS_CELLS;
 
-/** Enemy units standing anywhere in the ritual area (Nexus + circle). */
+/** Enemy units standing anywhere in the Nexus. */
 export function ritualIntruders(state: GameState, owner: PlayerColor): Unit[] {
   return state.units.filter(
     (u) => u.owner !== owner && RITUAL_AREA.some((c) => sameCell(c, u.cell)),
@@ -1122,7 +1130,7 @@ function ritualAreaClear(state: GameState, owner: PlayerColor): boolean {
 }
 
 /** Is a declared ritual still standing — Priest alive, still in the Nexus, and
- *  no enemy anywhere in the Nexus OR its 12-square circle? */
+ *  no enemy on any Nexus square? */
 export function ritualIntact(state: GameState): boolean {
   const rit = state.ritual;
   if (!rit) return false;
@@ -1148,7 +1156,7 @@ export function canRitual(state: GameState, unitId: string): boolean {
   if (!u || u.kind !== 'priest' || !canAct(state, unitId)) return false;
   if (!inNexus(u.cell.r, u.cell.c)) return false;
   if (state.ritual) return false;
-  // The Nexus AND its 12-square circle must be free of enemies to even begin.
+  // All four Nexus squares must be free of enemies to begin.
   return ritualAreaClear(state, u.owner);
 }
 
@@ -1234,7 +1242,7 @@ function hasActivationLeft(state: GameState, p: PlayerColor): boolean {
   if (state.eliminated.includes(p)) return false;
   if (state.passed.includes(p)) return false;
   if (diceLeft(state, p) <= 0) return false;
-  if (!state.dice.some((d) => d.owner === p && d.usedBy === null)) return false;
+  if (!state.dice.some((d) => dieSpentBy(d, p) === null)) return false;
   return hasPlayLeft({ ...state, current: p, activationDice: [] });
 }
 

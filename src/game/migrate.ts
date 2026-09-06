@@ -25,6 +25,17 @@ export function isCurrentStateShape(s: unknown): s is GameState {
   // The finite Gravestone bank must be present — a derived-bank state predates it.
   if (typeof g.graveBank !== 'number') return false;
   if (!Array.isArray(g.resurrectedThisTurn)) return false;
+  // Dice are one SHARED pool of five now, and `usedBy` is a per-player map.
+  // A save with per-seat dice (an `owner` field, or a null `usedBy`) predates
+  // that and cannot be reinterpreted.
+  if (Array.isArray(g.dice)) {
+    for (const raw of g.dice as unknown[]) {
+      if (!raw || typeof raw !== 'object') return false;
+      const d = raw as Record<string, unknown>;
+      if ('owner' in d) return false;
+      if (typeof d.usedBy !== 'object' || d.usedBy === null) return false;
+    }
+  }
   // Every stone must be a token of the current shape.
   for (const raw of g.stones as unknown[]) {
     if (!raw || typeof raw !== 'object') return false;

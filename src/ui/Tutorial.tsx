@@ -291,13 +291,13 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p className="htp-p">
-          Each round every player rolls, then you take turns{' '}
-          <span className="htp-em">activating</span> — one die at a time, back and
-          forth.
+          There is <span className="htp-em">one shared set of five dice</span>. Whoever starts the
+          round rolls them, and they serve everybody for that whole round — you then take turns{' '}
+          <span className="htp-em">activating</span>, one die at a time, back and forth.
         </p>
         <ol className="htp-ol">
           <li>
-            At the start of the round, <span className="htp-em">every player</span> rolls 5 dice:
+            The player going first rolls <span className="htp-em">5 dice for the table</span>:
             <ul className="htp-list htp-list--sub htp-list--dice">
               <li>
                 <span className="htp-die htp-die--w" />3 Warrior dice (Red)
@@ -312,8 +312,15 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <span className="htp-em">Nothing is discarded.</span> All five stay on the table and
-            visible — but you may only ever spend <span className="htp-em">3 of your 5</span> in a
-            round. Whatever you don’t use is simply ignored when the round ends.
+            visible to everyone — but each player may only ever spend{' '}
+            <span className="htp-em">3 of the 5</span> in a round. Whatever you don’t use is simply
+            ignored when the round ends.
+          </li>
+          <li>
+            The dice are <span className="htp-em">shared, not divided</span>. You and your opponent
+            may take the <span className="htp-em">same</span> die, or completely different ones —
+            a die another player has already used is still yours to take. The only limits are your
+            own three, and that you can’t take the same die twice yourself.
           </li>
           <li>
             Take one <span className="htp-em">activation</span>, then pass to your opponent:
@@ -548,17 +555,12 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p className="htp-p">
-          The Nexus is the 2×2 heart of the board, and around it lies the{' '}
-          <span className="htp-em">ritual circle</span> — the ring of 12 squares immediately
-          surrounding it (the two squares outside each of its four sides, plus the four diagonal
-          corners).
-        </p>
-        <p className="htp-p">
-          A Priest standing in the Nexus may declare the{' '}
+          The Nexus is the 2×2 heart of the board. A Priest standing on it may declare the{' '}
           <span className="htp-em">Rite of the Nexus</span>, and declaring it is that Priest’s
-          action. To begin it — and to keep it — <span className="htp-em">all 16 squares</span> of
-          the Nexus and its circle must be free of enemies. Friendly units are welcome there and
-          screening the circle with them is the usual way to hold one.
+          action. To begin it — and to keep it — <span className="htp-em">all four Nexus squares</span>{' '}
+          must be free of enemies; friendly units are welcome on the other three, and screening
+          them is the usual way to hold one. While a Rite is running the Nexus glows in that
+          player’s colour.
         </p>
         <p className="htp-p">
           Every other player then gets a complete turn. If the Rite is still standing when play
@@ -577,7 +579,7 @@ const SECTIONS: Section[] = [
     icon: 'scroll',
     body: (
       <ol className="htp-ol">
-        <li>Every player rolls 5 dice — 3 Warrior (red), 1 Mage (blue), 1 Priest (green).</li>
+        <li>The player going first rolls 5 shared dice — 3 Warrior (red), 1 Mage (blue), 1 Priest (green).</li>
         <li>Nothing is discarded; you may spend 3 of your 5 this round.</li>
         <li>Take turns activating: 1 die → move that unit → resolve its action → pass.</li>
         <li>Or spend 2–3 same-colour dice together as one activation.</li>

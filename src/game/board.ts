@@ -40,27 +40,6 @@ export const NEXUS_CELLS: Cell[] = [
   { r: 8, c: 8 },
 ];
 
-/**
- * The RITUAL CIRCLE — the ring of 12 squares immediately around the Nexus.
- *
- * That is the two squares directly outside each of the Nexus's four sides
- * (8 in all) plus the four diagonal corners: rows 6-9 x cols 6-9, less the 2x2
- * Nexus itself. A Rite of the Nexus needs every one of these clear of enemies,
- * as well as the Nexus, which makes holding one a real siege rather than a
- * matter of standing still.
- */
-export const RITUAL_CIRCLE: Cell[] = (() => {
-  const out: Cell[] = [];
-  for (let r = 6; r <= 9; r++)
-    for (let c = 6; c <= 9; c++) if (!inNexus(r, c)) out.push({ r, c });
-  return out;
-})();
-
-/** Is this cell part of the ritual circle (the ring around the Nexus)? */
-export function inRitualCircle(r: number, c: number): boolean {
-  return r >= 6 && r <= 9 && c >= 6 && c <= 9 && !inNexus(r, c);
-}
-
 /** Which player edge (if any) a cell belongs to (canonical colour mapping). */
 export function edgeOwner(r: number, c: number): PlayerColor | null {
   if (!exists(r, c)) return null;

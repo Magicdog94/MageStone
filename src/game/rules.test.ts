@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { createGame, playerCountFor, playerSet, stoneCells, STONE_LAYOUTS } from './setup';
-import { RITUAL_CIRCLE, inNexus } from './board';
+import { NEXUS_CELLS, inNexus } from './board';
 import { isCurrentStateShape } from './migrate';
 import {
   BOLT_COST,
@@ -39,6 +39,7 @@ import {
   activationKind,
   canCommitDie,
   diceLeft,
+  diceOf,
   diceSpent,
   endActivation,
   syncStones,
@@ -46,7 +47,7 @@ import {
   canDieMoveUnit,
   legalMoves,
 } from './rules';
-import type { Cell, GameState, MageStone, PlayerColor, Unit } from './types';
+import type { Cell, Die, GameState, MageStone, PlayerColor, Unit } from './types';
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -56,34 +57,31 @@ function acting(players: PlayerColor[] = ['red', 'blue']): GameState {
   return { ...g, turnPhase: 'act' };
 }
 
+/** A hand-picked shared pool. The dice belong to nobody — every player draws
+ *  their three from the same five. */
 function withDice(
   g: GameState,
   kinds: ('mage' | 'priest' | 'warrior')[],
   values: number[],
-  owner: PlayerColor = g.current,
 ): GameState {
   return {
     ...g,
-    dice: kinds.map((kind, i) => ({
-      id: `d${i}`,
-      owner,
-      kind,
-      value: values[i],
-      usedBy: null,
-    })),
+    dice: kinds.map((kind, i) => ({ id: `d${i}`, kind, value: values[i], usedBy: {} })),
   };
 }
 
-/** A full round's dice for every seat, so alternation has something to spend. */
+/** A full round's SHARED pool — five dice, one mage, one priest, three warrior. */
 function rolled(g: GameState, value = 3): GameState {
-  const dice = [];
-  for (const owner of g.players) {
-    for (const kind of ['mage', 'priest', 'warrior', 'warrior', 'warrior'] as const) {
-      dice.push({ id: `${owner}-${kind}-${dice.length}`, owner, kind, value, usedBy: null });
-    }
-  }
-  return { ...g, dice, turnPhase: 'act' as const };
+  const kinds = ['mage', 'priest', 'warrior', 'warrior', 'warrior'] as const;
+  return {
+    ...g,
+    dice: kinds.map((kind, i) => ({ id: `shared-${kind}-${i}`, kind, value, usedBy: {} })),
+    turnPhase: 'act' as const,
+  };
 }
+
+/** Has `player` spent this die? (Another player's claim is irrelevant.) */
+const spentBy = (d: Die, p: PlayerColor) => d.usedBy[p] ?? null;
 
 const at = (g: GameState, id: string): Unit => {
   const u = unitById(g, id);
@@ -115,7 +113,7 @@ function give(g: GameState, unitId: string, carried: number, activated: number):
  *  smallest real activation, for driving the alternation. */
 function activateOne(g: GameState, id: string): GameState {
   const u = at(g, id);
-  const die = g.dice.find((d) => d.owner === g.current && d.kind === u.kind && !d.usedBy);
+  const die = g.dice.find((d) => d.kind === u.kind && !spentBy(d, g.current));
   if (!die) throw new Error(`no free ${u.kind} die for ${id}`);
   const dest = legalMoves(g, u, die.value)[0];
   const next = moveUnit(g, id, die.id, dest);
@@ -142,32 +140,83 @@ const LO = 0; // rolls a 1
 // ---- TEST 1 — turn dice ----------------------------------------------------
 
 describe('TEST 1 — turn dice', () => {
-  it('gives each player 3 standard, 1 mage and 1 priest die', () => {
+  it('rolls ONE shared pool of five: 3 standard, 1 mage, 1 priest', () => {
     const g = rollDice(createGame(['red', 'blue']));
-    for (const p of g.players) {
-      const mine = g.dice.filter((d) => d.owner === p);
-      expect(mine.filter((d) => d.kind === 'warrior')).toHaveLength(3);
-      expect(mine.filter((d) => d.kind === 'mage')).toHaveLength(1);
-      expect(mine.filter((d) => d.kind === 'priest')).toHaveLength(1);
-    }
+    expect(g.dice).toHaveLength(5);
+    expect(g.dice.filter((d) => d.kind === 'warrior')).toHaveLength(3);
+    expect(g.dice.filter((d) => d.kind === 'mage')).toHaveLength(1);
+    expect(g.dice.filter((d) => d.kind === 'priest')).toHaveLength(1);
     expect(g.dice.every((d) => d.value >= 1 && d.value <= 6)).toBe(true);
   });
 
-  it('rolls five for EVERY player and discards nothing', () => {
+  it('rolls five TOTAL however many players there are', () => {
     for (const n of [2, 4] as const) {
       const g = rollDice(createGame(n));
-      expect(g.dice).toHaveLength(5 * n);
+      expect(g.dice).toHaveLength(5); // not 5 per player
       for (const p of g.players) {
-        expect(g.dice.filter((d) => d.owner === p)).toHaveLength(5);
         expect(diceSpent(g, p)).toBe(0);
         expect(diceLeft(g, p)).toBe(DICE_PER_ROUND);
+        // every player sees the same five
+        expect(diceOf(g, p)).toEqual(g.dice);
       }
-      // Straight into activations — there is no discard step at all.
       expect(g.turnPhase).toBe('act');
     }
   });
 
-  it('lets a player spend at most three of their five dice per round', () => {
+  it('is the ROUND STARTER who rolls, and the pool serves the whole round', () => {
+    let g = createGame(['red', 'blue']);
+    expect(g.turnPhase).toBe('roll');
+    expect(g.current).toBe(g.roundStarter); // the starter is on the roll
+    g = rollDice(g);
+    const values = g.dice.map((d) => d.value);
+    // Hand play to the opponent — they inherit the very same dice.
+    g = endActivation(g);
+    expect(g.current).toBe('blue');
+    expect(g.dice.map((d) => d.value)).toEqual(values);
+    expect(g.turnPhase).toBe('act'); // no fresh roll mid-round
+  });
+
+  it('lets BOTH players take the same die', () => {
+    let g = rolled(acting(['red', 'blue']), 2);
+    const shared = g.dice.find((d) => d.kind === 'warrior')!;
+
+    g = moveUnit(g, 'red-w1', shared.id, legalMovesOf(g, 'red-w1', 2)[0]);
+    expect(spentBy(g.dice.find((d) => d.id === shared.id)!, 'red')).toBe('red-w1');
+    g = endActivation(g);
+
+    // Blue's turn: red having taken that die does not lock blue out of it.
+    expect(g.current).toBe('blue');
+    const die = g.dice.find((d) => d.id === shared.id)!;
+    expect(spentBy(die, 'blue')).toBeNull();
+    expect(canCommitDie(g, die)).toBe(true);
+    g = moveUnit(g, 'blue-w1', shared.id, legalMovesOf(g, 'blue-w1', 2)[0]);
+
+    const after = g.dice.find((d) => d.id === shared.id)!;
+    expect(spentBy(after, 'red')).toBe('red-w1');
+    expect(spentBy(after, 'blue')).toBe('blue-w1'); // one die, two claims
+    expect(diceSpent(g, 'red')).toBe(1);
+    expect(diceSpent(g, 'blue')).toBe(1);
+  });
+
+  it('lets players take DIFFERENT dice from the pool', () => {
+    let g = rolled(acting(['red', 'blue']), 2);
+    const [w1, w2] = g.dice.filter((d) => d.kind === 'warrior');
+    g = endActivation(moveUnit(g, 'red-w1', w1.id, legalMovesOf(g, 'red-w1', 2)[0]));
+    g = moveUnit(g, 'blue-w1', w2.id, legalMovesOf(g, 'blue-w1', 2)[0]);
+    expect(spentBy(g.dice.find((d) => d.id === w1.id)!, 'blue')).toBeNull();
+    expect(spentBy(g.dice.find((d) => d.id === w2.id)!, 'blue')).toBe('blue-w1');
+  });
+
+  it('stops a player re-using a die THEY have already spent', () => {
+    let g = rolled(acting(['red', 'blue']), 2);
+    const die = g.dice.find((d) => d.kind === 'warrior')!;
+    g = moveUnit(g, 'red-w1', die.id, legalMovesOf(g, 'red-w1', 2)[0]);
+    const again = g.dice.find((d) => d.id === die.id)!;
+    expect(canCommitDie(g, again)).toBe(false);
+    expect(moveUnit(g, 'red-w2', die.id, legalMovesOf(g, 'red-w2', 2)[0])).toBe(g);
+  });
+
+  it('lets a player spend at most three of the five per round', () => {
     let g = rolled(acting(), 1);
     // Three Warrior activations each, strictly alternating.
     for (let i = 1; i <= 3; i++) {
@@ -181,6 +230,17 @@ describe('TEST 1 — turn dice', () => {
     expect(g.turn).toBe(2);
     expect(g.dice).toEqual([]);
     expect(g.roundStarter).toBe('blue');
+  });
+
+  it('leaves two of the five unused even though both players played', () => {
+    let g = rolled(acting(['red', 'blue']), 1);
+    for (let i = 1; i <= 3; i++) {
+      g = endActivation(activateOne(g, `red-w${i}`));
+      if (g.turn === 1) g = endActivation(activateOne(g, `blue-w${i}`));
+    }
+    // Each took 3 of 5 — nobody could touch the other two.
+    expect(diceSpent(g, 'red')).toBe(0); // (round rolled over, counters reset)
+    expect(g.turn).toBe(2);
   });
 
   it('only lets the Mage move on a Mage die, and the Priest on a Priest die', () => {
@@ -208,9 +268,7 @@ describe('TEST 1 — turn dice', () => {
     g = {
       ...g,
       dice: g.dice.map((d) =>
-        d.owner === 'red' && (d.kind === 'mage' || d.kind === 'priest')
-          ? { ...d, usedBy: 'spent' }
-          : d,
+        d.kind === 'mage' || d.kind === 'priest' ? { ...d, usedBy: { red: 'spent' } } : d,
       ),
     };
     const mage = at(g, 'red-m');
@@ -281,7 +339,7 @@ describe('Rounds and alternating activations', () => {
   it('clears unspent dice and the per-round records at the round boundary', () => {
     let g = rolled(acting(['red', 'blue']), 1);
     const w = at(g, 'red-w1');
-    const die = g.dice.find((d) => d.owner === 'red' && d.kind === 'warrior')!;
+    const die = g.dice.find((d) => d.kind === 'warrior')!;
     g = moveUnit(g, w.id, die.id, legalMovesOf(g, w.id, 1)[0]);
     expect(g.unitsMovedThisTurn).toContain('red-w1');
     for (let i = 0; i < 20 && g.turn === 1; i++) g = endActivation(g);
@@ -295,19 +353,18 @@ describe('Rounds and alternating activations', () => {
 
   it('gives each unit at most one die per round', () => {
     let g = rolled(acting(), 1);
-    const die = g.dice.find((d) => d.owner === 'red' && d.kind === 'warrior')!;
+    const die = g.dice.find((d) => d.kind === 'warrior')!;
     g = moveUnit(g, 'red-w1', die.id, legalMovesOf(g, 'red-w1', 1)[0]);
-    const other = g.dice.find((d) => d.owner === 'red' && d.kind === 'warrior' && !d.usedBy)!;
+    const other = g.dice.find((d) => d.kind === 'warrior' && !spentBy(d, 'red'))!;
     // Same warrior, a second warrior die — refused.
     expect(canDieMoveUnit(other, at(g, 'red-w1'), g)).toBe(false);
   });
 
-  it('never lets a player touch another player’s dice', () => {
+  it('offers the WHOLE shared pool to whoever is activating', () => {
     const g = rolled(acting(['red', 'blue']), 3);
-    const blueDie = g.dice.find((d) => d.owner === 'blue' && d.kind === 'warrior')!;
-    expect(canCommitDie(g, blueDie)).toBe(false);
-    expect(canDieMoveUnit(blueDie, at(g, 'red-w1'), g)).toBe(false);
-    expect(availableDice(g).every((d) => d.owner === 'red')).toBe(true);
+    // Nothing is reserved for a seat: every unspent die is on offer.
+    expect(availableDice(g)).toHaveLength(5);
+    expect(availableDice(g).map((d) => d.id).sort()).toEqual(g.dice.map((d) => d.id).sort());
   });
 });
 
@@ -316,7 +373,7 @@ describe('The same-colour bundle', () => {
     let g = rolled(acting(), 1);
     expect(activationKind(g)).toBeNull();
 
-    const w1 = g.dice.find((d) => d.owner === 'red' && d.kind === 'warrior')!;
+    const w1 = g.dice.find((d) => d.kind === 'warrior')!;
     g = moveUnit(g, 'red-w1', w1.id, legalMovesOf(g, 'red-w1', 1)[0]);
     // The activation is now locked to Warrior dice…
     expect(activationKind(g)).toBe('warrior');
@@ -324,7 +381,7 @@ describe('The same-colour bundle', () => {
     // …and play has NOT passed.
     expect(g.current).toBe('red');
 
-    const w2 = g.dice.find((d) => d.owner === 'red' && d.kind === 'warrior' && !d.usedBy)!;
+    const w2 = g.dice.find((d) => d.kind === 'warrior' && !spentBy(d, 'red'))!;
     g = moveUnit(g, 'red-w2', w2.id, legalMovesOf(g, 'red-w2', 1)[0]);
     expect(g.activationDice).toHaveLength(2);
     expect(diceSpent(g, 'red')).toBe(2);
@@ -337,10 +394,10 @@ describe('The same-colour bundle', () => {
 
   it('refuses to mix colours inside one activation', () => {
     let g = rolled(acting(), 1);
-    const w1 = g.dice.find((d) => d.owner === 'red' && d.kind === 'warrior')!;
+    const w1 = g.dice.find((d) => d.kind === 'warrior')!;
     g = moveUnit(g, 'red-w1', w1.id, legalMovesOf(g, 'red-w1', 1)[0]);
 
-    const mageDie = g.dice.find((d) => d.owner === 'red' && d.kind === 'mage')!;
+    const mageDie = g.dice.find((d) => d.kind === 'mage')!;
     expect(canCommitDie(g, mageDie)).toBe(false);
     expect(canDieMoveUnit(mageDie, at(g, 'red-m'), g)).toBe(false);
     // The Mage becomes available again on a LATER activation.
@@ -365,13 +422,13 @@ describe('The same-colour bundle', () => {
     let g = rolled(acting(), 1);
     // Spend all three Warrior dice on three separate Warriors in one bundle.
     for (const id of ['red-w1', 'red-w2', 'red-w3']) {
-      const die = g.dice.find((d) => d.owner === 'red' && d.kind === 'warrior' && !d.usedBy)!;
+      const die = g.dice.find((d) => d.kind === 'warrior' && !spentBy(d, 'red'))!;
       g = moveUnit(g, id, die.id, legalMovesOf(g, id, 1)[0]);
     }
     expect(diceSpent(g, 'red')).toBe(DICE_PER_ROUND);
     expect(diceLeft(g, 'red')).toBe(0);
     // Two dice remain unspent but are out of budget — nothing else may commit.
-    expect(g.dice.filter((d) => d.owner === 'red' && !d.usedBy)).toHaveLength(2);
+    expect(g.dice.filter((d) => !spentBy(d, 'red'))).toHaveLength(2);
     expect(availableDice(g)).toEqual([]);
     expect(hasPlayLeft(g)).toBe(false);
     // Play passes automatically once the budget is gone.
@@ -805,12 +862,14 @@ describe('TEST 11 — Ritual', () => {
     return g;
   };
 
-  it('wins once play returns to the ritualist with the circle still held', () => {
+  it('wins once play returns to the ritualist with the Nexus still held', () => {
     let g = startRitual(['red', 'blue']);
     expect(g.winner).toBeNull();
-    g = endActivation(g); // nobody has dice → the round closes
+    // Everybody passes out the round; the win cannot land at the boundary,
+    // only when play is handed back to red.
+    for (let i = 0; i < 6 && g.turn === 1; i++) g = endActivation(g);
     expect(g.turn).toBe(2);
-    expect(g.winner).toBeNull(); // NOT at the boundary — blue starts round 2
+    expect(g.winner).toBeNull();
     g = playOn(g);
     expect(g.winner).toBe('red');
     expect(g.winMethod).toBe('Ritual');
@@ -844,51 +903,30 @@ describe('TEST 11 — Ritual', () => {
     expect(g.winner).toBe('red');
   });
 
-  it('needs the 12-square ritual circle clear, not just the Nexus', () => {
-    // The circle is the ring around the Nexus: rows/cols 6-9, less the 2x2.
-    expect(RITUAL_CIRCLE).toHaveLength(12);
-    expect(RITUAL_AREA).toHaveLength(16);
-    for (const c of RITUAL_CIRCLE) {
-      expect(c.r >= 6 && c.r <= 9 && c.c >= 6 && c.c <= 9).toBe(true);
-      expect(inNexus(c.r, c.c)).toBe(false);
-    }
-    // The 8 squares directly outside the Nexus sides, plus the 4 diagonals.
-    for (const c of [
-      { r: 6, c: 7 }, { r: 6, c: 8 }, // north pair
-      { r: 9, c: 7 }, { r: 9, c: 8 }, // south pair
-      { r: 7, c: 6 }, { r: 8, c: 6 }, // west pair
-      { r: 7, c: 9 }, { r: 8, c: 9 }, // east pair
-      { r: 6, c: 6 }, { r: 6, c: 9 }, { r: 9, c: 6 }, { r: 9, c: 9 }, // corners
-    ]) {
-      expect(RITUAL_CIRCLE.some((x) => x.r === c.r && x.c === c.c)).toBe(true);
+  it('is the central 2x2 and nothing more', () => {
+    expect(RITUAL_AREA).toHaveLength(4);
+    for (const c of RITUAL_AREA) expect(inNexus(c.r, c.c)).toBe(true);
+    // The ring around it is ordinary ground again — an enemy there is fine.
+    let g = withDice(acting(['red', 'blue']), ['priest'], [2]);
+    g = place(g, 'red-p', { r: 7, c: 7 });
+    for (const spot of [{ r: 6, c: 6 }, { r: 6, c: 7 }, { r: 9, c: 9 }, { r: 8, c: 9 }]) {
+      expect(canRitual(place(g, 'blue-w1', spot), 'red-p')).toBe(true);
     }
   });
 
-  it('an enemy anywhere in the circle blocks the Rite from even starting', () => {
-    for (const spot of RITUAL_CIRCLE) {
+  it('an enemy on any NEXUS square blocks the Rite from starting', () => {
+    for (const spot of NEXUS_CELLS.filter((c) => !(c.r === 7 && c.c === 7))) {
       let g = withDice(acting(['red', 'blue']), ['priest'], [2]);
       g = place(g, 'red-p', { r: 7, c: 7 });
-      expect(canRitual(g, 'red-p')).toBe(true); // clear board — fine
+      expect(canRitual(g, 'red-p')).toBe(true);
       g = place(g, 'blue-w1', spot);
-      expect(canRitual(g, 'red-p')).toBe(false); // one intruder is enough
+      expect(canRitual(g, 'red-p')).toBe(false);
     }
   });
 
-  it('an enemy stepping into the circle breaks a running Rite', () => {
+  it('a Rite survives an enemy standing just outside the Nexus', () => {
     let g = startRitual(['red', 'blue']);
-    expect(ritualIntact(g)).toBe(true);
-    g = place(g, 'blue-w1', { r: 6, c: 6 }); // a far diagonal of the circle
-    expect(ritualIntact(g)).toBe(false);
-    g = endActivation(g);
-    expect(g.winner).toBeNull();
-    expect(g.ritual).toBeNull();
-  });
-
-  it('tolerates FRIENDLY units all over the circle', () => {
-    let g = startRitual(['red', 'blue']);
-    g = place(g, 'red-w1', { r: 6, c: 6 });
-    g = place(g, 'red-w2', { r: 9, c: 9 });
-    g = place(g, 'red-w3', { r: 6, c: 8 });
+    g = place(g, 'blue-w1', { r: 6, c: 7 }); // adjacent, but off the Nexus
     expect(ritualIntact(g)).toBe(true);
     expect(playOn(g).winner).toBe('red');
   });
@@ -906,11 +944,15 @@ describe('TEST 11 — Ritual', () => {
     expect(g.roundStarter).toBe('blue');
     expect(g.current).toBe('blue'); // blue moves FIRST in the new round
     expect(g.winner).toBeNull(); // …and red has NOT won yet
-    // Blue uses that last activation to step into the circle.
-    g = place(g, 'blue-w1', { r: 6, c: 7 });
-    g = endActivation(g);
-    expect(g.winner).toBeNull();
+    // Blue, as the new round's starter, rolls the shared pool…
+    expect(g.turnPhase).toBe('roll');
+    g = rollDice(g, () => 0.34); // every die a 3
+    // …and uses that first activation to step into the Nexus and break it.
+    const die = g.dice.find((d) => d.kind === 'warrior')!;
+    g = place(g, 'blue-w1', { r: 8, c: 10 });
+    g = moveUnit(g, 'blue-w1', die.id, { r: 8, c: 8 });
     expect(g.ritual).toBeNull();
+    expect(playOn(g).winner).toBeNull();
   });
 
   it('lands the win the moment play returns to the ritualist', () => {
@@ -929,9 +971,21 @@ describe('TEST 11 — Ritual', () => {
   it('breaks when an enemy occupies a Nexus square', () => {
     let g = startRitual(['red', 'blue']);
     g = place(g, 'blue-w1', { r: 8, c: 8 }); // another Nexus cell
-    g = endActivation(g);
-    expect(g.winner).toBeNull();
-    expect(g.ritual).toBeNull();
+    expect(ritualIntact(g)).toBe(false); // dead the instant they stand there
+    g = playOn(g);
+    expect(g.winner).toBeNull(); // no win, however long play runs on
+    expect(g.ritual).toBeNull(); // and the flag is cleared
+  });
+
+  it('breaks the moment an enemy WALKS into the Nexus, not at the boundary', () => {
+    let g = rolled(acting(['red', 'blue']), 2);
+    g = place(g, 'red-p', { r: 7, c: 7 });
+    g = place(g, 'blue-w1', { r: 8, c: 10 });
+    g = { ...g, ritual: { player: 'red', priestId: 'red-p', round: g.turn }, current: 'blue' };
+    const die = g.dice.find((d) => d.kind === 'warrior')!;
+    g = moveUnit(g, 'blue-w1', die.id, { r: 8, c: 8 }); // steps onto the Nexus
+    expect(at(g, 'blue-w1').cell).toEqual({ r: 8, c: 8 });
+    expect(g.ritual).toBeNull(); // pruneRitual fires on the move itself
   });
 
   it('breaks when the Priest is defeated, and when it leaves the Nexus', () => {

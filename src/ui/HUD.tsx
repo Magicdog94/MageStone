@@ -3,6 +3,7 @@ import { attackOptions, tutAllows, unitActions, useGame } from '../store';
 import { useNet } from '../net/useNet';
 import { usePlayerLabel } from './playerNames';
 import { COLORS } from '../three/coords';
+import type { PlayerColor } from '../game/types';
 import {
   boltTargets,
   canBolt,
@@ -67,7 +68,7 @@ function PhaseTrack() {
   const steps = [
     {
       key: 'roll',
-      label: '1 · Everyone rolls 5 dice',
+      label: '1 · Roll 5 shared dice',
       done: phase !== 'roll',
       active: phase === 'roll',
     },
@@ -76,7 +77,7 @@ function PhaseTrack() {
       label:
         phase === 'act'
           ? `2 · Activate — ${left} of ${DICE_PER_ROUND} dice left`
-          : `2 · Activate (${DICE_PER_ROUND} dice each)`,
+          : `2 · Activate (${DICE_PER_ROUND} of the 5 each)`,
       done: false,
       active: phase === 'act',
     },
@@ -354,12 +355,11 @@ export function HUD() {
               // Kind tags under the dice, in each die's colour: M · P · W1 W2
               // W3 — so players always know which die drives which unit.
               let warriorNo = 0;
-              // Only the ACTIVE player's own five dice — everyone rolled, but
-              // the tray belongs to whoever is activating.
-              return game.dice
-                .filter((d) => d.owner === game.current)
-                .map((d) => {
-                const state = d.usedBy
+              // The five SHARED dice — the same pool for everybody. A die is
+              // "used" only once the ACTIVE player has spent it; an opponent
+              // having taken it does not put it out of reach.
+              return game.dice.map((d) => {
+                const state = d.usedBy[game.current]
                   ? 'used'
                   : d.id === selectedDieId
                     ? 'selected'
@@ -370,7 +370,9 @@ export function HUD() {
                   myTurn && phase === 'act' && canCommitDie(game, d)
                     ? () => selectDie(d.id)
                     : undefined;
-                const label =
+                // kind tag (M / P / W1…) — named apart from the player-label
+                // helper of the same name in the enclosing scope
+                const kindTag =
                   d.kind === 'mage' ? 'M' : d.kind === 'priest' ? 'P' : `W${++warriorNo}`;
                 return (
                   <div className="die-col" key={d.id}>
@@ -380,10 +382,18 @@ export function HUD() {
                       state={state}
                       onClick={click}
                       size={mobile ? 34 : 48}
-                      title={`${d.kind[0].toUpperCase()}${d.kind.slice(1)} die`}
+                      title={
+                        `${d.kind[0].toUpperCase()}${d.kind.slice(1)} die — shared` +
+                        (() => {
+                          const others = (Object.keys(d.usedBy) as PlayerColor[]).filter(
+                            (p) => p !== game.current,
+                          );
+                          return others.length ? `. Also taken by ${others.map((p) => label(p)).join(', ')}` : '';
+                        })()
+                      }
                     />
                     <span className="die-label" style={{ color: DIE_LABEL_COLOR[d.kind] }}>
-                      {label}
+                      {kindTag}
                     </span>
                   </div>
                 );

@@ -2,7 +2,7 @@ import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useTexture } from '@react-three/drei';
-import { RITUAL_CIRCLE, allCells, cellKey, edgeRotation, N } from '../game/board';
+import { NEXUS_CELLS, allCells, cellKey, edgeRotation, N } from '../game/board';
 import type { Cell } from '../game/types';
 import { besiegersOf, siegedPlayers } from '../game/rules';
 import { BOARD, CELL, COLORS, FLOOR_Y, TABLE_HALF, TILE_SURFACE, cellToWorld } from './coords';
@@ -248,9 +248,9 @@ function SiegeGlow({ color }: { color: string }) {
 }
 
 /**
- * A soft, slow breath over the 12 squares of the RITUAL CIRCLE while a Rite of
- * the Nexus is running, in the ritualist's colour — the ground they have to
- * hold, and that everyone else has to break into.
+ * A soft, slow breath over the four NEXUS squares while a Rite of the Nexus is
+ * running, in the ritualist's colour — the ground they have to hold, and that
+ * everyone else has to break into.
  *
  * Deliberately far gentler than SiegeGlow: a siege is an emergency and shouts
  * at 0.62–0.82 opacity, whereas this is standing information that may sit on
@@ -286,8 +286,8 @@ function Tile({
   baseColor: string | null;
   /** Besieging team's colour when this base tile's owner is under siege, else null. */
   siege: string | null;
-  /** Ritualist's colour when this cell is in the ritual circle of a RUNNING
-   *  Rite, else null. */
+  /** Ritualist's colour when this cell is a Nexus square and a Rite is RUNNING,
+   *  else null. */
   ritual: string | null;
   map: THREE.Texture;
   bump: THREE.Texture;
@@ -454,10 +454,11 @@ export function Board() {
     return byRotation;
   }, [game.players, game.seats]);
 
-  // While a Rite is running, its 12-square circle lights up in the ritualist's
-  // colour. The set is fixed board geometry, so it is built once.
+  // While a Rite is running, the Nexus lights up in the ritualist's colour —
+  // the four squares that have to stay clear of enemies for it to stand. Fixed
+  // board geometry, so the set is built once.
   const ritualColor = game.ritual ? COLORS[game.ritual.player] : null;
-  const ritualKeys = useMemo(() => new Set(RITUAL_CIRCLE.map(cellKey)), []);
+  const ritualKeys = useMemo(() => new Set(NEXUS_CELLS.map(cellKey)), []);
 
   // Seats whose base is under siege → the dominant besieger's colour, so the
   // base glows in the colour of the team claiming it.

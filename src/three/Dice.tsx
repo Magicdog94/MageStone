@@ -382,7 +382,9 @@ function DiceBodies() {
   const online = useGame((s) => s.online);
   const myColor = useGame((s) => s.myColor);
   const current = useGame((s) => s.game.current);
-  const dice = useMemo(() => allDice.filter((d) => d.owner === current), [allDice, current]);
+  // One shared pool of five, thrown once per round by whoever starts it — no
+  // per-seat filtering any more.
+  const dice = allDice;
 
   // The tray sits behind the CURRENT roller's base, so it hops seat to seat.
   // Under the camera lock the board is rotated by viewOffset quarter-turns —

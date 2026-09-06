@@ -508,10 +508,8 @@ export const useGame = create<UIState>((set, get) => ({
       const s = get();
       if (s.rolling && s.rollNonce === nonce) {
         if (!s.sceneDown) console.warn('MageStone: dice watchdog cleared a stuck roll');
-        // only the roller's own five are thrown, so only those are reported
-        s.reportDiceValues(
-          s.game.dice.filter((x) => x.owner === s.game.current).map((x) => x.value),
-        );
+        // one shared pool of five — report all of them
+        s.reportDiceValues(s.game.dice.map((x) => x.value));
       }
     }, grace);
   },
@@ -535,7 +533,7 @@ export const useGame = create<UIState>((set, get) => ({
       // manually clicked die still wins (kept above); this only fills the gap.
       if (!dieId && s.game.turnPhase === 'act') {
         const best = s.game.dice
-          .filter((d) => d.usedBy === null && canDieMoveUnit(d, unit, s.game))
+          .filter((d) => canDieMoveUnit(d, unit, s.game))
           .sort((a, b) => b.value - a.value)[0];
         dieId = best?.id ?? null;
       }
@@ -547,7 +545,8 @@ export const useGame = create<UIState>((set, get) => ({
     set((s) => {
       if (dieId === null) return { selectedDieId: null };
       const die = s.game.dice.find((d) => d.id === dieId);
-      // Only your own unspent dice, and only ones the activation's same-colour
+      // Only dice YOU have not spent yet (an opponent using the same die is
+      // fine — the pool is shared), and only ones the activation's same-colour
       // lock still allows.
       if (!die || !canCommitDie(s.game, die)) return {};
       return { selectedDieId: dieId };

@@ -3,7 +3,7 @@ import { legalMoves, siegedPlayers, syncStones, unitById, warriorCount } from '.
 import { NEXUS_CELLS } from '../../game/board';
 import { createGame } from '../../game/setup';
 import type { Callout } from './useTutorial';
-import type { Cell, Die, DieKind, GameState, PlayerColor } from '../../game/types';
+import type { Cell, Die, DieKind, GameState } from '../../game/types';
 import { useTutorial } from './useTutorial';
 
 const g = () => useGame.getState();
@@ -113,18 +113,17 @@ async function playerTask(
 // ---- staging ---------------------------------------------------------------
 
 let diceNonce = 0;
-function mkDice(kinds: DieKind[], values: number[], owner: PlayerColor = 'red'): Die[] {
+function mkDice(kinds: DieKind[], values: number[]): Die[] {
+  // The round pool is SHARED, so a staged die belongs to nobody in
+  // particular — usedBy fills in per player as each spends it.
   return kinds.map((kind, i) => ({
     id: `tut-die-${diceNonce++}`,
-    owner,
     kind,
     value: values[i],
-    usedBy: null,
+    usedBy: {},
   }));
 }
 
-/** Replace the game with a fresh red-vs-blue board, mutated by `build`, already
- *  in red's action phase with hand-picked dice. */
 /** Hand `unitId` real MageStone tokens for a staged lesson. Activation lives on
  *  the token, so the demo boards are built by REASSIGNING stones, never by
  *  writing the derived `carried`/`activated` counters. */
@@ -166,7 +165,7 @@ function stepToward(unitId: string, target: Cell): boolean {
   const u = unitById(st, unitId);
   if (!u) return false;
   const die = st.dice.find(
-    (d) => d.owner === st.current && d.usedBy === null && d.kind === u.kind,
+    (d) => !d.usedBy[st.current] && d.kind === u.kind,
   );
   if (!die) return false;
   const moves = legalMoves(st, u, die.value);
@@ -184,7 +183,7 @@ function scriptMove(unitId: string, dest: Cell): void {
   const u = unitById(st, unitId);
   if (!u) return;
   const die = st.dice.find(
-    (d) => d.owner === st.current && d.usedBy === null && d.kind === u.kind,
+    (d) => !d.usedBy[st.current] && d.kind === u.kind,
   );
   if (!die) return;
   g().selectUnit(unitId);
@@ -239,7 +238,7 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-roll',
         title: 'Roll your dice',
-        body: 'Every turn begins with 5 dice. Press ROLL DICE and watch them tumble — however they land is what you get.',
+        body: 'Every round begins with 5 SHARED dice, thrown once by whoever goes first. Press ROLL DICE and watch them tumble — however they land is what the whole table gets.',
         anchor: '.actions .primary',
         placement: 'top',
       },
@@ -252,8 +251,8 @@ export async function runTutorial(onDone: () => void) {
 
     await note({
       id: 'dice',
-      title: 'Read your dice',
-      body: 'The tags name each die: M is your Mage’s, P your Priest’s, W1–W3 belong to your Warriors. A die only moves its MATCHING unit, and its number is how far that unit can go.',
+      title: 'Read the dice',
+      body: 'The tags name each die: M drives a Mage, P a Priest, W1–W3 the Warriors. A die only moves its MATCHING unit, and its number is how far that unit can go.',
       anchor: '.tray',
       placement: 'top',
     });
@@ -261,8 +260,8 @@ export async function runTutorial(onDone: () => void) {
     // ---- YOU discard -------------------------------------------------------
     await note({
       id: 'roll-read',
-      title: 'Five dice — you spend three',
-      body: 'Nothing is discarded. All five stay on the table, and you simply never get to use more than THREE of them this round. Choosing which three, and when, is the whole game.',
+      title: 'Five shared dice — you spend three',
+      body: 'Nothing is discarded. All five stay on the table for BOTH of you, and each side never gets to use more than THREE of them this round. Your opponent may even take the same die you did — it is not used up. Choosing which three, and when, is the whole game.',
       anchor: '.tray',
       placement: 'top',
     });
@@ -289,7 +288,7 @@ export async function runTutorial(onDone: () => void) {
         const w = st.units.find(
           (u) =>
             u.owner === st.current &&
-            st.dice.some((d) => d.owner === st.current && !d.usedBy && d.kind === u.kind),
+            st.dice.some((d) => !d.usedBy[st.current] && d.kind === u.kind),
         );
         if (w) stepToward(w.id, { r: 8, c: 8 });
       },

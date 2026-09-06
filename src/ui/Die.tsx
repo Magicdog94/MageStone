@@ -26,7 +26,11 @@ const PIP_BG = 'radial-gradient(circle at 35% 30%, #fff2bf 0%, #f6e191 42%, #c9a
 interface DieProps {
   value: number;
   kind?: DieKind;
-  state?: 'idle' | 'selected' | 'used' | 'discarded';
+  /** 'used' = already spent this round; 'locked' = still yours and still
+   *  readable, but not committable right now (out of your 3-dice budget, or the
+   *  wrong colour for the activation in progress). Nothing is ever discarded,
+   *  so every die keeps showing its face. */
+  state?: 'idle' | 'selected' | 'used' | 'locked';
   onClick?: () => void;
   size?: number;
   title?: string;
@@ -35,7 +39,9 @@ interface DieProps {
 export function PipDie({ value, kind = 'warrior', state = 'idle', onClick, size = 48, title }: DieProps) {
   const sk = STYLE[kind];
   const border = state === 'selected' ? '#ffd54a' : GOLD;
-  const dim = state === 'used' || state === 'discarded';
+  // A locked die is dimmed but stays legible — all five dice must remain
+  // visible all round, even the ones you cannot spend right now.
+  const dim = state === 'used' ? 0.32 : state === 'locked' ? 0.55 : 1;
   const cells = PIPS[value] ?? [];
 
   return (
@@ -56,28 +62,12 @@ export function PipDie({ value, kind = 'warrior', state = 'idle', onClick, size 
             ? `0 0 10px #ffd54a, inset 0 0 0 1px ${GOLD_BRIGHT}`
             : `inset 0 0 0 1px rgba(240,210,122,0.45), 0 2px 4px rgba(0,0,0,.4)`,
         cursor: onClick ? 'pointer' : 'default',
-        opacity: dim ? 0.32 : 1,
+        opacity: dim,
         padding: 0,
         transition: 'opacity .15s, box-shadow .15s, border-color .15s',
       }}
     >
-      {state === 'discarded' && (
-        <span
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'grid',
-            placeItems: 'center',
-            color: '#c0392b',
-            fontSize: size * 0.6,
-            fontWeight: 700,
-          }}
-        >
-          ✕
-        </span>
-      )}
-      {state !== 'discarded' &&
-        cells.map(([cx, cy], i) => (
+      {cells.map(([cx, cy], i) => (
           <span
             key={i}
             style={{
@@ -89,10 +79,10 @@ export function PipDie({ value, kind = 'warrior', state = 'idle', onClick, size 
               borderRadius: '50%',
               background: PIP_BG,
               boxShadow: 'inset 0 -1px 1px rgba(0,0,0,.35), 0 1px 1.5px rgba(0,0,0,.5)',
-              transform: 'translate(-50%,-50%)',
-            }}
-          />
-        ))}
+            transform: 'translate(-50%,-50%)',
+          }}
+        />
+      ))}
     </button>
   );
 }

@@ -17,7 +17,6 @@ import type {
   Die,
   DieKind,
   GameState,
-  MageStone,
   PlayerColor,
   Unit,
 } from './types';
@@ -27,7 +26,6 @@ const defaultRng: RNG = () => Math.random();
 
 let dieCounter = 0;
 let graveCounter = 0;
-let stoneCounter = 1000;
 function dN(n: number, rng: RNG): number {
   return 1 + Math.floor(rng() * n);
 }
@@ -52,8 +50,56 @@ export function unitById(state: GameState, id: string): Unit | undefined {
   return state.units.find((u) => u.id === id);
 }
 
+/** MageStone tokens lying loose on `cell` (carried stones are not on the board). */
 export function stonesAt(state: GameState, cell: Cell) {
-  return state.stones.filter((s) => !s.collected && sameCell(s.cell, cell));
+  return state.stones.filter((s) => !s.carrier && sameCell(s.cell, cell));
+}
+
+// ---- MageStone tokens ----------------------------------------------------
+// Activation lives on the TOKEN, so it follows the stone through every hand it
+// passes: carried, dropped on death, spent on Bolt or Nova, and stolen. The
+// only permitted transition is false -> true; nothing here ever writes false
+// over a true. `Unit.carried`/`Unit.activated` are derived mirrors of these
+// tokens — `syncStones` is their single writer.
+
+/** Every token a unit is holding (board stones excluded). */
+export function carriedStones(state: GameState, unitId: string) {
+  return state.stones.filter((s) => s.carrier === unitId);
+}
+
+/**
+ * Recompute every unit's `carried`/`activated` mirror from the token list. Call
+ * this after ANY mutation of `state.stones` or of stone carriers — it is the
+ * one place those two numbers are written.
+ */
+export function syncStones(state: GameState): GameState {
+  const carried = new Map<string, number>();
+  const activated = new Map<string, number>();
+  for (const s of state.stones) {
+    if (!s.carrier) continue;
+    const m = s.activated ? activated : carried;
+    m.set(s.carrier, (m.get(s.carrier) ?? 0) + 1);
+  }
+  return {
+    ...state,
+    units: state.units.map((u) => {
+      const c = carried.get(u.id) ?? 0;
+      const a = activated.get(u.id) ?? 0;
+      return u.carried === c && u.activated === a ? u : { ...u, carried: c, activated: a };
+    }),
+  };
+}
+
+/** Move a set of tokens onto the board at `cell` (carrier cleared). Activation
+ *  is untouched — an Activated stone stays Activated wherever it lands. */
+function dropStones(state: GameState, ids: Set<string>, cell: Cell): GameState {
+  if (!ids.size) return state;
+  return {
+    ...state,
+    stones: state.stones.map((s) =>
+      ids.has(s.id) ? { ...s, carrier: null, cell: { ...cell } } : s,
+    ),
+  };
 }
 
 export function graveAt(state: GameState, cell: Cell) {
@@ -145,10 +191,12 @@ function respawnOrQueue(
     const cell = freeBaseCell(state, owner, home);
     if (cell) {
       log.push(`${owner}'s ${cap(kind)} respawns at base.`);
-      return {
+      // The Mage's remaining Activated tokens are still bound to this unit id,
+      // so syncStones restores its counts the moment it is back on the board.
+      return syncStones({
         ...state,
         units: [...state.units, { id, kind, owner, cell, carried: 0, activated }],
-      };
+      });
     }
   }
   log.push(`${owner}'s ${cap(kind)} cannot respawn — an enemy holds the base.`);
@@ -177,7 +225,9 @@ export function resolveRespawns(state: GameState): GameState {
     }
     remaining.push(p);
   }
-  return { ...state, units, pendingRespawns: remaining, log };
+  // A returning Mage's stone TOKENS are still bound to its unit id, so syncing
+  // restores its carried/activated counts the moment it is back on the board.
+  return syncStones({ ...state, units, pendingRespawns: remaining, log });
 }
 
 export function warriorCount(state: GameState, owner: PlayerColor): number {
@@ -186,8 +236,9 @@ export function warriorCount(state: GameState, owner: PlayerColor): number {
 
 // ---- Gravestone bank -----------------------------------------------------
 
-/** Gravestone markers each player contributes to the shared bank. */
-export const GRAVES_PER_PLAYER = 3;
+/** Gravestone markers each participating player contributes to the shared bank
+ *  at setup: 8 in a 2-player game, 16 in a 4-player game. */
+export const GRAVES_PER_PLAYER = 4;
 
 /** Players still in the game — not eliminated, and holding a unit or with one
  *  queued to respawn. (Same test conquest victory uses, so the two agree.) */
@@ -200,101 +251,127 @@ export function activePlayers(state: GameState): PlayerColor[] {
   );
 }
 
-/** Maximum gravestones allowed on the board at once: `GRAVES_PER_PLAYER` per
- *  still-active player (6 for 2p, 12 for 4p), so the cap drops by 3 each time a
- *  player is eliminated. */
+/** The bank's STARTING size for this game — `GRAVES_PER_PLAYER` per seat at
+ *  setup (8 for 2p, 16 for 4p). Fixed for the whole match: eliminating a player
+ *  does not shrink it, and nothing ever adds to it. */
 export function gravestoneCapacity(state: GameState): number {
-  return GRAVES_PER_PLAYER * activePlayers(state).length;
+  return GRAVES_PER_PLAYER * state.players.length;
 }
 
-/** Markers left in the shared gravestone bank — capacity minus those already on
- *  the board. Placing a gravestone spends one; resurrecting returns one. */
+/**
+ * Markers left in the shared, FINITE gravestone bank.
+ *
+ * This is a stored counter, not a derived one. It only ever DECREASES: a
+ * Warrior's death spends one, and a resurrection removes that token from the
+ * game entirely rather than returning it. Once it hits zero, Warrior losses are
+ * permanent — the attrition half of the endgame clock.
+ */
 export function gravestoneBank(state: GameState): number {
-  return Math.max(0, gravestoneCapacity(state) - state.gravestones.length);
+  return Math.max(0, state.graveBank ?? 0);
 }
 
-// ---- Phase 1-2: roll & discard ------------------------------------------
+// ---- The round: roll, then alternating activations -----------------------
+//
+// At the start of a round EVERY player rolls the same five dice — 3 Standard,
+// 1 Mage, 1 Priest. Nothing is discarded and all five stay visible. Players
+// then take turns ACTIVATING: one die, one unit, move-and-act, pass. A player
+// may spend at most three of their five dice per round; whatever is left over
+// is simply ignored when the round ends.
+//
+// The one exception to strict alternation is the SAME-COLOUR bundle: 2 or 3
+// unused dice of the same kind may be committed to a single activation, moving
+// and resolving all their units (a coordinated Warrior attack, say) before play
+// passes. `GameState.activationDice` holds the dice committed to the activation
+// in progress, and every die in it must share a kind.
 
-// Roll 5 dice: 1 Mage, 1 Priest, 3 Warrior. Discard 2; the remaining ≤3 dice
-// each activate one matching-kind unit (so at most 3 units act per turn).
 const DIE_KINDS: DieKind[] = ['mage', 'priest', 'warrior', 'warrior', 'warrior'];
-const DISCARDS = 2;
 
+/** Dice a player may spend per round (they roll five and keep the rest). */
+export const DICE_PER_ROUND = 3;
+
+/** Roll the round's dice — five for EVERY player still in the game. */
 export function rollDice(state: GameState, rng: RNG = defaultRng): GameState {
   if (state.turnPhase !== 'roll') return state;
-  const dice: Die[] = DIE_KINDS.map((kind) => ({
-    id: `die-${dieCounter++}`,
-    value: dN(6, rng),
-    kind,
-    discarded: false,
-    usedBy: null,
-  }));
+  const dice: Die[] = [];
+  for (const owner of state.players) {
+    if (state.eliminated.includes(owner)) continue;
+    for (const kind of DIE_KINDS) {
+      dice.push({ id: `die-${dieCounter++}`, owner, value: dN(6, rng), kind, usedBy: null });
+    }
+  }
   return {
     ...state,
     dice,
-    turnPhase: 'discard',
-    log: [...state.log, `${state.current} rolled 5 dice. Discard two.`],
+    activationDice: [],
+    turnPhase: 'act',
+    log: [
+      ...state.log,
+      `Round ${state.turn}: every player rolls 5 dice. ${state.current} activates first.`,
+    ],
   };
 }
 
-export function discardsLeft(state: GameState): number {
-  return DISCARDS - state.dice.filter((d) => d.discarded).length;
+/** Dice `player` has already spent this round (max `DICE_PER_ROUND`). */
+export function diceSpent(state: GameState, player: PlayerColor): number {
+  return state.dice.filter((d) => d.owner === player && d.usedBy !== null).length;
 }
 
-/** Replace die values with the physically-rolled results (by order). */
+/** Dice `player` may still spend this round. */
+export function diceLeft(state: GameState, player: PlayerColor): number {
+  return Math.max(0, DICE_PER_ROUND - diceSpent(state, player));
+}
+
+/** The player's own five dice for this round, spent and unspent. */
+export function diceOf(state: GameState, player: PlayerColor): Die[] {
+  return state.dice.filter((d) => d.owner === player);
+}
+
+/** The kind an activation is locked to once it has begun — only same-kind dice
+ *  may join it. Null when no activation is in progress. */
+export function activationKind(state: GameState): DieKind | null {
+  const first = state.activationDice
+    .map((id) => state.dice.find((d) => d.id === id))
+    .find((d): d is Die => !!d);
+  return first?.kind ?? null;
+}
+
+/** Is this die one the current player may commit right now — theirs, unspent,
+ *  within their three-dice budget, and matching any activation already begun? */
+export function canCommitDie(state: GameState, die: Die): boolean {
+  if (die.owner !== state.current || die.usedBy !== null) return false;
+  if (diceLeft(state, state.current) <= 0) return false;
+  const kind = activationKind(state);
+  return kind === null || kind === die.kind;
+}
+
+/**
+ * Replace the CURRENT player's die values with the physically-rolled results,
+ * in order. Only their five dice are thrown on the table, so the values must be
+ * matched to those — mapping across the whole (all-players) array would write
+ * one seat's physical roll onto another seat's dice.
+ */
 export function setRolledValues(state: GameState, values: number[]): GameState {
   let i = 0;
-  return { ...state, dice: state.dice.map((d) => ({ ...d, value: values[i++] ?? d.value })) };
-}
-
-export function discardDie(state: GameState, dieId: string): GameState {
-  if (state.turnPhase !== 'discard') return state;
-  const die = state.dice.find((d) => d.id === dieId);
-  if (!die || die.discarded) return state;
-  const seq = state.dice.filter((d) => d.discarded).length + 1;
-  const dice = state.dice.map((d) =>
-    d.id === dieId ? { ...d, discarded: true, discardSeq: seq } : d,
-  );
-  const done = seq >= DISCARDS;
   return {
     ...state,
-    dice,
-    turnPhase: done ? 'act' : 'discard',
-    log: [...state.log, `${state.current} discards a ${die.value} (${die.kind} die).`],
-  };
-}
-
-/** May the current player take back their most recent discard? Only while the
- *  turn hasn't really begun — nothing moved, nothing acted, no die spent. */
-export function canUndoDiscard(state: GameState): boolean {
-  if (state.winner) return false;
-  if (state.turnPhase !== 'discard' && state.turnPhase !== 'act') return false;
-  if (state.unitsMovedThisTurn.length > 0 || state.unitsActedThisTurn.length > 0) return false;
-  if (state.dice.some((d) => d.usedBy !== null)) return false;
-  return state.dice.some((d) => d.discarded);
-}
-
-/** Take back the MOST RECENT discard (a mis-click fix, not a rewind): the die
- *  returns to the tray and the phase steps back to `discard`. */
-export function undoDiscard(state: GameState): GameState {
-  if (!canUndoDiscard(state)) return state;
-  const discarded = state.dice.filter((d) => d.discarded);
-  const last = discarded.reduce((a, b) => ((b.discardSeq ?? 0) >= (a.discardSeq ?? 0) ? b : a));
-  const dice = state.dice.map((d) =>
-    d.id === last.id ? { ...d, discarded: false, discardSeq: null } : d,
-  );
-  return {
-    ...state,
-    dice,
-    turnPhase: 'discard',
-    log: [...state.log, `${state.current} takes back the ${last.value} (${last.kind} die).`],
+    dice: state.dice.map((d) =>
+      d.owner === state.current ? { ...d, value: values[i++] ?? d.value } : d,
+    ),
   };
 }
 
 // ---- Dice / activation ---------------------------------------------------
 
+/** The current player's dice that are still free AND legal to commit to the
+ *  activation in progress (see `canCommitDie`). */
 export function availableDice(state: GameState): Die[] {
-  return state.dice.filter((d) => !d.discarded && d.usedBy === null);
+  return state.dice.filter((d) => canCommitDie(state, d));
+}
+
+/** The current player's unspent dice, ignoring the same-kind activation lock —
+ *  what the tray should still show as "yours this round". */
+export function unspentDice(state: GameState): Die[] {
+  return state.dice.filter((d) => d.owner === state.current && d.usedBy === null);
 }
 
 /** The die already spent activating this unit (from a move), if any. */
@@ -302,11 +379,15 @@ export function unitDie(state: GameState, unitId: string): Die | undefined {
   return state.dice.find((d) => d.usedBy === unitId);
 }
 
-/** A die may move/activate only its matching unit kind. */
+/** A die may move/activate only its owner's matching unit kind, only within its
+ *  owner's three-dice round budget, and only if it fits the same-colour rule
+ *  for the activation already in progress. */
 export function canDieMoveUnit(die: Die, unit: Unit, state: GameState): boolean {
   if (unit.owner !== state.current) return false;
+  if (state.pendingFlee) return false;
   if (state.unitsActedThisTurn.includes(unit.id)) return false;
   if (state.unitsMovedThisTurn.includes(unit.id)) return false;
+  if (!canCommitDie(state, die)) return false;
   return die.kind === unit.kind;
 }
 
@@ -349,6 +430,7 @@ export function legalMoves(state: GameState, unit: Unit, steps: number): Cell[] 
 
 export function moveUnit(state: GameState, unitId: string, dieId: string, dest: Cell): GameState {
   if (state.turnPhase !== 'act') return state;
+  if (state.pendingFlee) return state; // settle the repelled Priest's retreat first
   const unit = unitById(state, unitId);
   const die = state.dice.find((d) => d.id === dieId);
   if (!unit || !die) return state;
@@ -359,14 +441,21 @@ export function moveUnit(state: GameState, unitId: string, dieId: string, dest: 
   // And a Mage stepping onto its own base with 6+ activated stones wins on the
   // spot, so victory is checked immediately (not deferred to the next action).
   return checkVictory(
-    resolveRespawns({
-      ...state,
-      units: state.units.map((u) =>
-        u.id === unitId ? { ...u, prevCell: u.cell, cell: dest } : u,
-      ),
-      dice: state.dice.map((d) => (d.id === dieId ? { ...d, usedBy: unitId } : d)),
-      unitsMovedThisTurn: [...state.unitsMovedThisTurn, unitId],
-    }),
+    pruneRitual(
+      resolveRespawns({
+        ...state,
+        units: state.units.map((u) =>
+          u.id === unitId ? { ...u, prevCell: u.cell, cell: dest } : u,
+        ),
+        dice: state.dice.map((d) => (d.id === dieId ? { ...d, usedBy: unitId } : d)),
+        // Committing a die opens (or joins) the current activation. Everything
+        // in it must share a kind — that IS the same-colour bundle rule.
+        activationDice: state.activationDice.includes(dieId)
+          ? state.activationDice
+          : [...state.activationDice, dieId],
+        unitsMovedThisTurn: [...state.unitsMovedThisTurn, unitId],
+      }),
+    ),
   );
 }
 
@@ -376,12 +465,19 @@ export function moveUnit(state: GameState, unitId: string, dieId: string, dest: 
 export function canAct(state: GameState, unitId: string): boolean {
   const unit = unitById(state, unitId);
   if (!unit || unit.owner !== state.current) return false;
+  // A repelled Priest's retreat is settled before play continues.
+  if (state.pendingFlee) return false;
   if (state.unitsActedThisTurn.includes(unitId)) return false;
   if (unitDie(state, unitId)) return true;
   return availableDice(state).some((d) => d.kind === unit.kind);
 }
 
-/** Spend a matching-kind die on this unit's action (reuse its move die if any). */
+/**
+ * Spend a matching-kind die on this unit's action, reusing its move die when it
+ * has one. A fresh die must still pass `canCommitDie` — the owner's three-dice
+ * round budget and the activation's same-colour lock both apply — so returns
+ * both the new dice array and the activation it belongs to.
+ */
 function spendActionDie(state: GameState, unitId: string): Die[] | null {
   const existing = unitDie(state, unitId);
   if (existing) return state.dice;
@@ -390,6 +486,21 @@ function spendActionDie(state: GameState, unitId: string): Die[] | null {
   const free = availableDice(state).find((d) => d.kind === unit.kind);
   if (!free) return null;
   return state.dice.map((d) => (d.id === free.id ? { ...d, usedBy: unitId } : d));
+}
+
+/**
+ * The activation ids after an action spent `dice`. An action-only activation
+ * (a unit that acts without moving first) still has to register its die, or the
+ * same-colour lock would not apply to whatever the player commits next.
+ */
+function withActivation(state: GameState, dice: Die[]): string[] {
+  const opened = state.activationDice.slice();
+  for (const d of dice) {
+    if (d.usedBy === null || opened.includes(d.id)) continue;
+    const before = state.dice.find((x) => x.id === d.id);
+    if (before && before.usedBy === null) opened.push(d.id);
+  }
+  return opened;
 }
 
 function markActed(state: GameState, unitId: string): string[] {
@@ -442,10 +553,11 @@ export function plannedAttackers(state: GameState, attackerId: string, targetId:
 /**
  * Win/lose probabilities for an attack (attacker's summed roll vs the defender's
  * die — d6, or a defending Mage's power die). Warriors contribute n×d6; a lone
- * Mage attacks with its power die. Because combat
- * **rerolls any draw** (see `resolveAttack`), the odds are conditioned on a
- * decisive result: P(win | not draw) = win / (win + lose). `draw` is therefore
- * always 0 here — kept in the shape for compatibility.
+ * Mage attacks with its power die.
+ *
+ * **Ties go to the ATTACKER**, so the chance of success is simply
+ * `P(attack >= defence)` and there is no draw branch. `draw` is always 0 here —
+ * kept in the shape for compatibility with existing callers.
  */
 export function combatOdds(
   state: GameState,
@@ -473,21 +585,20 @@ export function combatOdds(
   for (const [a, pa] of dist) {
     for (let d = 1; d <= defFaces; d++) {
       const p = pa / defFaces;
-      if (a > d) win += p;
-      else if (a < d) lose += p;
-      // a === d is a draw → rerolled, so it doesn't contribute to either side.
+      // Ties go to the attacker, so `>=` wins outright — no draw branch.
+      if (a >= d) win += p;
+      else lose += p;
     }
   }
-  // Renormalise over decisive outcomes (draws are rerolled away).
-  const decisive = win + lose;
-  if (decisive === 0) return { win: 0, draw: 0, lose: 0 };
-  return { win: win / decisive, draw: 0, lose: lose / decisive };
+  return { win, draw: 0, lose };
 }
 
 /**
  * Resolve an attack by one or more attackers on a target. Warriors combine
- * (n d6); a lone Mage rolls its power die. Defender always rolls 1d6. Higher
- * wins; draw wastes the action; on a loss exactly one attacker falls.
+ * (n d6); a lone Mage rolls its power die. The defender rolls 1d6 (a Mage rolls
+ * its power die). Higher wins and **ties go to the attacker**; on a loss
+ * exactly one attacker falls — except against a Priest, which never kills its
+ * attacker but may retreat instead (see `PendingFlee`).
  */
 export function resolveAttack(
   state: GameState,
@@ -515,45 +626,48 @@ export function resolveAttack(
     scratch = { ...scratch, dice: updated };
   }
   dice = scratch.dice;
+  const activationDice = withActivation(state, dice);
 
-  // Roll attack vs the defender's die, rerolling any **draw** so combat is always
-  // decisive (a tie is silently re-rolled — the UI only ever sees a win or loss).
-  // A defending Mage rolls its own power die (d12/d20 by activated stones), not a
-  // d6 — so a powered-up Mage is much harder to kill.
+  // Roll attack vs the defender's die. **Ties go to the attacker**, so a single
+  // roll always settles it — there is no reroll loop. A defending Mage rolls its
+  // own power die (d12/d20 by activated stones), not a d6, so a powered-up Mage
+  // is much harder to kill.
   const attackFaces = isMage ? magePowerDie(attackers[0].activated) : 6;
   const defenseFaces = target.kind === 'mage' ? magePowerDie(target.activated) : 6;
-  let attackDice: number[];
-  let attackRoll: number;
-  let defenseRoll: number;
-  do {
-    attackDice = isMage
-      ? [dN(attackFaces, rng)]
-      : Array.from({ length: attackers.length }, () => dN(6, rng));
-    attackRoll = attackDice.reduce((a, b) => a + b, 0);
-    defenseRoll = dN(defenseFaces, rng);
-  } while (attackRoll === defenseRoll);
+  const attackDice: number[] = isMage
+    ? [dN(attackFaces, rng)]
+    : Array.from({ length: attackers.length }, () => dN(6, rng));
+  const attackRoll = attackDice.reduce((a, b) => a + b, 0);
+  const defenseRoll = dN(defenseFaces, rng);
 
-  // Highest roll wins; the loser is defeated outright. (Draws never reach here.)
+  // Highest roll wins, the attacker taking ties; the loser is defeated outright.
   let outcome: CombatResult['outcome'];
   let defeatedId: string | null = null;
   let next: GameState = {
     ...state,
     dice,
+    activationDice,
     unitsActedThisTurn: attackers.reduce((acc, a) => {
       return acc.includes(a.id) ? acc : [...acc, a.id];
     }, state.unitsActedThisTurn),
   };
 
-  if (attackRoll > defenseRoll) {
+  if (attackRoll >= defenseRoll) {
     outcome = 'win';
     defeatedId = target.id;
     next = bumpKill(defeatUnit(next, target.id), state.current);
   } else {
-    // attackRoll < defenseRoll (equality was rerolled away above). A Priest never
-    // kills its attacker — winning its defence simply repels the attack and both
-    // units stay put. Any other defender defeats exactly one attacker.
+    // The defender beat the attacker outright. A Priest never kills its
+    // attacker — winning its defence repels the attack, and the Priest may then
+    // retreat up to its defence roll (offered out of turn, always declinable).
+    // Any other defender defeats exactly one attacker.
     outcome = 'lose';
-    if (target.kind !== 'priest') {
+    if (target.kind === 'priest') {
+      next = {
+        ...next,
+        pendingFlee: { priestId: target.id, owner: target.owner, steps: defenseRoll },
+      };
+    } else {
       defeatedId = attackers[0].id; // coordinated: only one attacker falls
       next = bumpKill(defeatUnit(next, attackers[0].id), target.owner);
     }
@@ -603,18 +717,25 @@ export function defeatUnit(state: GameState, unitId: string): GameState {
   const log = [...state.log];
 
   if (unit.kind === 'warrior') {
-    // A Warrior leaves one Gravestone where it fell — but only if the shared bank
-    // still has a marker, the square has no gravestone already (no stacking), and
-    // it isn't a Nexus square.
+    // A Warrior leaves one Gravestone where it fell — but only if the finite
+    // shared bank still holds a token, the square has no gravestone already (no
+    // stacking), and it isn't a Nexus square. A token is spent only when one is
+    // actually placed; a blocked square costs the bank nothing.
     const blocked = !!graveAt(state, unit.cell) || inNexus(unit.cell.r, unit.cell.c);
     let gravestones = state.gravestones;
-    if (gravestoneBank(state) > 0 && !blocked) {
+    let graveBank = state.graveBank;
+    if (graveBank > 0 && !blocked) {
       gravestones = [...gravestones, { id: `grave-${graveCounter++}`, cell: unit.cell }];
-      log.push(`${unit.owner}'s Warrior falls — a Gravestone marks the square.`);
+      graveBank -= 1;
+      log.push(
+        `${unit.owner}'s Warrior falls — a Gravestone marks the square (bank ${graveBank}).`,
+      );
+    } else if (graveBank <= 0) {
+      log.push(`${unit.owner}'s Warrior falls for good — the Gravestone bank is empty.`);
     } else {
       log.push(`${unit.owner}'s Warrior falls (no Gravestone placed).`);
     }
-    return { ...state, units, gravestones, log };
+    return { ...state, units, gravestones, graveBank, log };
   }
 
   if (unit.kind === 'priest') {
@@ -624,28 +745,27 @@ export function defeatUnit(state: GameState, unitId: string): GameState {
     return respawnOrQueue(base, unit.owner, 'priest', unit.id, log, 0);
   }
 
-  // Mage: drop all unactivated + 1 activated stone; keep the remaining activated
-  // stones, which return with the Mage when it respawns. The dropped activated
-  // stone is flagged so it shows gold on the board.
-  const droppedActivated = unit.activated > 0 ? 1 : 0;
-  const retainedActivated = unit.activated - droppedActivated;
-  const dropCount = unit.carried + droppedActivated;
-  const dropped: MageStone[] = [
-    ...Array.from({ length: unit.carried }, () => ({
-      id: `stone-${stoneCounter++}`,
-      cell: unit.cell,
-      collected: false,
-    })),
-    ...Array.from({ length: droppedActivated }, () => ({
-      id: `stone-${stoneCounter++}`,
-      cell: unit.cell,
-      collected: false,
-      activated: true,
-    })),
-  ];
-  log.push(`${unit.owner}'s Mage is struck down, scattering ${dropCount} MageStone(s).`);
+  // Mage: drop every Unactivated token it carries, PLUS exactly one Activated
+  // token if it has any. The rest of its Activated tokens stay bound to the unit
+  // id and so return with it on respawn. The dropped Activated stone stays
+  // ACTIVATED on the board — activation is never undone.
+  const held = carriedStones(state, unit.id);
+  const unactivated = held.filter((s) => !s.activated);
+  const activatedHeld = held.filter((s) => s.activated);
+  const droppedIds = new Set([
+    ...unactivated.map((s) => s.id),
+    ...activatedHeld.slice(0, 1).map((s) => s.id),
+  ]);
+  const retainedActivated = Math.max(0, activatedHeld.length - 1);
+  log.push(
+    `${unit.owner}'s Mage is struck down, scattering ${droppedIds.size} MageStone(s)` +
+      (activatedHeld.length ? ` (1 still Activated)` : '') +
+      '.',
+  );
 
-  const base = { ...state, units, stones: [...state.stones, ...dropped], log };
+  const base = syncStones(
+    dropStones({ ...state, units, log }, droppedIds, unit.cell),
+  );
   return respawnOrQueue(base, unit.owner, 'mage', unit.id, log, retainedActivated);
 }
 
@@ -661,25 +781,24 @@ export function collect(state: GameState, unitId: string): GameState {
   const unit = unitById(state, unitId)!;
   const dice = spendActionDie(state, unitId);
   if (!dice) return state;
+  const activationDice = withActivation(state, dice);
   const here = stonesAt(state, unit.cell);
   const ids = new Set(here.map((s) => s.id));
-  // Already-activated (gold) stones a slain Mage dropped stay activated when
-  // re-collected; plain (silver) stones become carried (need activating on base).
+  // Each token keeps the activation state it already had. An ALREADY-ACTIVATED
+  // stone counts for this Mage the instant it is picked up — no trip home, and
+  // it works just the same for an opponent who takes it off the battlefield.
   const gainedActivated = here.filter((s) => s.activated).length;
-  const gainedCarried = here.length - gainedActivated;
-  const note = gainedActivated > 0 ? ` (${gainedActivated} already activated)` : '';
-  return checkVictory({
-    ...state,
-    dice,
-    stones: state.stones.map((s) => (ids.has(s.id) ? { ...s, collected: true } : s)),
-    units: state.units.map((u) =>
-      u.id === unitId
-        ? { ...u, carried: u.carried + gainedCarried, activated: u.activated + gainedActivated }
-        : u,
-    ),
-    unitsActedThisTurn: markActed(state, unitId),
-    log: [...state.log, `${unit.owner}'s Mage collects ${here.length} MageStone(s)${note}.`],
-  });
+  const note = gainedActivated > 0 ? ` (${gainedActivated} already Activated)` : '';
+  return checkVictory(
+    syncStones({
+      ...state,
+      dice,
+      activationDice,
+      stones: state.stones.map((s) => (ids.has(s.id) ? { ...s, carrier: unitId } : s)),
+      unitsActedThisTurn: markActed(state, unitId),
+      log: [...state.log, `${unit.owner}'s Mage collects ${here.length} MageStone(s)${note}.`],
+    }),
+  );
 }
 
 export function canActivate(state: GameState, unitId: string): boolean {
@@ -693,19 +812,26 @@ export function activate(state: GameState, unitId: string): GameState {
   const unit = unitById(state, unitId)!;
   const dice = spendActionDie(state, unitId);
   if (!dice) return state;
-  const moved = unit.carried;
-  return checkVictory({
-    ...state,
-    dice,
-    units: state.units.map((u) =>
-      u.id === unitId ? { ...u, carried: 0, activated: u.activated + moved } : u,
-    ),
-    unitsActedThisTurn: markActed(state, unitId),
-    log: [
-      ...state.log,
-      `${unit.owner}'s Mage activates ${moved} MageStone(s) (now ${unit.activated + moved}).`,
-    ],
-  });
+  const activationDice = withActivation(state, dice);
+  // Flip the Mage's Unactivated tokens. This is the ONLY false -> true
+  // transition in the engine, and it is irreversible for the rest of the game.
+  const moved = carriedStones(state, unitId).filter((s) => !s.activated);
+  const ids = new Set(moved.map((s) => s.id));
+  return checkVictory(
+    syncStones({
+      ...state,
+      dice,
+      activationDice,
+      stones: state.stones.map((s) => (ids.has(s.id) ? { ...s, activated: true } : s)),
+      unitsActedThisTurn: markActed(state, unitId),
+      log: [
+        ...state.log,
+        `${unit.owner}'s Mage activates ${moved.length} MageStone(s) (now ${
+          unit.activated + moved.length
+        }).`,
+      ],
+    }),
+  );
 }
 
 // ---- Mage powers: Bolt / Nova ---------------------------------------------
@@ -713,7 +839,7 @@ export function activate(state: GameState, unitId: string): GameState {
 // activated but leave the Mage and land back on the board for anyone to claim.
 
 export const BOLT_COST = 1;
-export const NOVA_COST = 3;
+export const NOVA_COST = 4;
 
 const manhattan = (a: Cell, b: Cell) => Math.abs(a.r - b.r) + Math.abs(a.c - b.c);
 const chebyshev = (a: Cell, b: Cell) => Math.max(Math.abs(a.r - b.r), Math.abs(a.c - b.c));
@@ -747,16 +873,19 @@ export function boltTargets(state: GameState, unitId: string): Unit[] {
 }
 
 /**
- * BOLT — spend 1 activated stone to strike any enemy in range. Only an enemy
- * MAGE may roll to repel (power die vs power die, ties re-rolled); everything
- * else is destroyed outright. The spent stone lands ON the target's square,
- * still activated, waiting to be claimed.
+ * BOLT — spend 1 Activated stone to strike any enemy in range.
+ *
+ * It is **indefensible**: no defence roll is made by anything, a Mage included.
+ * The target is defeated immediately by its normal defeat rules. The spent
+ * stone is NOT destroyed — the same token leaves the Mage and lands on the
+ * square that was hit, STILL ACTIVATED, so any Mage (including the enemy's) can
+ * pick it up and count it immediately.
  */
 export function resolveBolt(
   state: GameState,
   mageId: string,
   targetId: string,
-  rng: RNG = defaultRng,
+  _rng: RNG = defaultRng,
 ): GameState {
   if (state.turnPhase !== 'act' || state.winner) return state;
   const mage = unitById(state, mageId);
@@ -767,65 +896,35 @@ export function resolveBolt(
 
   const dice = spendActionDie(state, mageId);
   if (!dice) return state;
+  const activationDice = withActivation(state, dice);
 
-  const attackFaces = magePowerDie(mage.activated);
-  let attackRoll = dN(attackFaces, rng);
-  let defenseRoll = 0;
-  let repelled = false;
-  if (target.kind === 'mage') {
-    const defenseFaces = magePowerDie(target.activated);
-    do {
-      attackRoll = dN(attackFaces, rng);
-      defenseRoll = dN(defenseFaces, rng);
-    } while (attackRoll === defenseRoll);
-    repelled = defenseRoll > attackRoll;
-  }
+  // The stone spent is a real token: it moves to the target square and keeps
+  // its activation. Nothing is minted and nothing is destroyed.
+  const spent = carriedStones(state, mageId).filter((s) => s.activated).slice(0, BOLT_COST);
+  if (spent.length < BOLT_COST) return state;
+  const spentIds = new Set(spent.map((s) => s.id));
 
-  // The spent stone drops on the target square, still activated.
-  const boltStone: MageStone = {
-    id: `stone-bolt-${stoneCounter++}`,
-    cell: { ...target.cell },
-    collected: false,
-    activated: true,
-  };
-
-  let next: GameState = {
-    ...state,
-    dice,
-    units: state.units.map((u) => (u.id === mageId ? { ...u, activated: u.activated - BOLT_COST } : u)),
-    stones: [...state.stones, boltStone],
-    unitsActedThisTurn: markActed(state, mageId),
-    // Physical dice only make sense for the mage-vs-mage duel; an unopposed
-    // bolt has no defence roll (defenseFaces 0 would break the dice layer).
-    lastCombat:
-      target.kind === 'mage'
-        ? {
-            attackerIds: [mageId],
-            defenderId: targetId,
-            attackerOwner: mage.owner,
-            defenderOwner: target.owner,
-            attackerKind: 'mage',
-            defenderKind: target.kind,
-            attackRoll,
-            attackDice: [attackRoll],
-            attackFaces,
-            defenseRoll,
-            defenseFaces: magePowerDie(target.activated),
-            outcome: repelled ? 'lose' : 'win',
-            defeatedId: repelled ? null : targetId,
-            defenderCell: { ...target.cell },
-          }
-        : null,
-    log: [
-      ...state.log,
-      repelled
-        ? `${mage.owner}'s Mage bolts ${target.owner}'s Mage — REPELLED (${defenseRoll} beats ${attackRoll})!`
-        : `${mage.owner}'s Mage bolts ${target.owner}'s ${target.kind} for ${BOLT_COST} stone!`,
-    ],
-  };
-  if (!repelled) {
-    next = bumpKill(defeatUnit(next, targetId), mage.owner);
-  }
+  let next: GameState = syncStones(
+    dropStones(
+      {
+        ...state,
+        dice,
+        activationDice,
+        unitsActedThisTurn: markActed(state, mageId),
+        // A Bolt has no defence roll at all, so there are no combat dice to
+        // throw — the physical dice layer keys off `lastCombat`.
+        lastCombat: null,
+        log: [
+          ...state.log,
+          `${mage.owner}'s Mage bolts ${target.owner}'s ${target.kind} — indefensible! ` +
+            `The spent MageStone drops (still Activated) where it struck.`,
+        ],
+      },
+      spentIds,
+      target.cell,
+    ),
+  );
+  next = bumpKill(defeatUnit(next, targetId), mage.owner);
   return checkVictory(resolveRespawns(next));
 }
 
@@ -837,57 +936,77 @@ export function canNova(state: GameState, unitId: string): boolean {
   return novaVictims(state, unitId).length > 0;
 }
 
-/** EVERY unit (friend or foe) within 1 square of the mage — diagonals too. */
+/** Every **ENEMY** unit in the 8 squares surrounding the Mage. Friendly units
+ *  stand in the blast unharmed. */
 export function novaVictims(state: GameState, unitId: string): Unit[] {
   const mage = unitById(state, unitId);
   if (!mage) return [];
-  return state.units.filter((u) => u.id !== unitId && chebyshev(u.cell, mage.cell) === 1);
+  return state.units.filter(
+    (u) => u.owner !== mage.owner && chebyshev(u.cell, mage.cell) === 1,
+  );
+}
+
+/** The four diagonal neighbours of `cell` that exist on the board, in a fixed
+ *  order (NW, NE, SW, SE) — where Nova's four spent stones land. */
+function diagonalsOf(cell: Cell): Cell[] {
+  const out: Cell[] = [];
+  for (const [dr, dc] of [
+    [-1, -1],
+    [-1, 1],
+    [1, -1],
+    [1, 1],
+  ]) {
+    const c = { r: cell.r + dr, c: cell.c + dc };
+    if (cellExists(c)) out.push(c);
+  }
+  return out;
 }
 
 /**
- * NOVA — spend 3 activated stones for an unrepellable blast that destroys
- * every unit within 1 square of the Mage (diagonals included, friend or foe).
- * The 3 stones scatter to random squares of the 3×3 around the Mage, still
- * activated.
+ * NOVA — spend 4 Activated stones for an indefensible area attack.
+ *
+ * Every ENEMY unit in the 8 squares surrounding the Mage is defeated
+ * immediately, with no defence rolls. Friendly units are untouched. The four
+ * spent tokens are then placed on the four DIAGONAL squares around the Mage,
+ * all still ACTIVATED and free for any Mage to collect.
  */
-export function resolveNova(state: GameState, mageId: string, rng: RNG = defaultRng): GameState {
+export function resolveNova(state: GameState, mageId: string, _rng: RNG = defaultRng): GameState {
   if (state.turnPhase !== 'act' || state.winner) return state;
   const mage = unitById(state, mageId);
   if (!mage || !canNova(state, mageId)) return state;
   const dice = spendActionDie(state, mageId);
   if (!dice) return state;
+  const activationDice = withActivation(state, dice);
 
   const victims = novaVictims(state, mageId);
-  // Scatter the 3 spent stones over the 3×3 blast area (existing cells only;
-  // stones may stack, and units can stand on stones).
-  const area: Cell[] = [];
-  for (let dr = -1; dr <= 1; dr++)
-    for (let dc = -1; dc <= 1; dc++) {
-      const c = { r: mage.cell.r + dr, c: mage.cell.c + dc };
-      if (cellExists(c)) area.push(c);
-    }
-  const scattered: MageStone[] = Array.from({ length: NOVA_COST }, () => ({
-    id: `stone-nova-${stoneCounter++}`,
-    cell: { ...area[Math.floor(rng() * area.length)] },
-    collected: false,
-    activated: true,
-  }));
+  const spent = carriedStones(state, mageId).filter((s) => s.activated).slice(0, NOVA_COST);
+  if (spent.length < NOVA_COST) return state;
 
+  // One stone per diagonal. If a diagonal is off the board (the Mage is against
+  // a cut corner or an edge) that stone falls on the Mage's own square instead,
+  // so no token is ever lost.
+  const diagonals = diagonalsOf(mage.cell);
   let next: GameState = {
     ...state,
     dice,
-    units: state.units.map((u) => (u.id === mageId ? { ...u, activated: u.activated - NOVA_COST } : u)),
-    stones: [...state.stones, ...scattered],
+    activationDice,
+    stones: state.stones.map((s) => {
+      const i = spent.findIndex((x) => x.id === s.id);
+      if (i < 0) return s;
+      return { ...s, carrier: null, cell: { ...(diagonals[i] ?? mage.cell) }, activated: true };
+    }),
     unitsActedThisTurn: markActed(state, mageId),
     lastCombat: null, // no dice duel — the blast is absolute
     log: [
       ...state.log,
-      `${mage.owner}'s Mage unleashes a NOVA — ${victims.length} unit(s) consumed!`,
+      `${mage.owner}'s Mage unleashes a NOVA — ${victims.length} enemy unit(s) consumed! ` +
+        `4 Activated MageStones fall to the diagonals.`,
     ],
   };
+  next = syncStones(next);
   for (const v of victims) {
     next = defeatUnit(next, v.id);
-    if (v.owner !== mage.owner) next = bumpKill(next, mage.owner);
+    next = bumpKill(next, mage.owner);
   }
   return checkVictory(resolveRespawns(next));
 }
@@ -899,6 +1018,9 @@ export function canResurrect(state: GameState, unitId: string): boolean {
   if (!u || u.kind !== 'priest' || !canAct(state, unitId)) return false;
   if (!graveAt(state, u.cell)) return false;
   if (warriorCount(state, u.owner) >= MAX_WARRIORS) return false;
+  // Only one Gravestone per player per turn (the flee-resurrection below is the
+  // deliberate exception and does not go through here).
+  if (state.resurrectedThisTurn.includes(u.owner)) return false;
   // Need an empty adjacent cell for the Priest to step back into.
   return stepBackCell(state, u) !== null;
 }
@@ -935,6 +1057,7 @@ export function resurrect(state: GameState, unitId: string): GameState {
   const priest = unitById(state, unitId)!;
   const dice = spendActionDie(state, unitId);
   if (!dice) return state;
+  const activationDice = withActivation(state, dice);
   const grave = graveAt(state, priest.cell)!;
   const back = stepBackCell(state, priest)!;
   const newWarrior: Unit = {
@@ -945,17 +1068,102 @@ export function resurrect(state: GameState, unitId: string): GameState {
     carried: 0,
     activated: 0,
   };
+  // The Gravestone token is spent PERMANENTLY — it leaves the board and is NOT
+  // returned to the shared bank, so `graveBank` is untouched here.
   return {
     ...state,
     dice,
+    activationDice,
     gravestones: state.gravestones.filter((g) => g.id !== grave.id),
     units: [
       ...state.units.map((u) => (u.id === unitId ? { ...u, cell: back } : u)),
       newWarrior,
     ],
     unitsActedThisTurn: markActed(state, unitId),
-    log: [...state.log, `${priest.owner}'s Priest resurrects a Warrior.`],
+    resurrectedThisTurn: state.resurrectedThisTurn.includes(priest.owner)
+      ? state.resurrectedThisTurn
+      : [...state.resurrectedThisTurn, priest.owner],
+    log: [
+      ...state.log,
+      `${priest.owner}'s Priest resurrects a Warrior — that Gravestone leaves the game.`,
+    ],
   };
+}
+
+// ---- Priest flee ---------------------------------------------------------
+// A Priest that WINS its defence roll is not merely repelled: it may retreat up
+// to the value of that roll, and does not have to use it all. The retreat is
+// offered out of turn to the DEFENDING player and is always safe to decline —
+// `endTurn` force-clears it, so a match can never wedge waiting on one.
+
+/** Squares a repelled Priest may retreat to, including staying put (its own
+ *  cell is always the first entry). Empty when no flee is pending. */
+export function fleeDestinations(state: GameState): Cell[] {
+  const flee = state.pendingFlee;
+  if (!flee) return [];
+  const priest = unitById(state, flee.priestId);
+  if (!priest) return [];
+  return [{ ...priest.cell }, ...legalMoves(state, priest, flee.steps)];
+}
+
+/**
+ * Resolve the pending flee. `dest` of `null` (or the Priest's own cell) stays
+ * put. Landing on a Gravestone lets the Priest resurrect from it **immediately,
+ * outside its own turn** — deliberately exempt from the one-per-turn cap, and
+ * from the action economy, because the retreat itself is the opt-in.
+ */
+export function resolveFlee(state: GameState, dest: Cell | null): GameState {
+  const flee = state.pendingFlee;
+  if (!flee) return state;
+  const priest = unitById(state, flee.priestId);
+  if (!priest) return { ...state, pendingFlee: null };
+
+  const legal = dest ? fleeDestinations(state).some((c) => sameCell(c, dest)) : true;
+  const to = legal && dest ? dest : priest.cell;
+  const moved = !sameCell(to, priest.cell);
+
+  let next: GameState = {
+    ...state,
+    pendingFlee: null,
+    units: state.units.map((u) =>
+      u.id === priest.id ? { ...u, prevCell: { ...u.cell }, cell: { ...to } } : u,
+    ),
+    log: [
+      ...state.log,
+      moved
+        ? `${priest.owner}'s Priest repels the attack and flees ${manhattan(priest.cell, to)} square(s).`
+        : `${priest.owner}'s Priest repels the attack and holds its ground.`,
+    ],
+  };
+
+  // Landed on a Gravestone? Resurrect there and then, out of turn.
+  const grave = graveAt(next, to);
+  const fled = unitById(next, priest.id)!;
+  if (moved && grave && warriorCount(next, priest.owner) < MAX_WARRIORS) {
+    const back = stepBackCell(next, fled);
+    if (back) {
+      next = {
+        ...next,
+        gravestones: next.gravestones.filter((g) => g.id !== grave.id),
+        units: [
+          ...next.units.map((u) => (u.id === priest.id ? { ...u, cell: back } : u)),
+          {
+            id: `${priest.owner}-w-res${graveCounter++}`,
+            kind: 'warrior' as const,
+            owner: priest.owner,
+            cell: { ...to },
+            carried: 0,
+            activated: 0,
+          },
+        ],
+        log: [
+          ...next.log,
+          `${priest.owner}'s fleeing Priest resurrects a Warrior on the spot — that Gravestone leaves the game.`,
+        ],
+      };
+    }
+  }
+  return checkVictory(pruneRitual(next));
 }
 
 function nexusClearOfEnemies(state: GameState, owner: PlayerColor): boolean {
@@ -963,6 +1171,28 @@ function nexusClearOfEnemies(state: GameState, owner: PlayerColor): boolean {
     const u = unitAt(state, cell);
     return !u || u.owner === owner;
   });
+}
+
+/** Is a declared ritual still standing — Priest alive, still in the Nexus, and
+ *  no enemy on any Nexus square? */
+export function ritualIntact(state: GameState): boolean {
+  const rit = state.ritual;
+  if (!rit) return false;
+  const priest = unitById(state, rit.priestId);
+  return (
+    !!priest &&
+    inNexus(priest.cell.r, priest.cell.c) &&
+    nexusClearOfEnemies(state, rit.player)
+  );
+}
+
+/** Drop a ritual the moment one of its stop conditions fires (the Priest dies,
+ *  leaves or flees out of the Nexus, or an enemy occupies a Nexus square) so
+ *  the HUD's ritual flag never lingers on a broken ritual. `endTurn` still does
+ *  the authoritative check when play comes back round. */
+function pruneRitual(state: GameState): GameState {
+  if (!state.ritual || ritualIntact(state)) return state;
+  return { ...state, ritual: null, log: [...state.log, `The Ritual was broken.`] };
 }
 
 export function canRitual(state: GameState, unitId: string): boolean {
@@ -978,10 +1208,14 @@ export function beginRitual(state: GameState, unitId: string): GameState {
   const priest = unitById(state, unitId)!;
   const dice = spendActionDie(state, unitId);
   if (!dice) return state;
+  const activationDice = withActivation(state, dice);
   return {
     ...state,
     dice,
-    ritual: { player: priest.owner, priestId: unitId },
+    activationDice,
+    // Stamped with the round it began in — the win is judged one round later,
+    // after every other player has had their complete turn.
+    ritual: { player: priest.owner, priestId: unitId, round: state.turn },
     unitsActedThisTurn: markActed(state, unitId),
     log: [...state.log, `${priest.owner}'s Priest begins the Ritual in the Nexus!`],
   };
@@ -991,6 +1225,9 @@ export function beginRitual(state: GameState, unitId: string): GameState {
 
 export function checkVictory(state: GameState): GameState {
   if (state.winner) return state;
+  // Safety net: every path that can change stone ownership funnels through here,
+  // so the derived mirrors are guaranteed fresh before victory is judged.
+  state = syncStones(state);
 
   // Eliminations first: a player reduced to ZERO units on the board (their
   // Mage/Priest respawns locked out by a siege) is out of the game entirely —
@@ -1036,67 +1273,133 @@ export function checkVictory(state: GameState): GameState {
 
 // ---- Phase 5: end of turn ------------------------------------------------
 
-export function endTurn(state: GameState): GameState {
+/**
+ * Is `p` still owed an activation this round? They must be in the game, under
+ * their three-dice budget, actually holding an unspent die, and able to do
+ * something with it. The last test matters: without it a player whose pieces
+ * are all locked would be handed activation after activation and the round
+ * could never end.
+ */
+function hasActivationLeft(state: GameState, p: PlayerColor): boolean {
+  if (state.eliminated.includes(p)) return false;
+  if (state.passed.includes(p)) return false;
+  if (diceLeft(state, p) <= 0) return false;
+  if (!state.dice.some((d) => d.owner === p && d.usedBy === null)) return false;
+  return hasPlayLeft({ ...state, current: p, activationDice: [], pendingFlee: null });
+}
+
+/** The next player owed an activation, clockwise from `from` (exclusive), or
+ *  null when the round is over. */
+function nextActivator(state: GameState, from: PlayerColor): PlayerColor | null {
+  const idx = state.players.indexOf(from);
+  for (let hop = 1; hop <= state.players.length; hop++) {
+    const cand = state.players[(idx + hop) % state.players.length];
+    if (hasActivationLeft(state, cand)) return cand;
+  }
+  return null;
+}
+
+/**
+ * End the current ACTIVATION and pass play on.
+ *
+ * Play alternates: the next player with dice left activates. When nobody has
+ * dice left — every player has spent their three, or passed on what remained —
+ * the round ends, the starting player rotates, and a fresh roll begins.
+ */
+export function endActivation(state: GameState): GameState {
   if (state.winner) return state;
-  // Pass clockwise, skipping eliminated players (they take no more turns).
-  const idx = state.players.indexOf(state.current);
-  let next = state.current;
+  // An unanswered Priest retreat is declined here (the Priest simply holds its
+  // ground), so an idle defender can never stall the game.
+  const base = state.pendingFlee ? resolveFlee(state, null) : state;
+  if (base.winner) return base;
+
+  // Ending an activation without having committed anything is a PASS: that
+  // player is done for the round and their unused dice are simply ignored.
+  // (Otherwise there would be no way to leave dice unspent, which the rules
+  // explicitly allow.)
+  const passing = base.activationDice.length === 0;
+  const after: GameState = passing
+    ? {
+        ...base,
+        passed: base.passed.includes(base.current) ? base.passed : [...base.passed, base.current],
+        log: [...base.log, `${base.current} passes — ${diceLeft(base, base.current)} dice unused.`],
+      }
+    : base;
+
+  const next = nextActivator(after, after.current);
+  if (next) {
+    return resolveRespawns({
+      ...after,
+      current: next,
+      activationDice: [],
+      pendingFlee: null,
+      lastCombat: null,
+      log: [...after.log, `— ${next} activates (${diceLeft(after, next)} dice left).`],
+    });
+  }
+  return newRound(after);
+}
+
+/**
+ * Close the round and open the next one. The starting player rotates clockwise
+ * each round (in a 2-player game that is strict alternation), unspent dice are
+ * simply discarded, and the per-round records reset.
+ */
+function newRound(state: GameState): GameState {
+  const idx = state.players.indexOf(state.roundStarter);
+  let starter = state.roundStarter;
   for (let hop = 1; hop <= state.players.length; hop++) {
     const cand = state.players[(idx + hop) % state.players.length];
     if (!state.eliminated.includes(cand)) {
-      next = cand;
+      starter = cand;
       break;
     }
   }
+  const turn = state.turn + 1;
 
-  // A new round begins when play wraps back to an earlier (or the same) player
-  // in the clockwise order — robust to eliminated players being skipped.
-  const wrapped = state.players.indexOf(next) <= idx;
   let s: GameState = resolveRespawns({
     ...state,
-    current: next,
-    turn: state.turn + (wrapped ? 1 : 0),
+    current: starter,
+    roundStarter: starter,
+    turn,
     turnPhase: 'roll',
     dice: [],
+    activationDice: [],
+    passed: [],
     unitsMovedThisTurn: [],
     unitsActedThisTurn: [],
+    resurrectedThisTurn: [],
+    pendingFlee: null,
     lastCombat: null,
-    log: [...state.log, `— ${next}'s turn. Roll the dice.`],
+    log: [...state.log, `— Round ${turn}. ${starter} starts. Roll the dice.`],
   });
 
-  // Ritual victory: play has returned to the ritual player with the Priest still
-  // holding a clear Nexus.
-  if (s.ritual && s.ritual.player === next) {
-    const priest = unitById(s, s.ritual.priestId);
-    const valid =
-      priest &&
-      inNexus(priest.cell.r, priest.cell.c) &&
-      nexusClearOfEnemies(s, s.ritual.player);
-    if (valid) {
+  // Ritual victory is judged at the round boundary: declaring it costs the
+  // Priest's action, every other player then gets a complete turn, and if the
+  // Ritual still stands when play comes back round, it is won.
+  if (s.ritual) {
+    const stands = ritualIntact(s);
+    if (stands && turn > s.ritual.round) {
+      const winner = s.ritual.player;
       return {
         ...s,
-        winner: next,
+        winner,
         winMethod: 'Ritual',
-        log: [...s.log, `${next} completes the Ritual and wins!`],
+        log: [...s.log, `${winner} completes the Ritual and wins!`],
       };
     }
-    s = { ...s, ritual: null, log: [...s.log, `${next}'s Ritual was broken.`] };
-  } else if (s.ritual) {
-    // Interrupted by an enemy entering the Nexus, or the Priest leaving/dying.
-    const priest = unitById(s, s.ritual.priestId);
-    const valid =
-      priest &&
-      inNexus(priest.cell.r, priest.cell.c) &&
-      nexusClearOfEnemies(s, s.ritual.player);
-    if (!valid) s = { ...s, ritual: null, log: [...s.log, `The Ritual was broken.`] };
+    if (!stands) s = { ...s, ritual: null, log: [...s.log, `The Ritual was broken.`] };
   }
 
   return s;
 }
 
-/** Whether the current player has any remaining move/action this turn. */
+/** Whether the current player can still do anything in this activation — a unit
+ *  to act with, or a die left to commit. */
 export function hasPlayLeft(state: GameState): boolean {
   if (state.turnPhase !== 'act') return false;
+  if (state.pendingFlee) return false;
+  if (diceLeft(state, state.current) <= 0) return false;
   return state.units.some(
     (u) =>
       u.owner === state.current &&

@@ -13,7 +13,7 @@
 // rejected simply ends the turn.
 import { useEffect, useRef } from 'react';
 import { useGame } from '../store';
-import { chooseAction, chooseDiscard, type BotAction } from '../game/bot';
+import { chooseAction, chooseFlee, type BotAction } from '../game/bot';
 
 /** Pause between bot steps, ms (a touch quicker between discards). */
 const stepDelay = (phase: string) => (phase === 'discard' ? 550 : 800);
@@ -61,12 +61,37 @@ export function BotDriver() {
   // A boolean regime flag (not the game object) — the interval below reads
   // fresh state each tick, so it survives bot-to-bot turn handoffs untouched.
   const enabled = useGame((s) => !!s.bots[s.game.current] && s.botController && !s.game.winner);
+  // A repelled Priest's retreat is answered by its OWNER, who may not be the
+  // player whose turn it is — so it needs its own regime flag. Without this a
+  // bot Priest would sit there until the store's 15s watchdog held it in place.
+  const fleeBot = useGame((s) => {
+    const f = s.game.pendingFlee;
+    return f && s.botController && s.bots[f.owner] && !s.game.winner ? f.owner : null;
+  });
   const lastStep = useRef(0);
   // A momentous play (attack, sorcery, ritual) is HELD briefly before it is
   // executed — the pause reads as the bot weighing the decision, like a human
   // hovering before committing. The action is chosen once and cached; `sig`
   // drops it if the game state moved on underneath.
   const pending = useRef<{ action: BotAction; at: number; sig: string } | null>(null);
+
+  // Resolve a bot Priest's retreat after a short beat, so it reads as a
+  // decision rather than a teleport.
+  useEffect(() => {
+    if (!fleeBot) return;
+    const t = window.setTimeout(() => {
+      const s = useGame.getState();
+      const f = s.game.pendingFlee;
+      if (!f || f.owner !== fleeBot) return;
+      try {
+        s.fleePriest(chooseFlee(s.game, s.bots[f.owner] ?? 'medium'));
+      } catch (e) {
+        console.warn('MageStone: bot flee failed — holding ground.', e);
+        useGame.getState().fleePriest(null);
+      }
+    }, 900);
+    return () => window.clearTimeout(t);
+  }, [fleeBot]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -82,6 +107,12 @@ export function BotDriver() {
         dbg.__botLast = `guard:${!lvl ? 'lvl' : !s.botController ? 'ctl' : g.winner ? 'win' : s.rolling ? 'rolling' : 'tutorial'}`;
         return;
       }
+      // Wait out a pending Priest retreat rather than treating "no legal action"
+      // as a finished turn — canAct is false for everyone while one is open.
+      if (g.pendingFlee) {
+        dbg.__botLast = 'guard:flee';
+        return;
+      }
       const now = performance.now();
       if (now - lastStep.current < stepDelay(g.turnPhase) + Math.random() * 300) return;
       lastStep.current = now;
@@ -91,15 +122,8 @@ export function BotDriver() {
           s.roll();
           return;
         }
-        if (g.turnPhase === 'discard') {
-          const id = chooseDiscard(g, lvl) ?? g.dice.find((d) => !d.discarded)?.id;
-          if (id) s.discard(id);
-          // Rejected or nothing to discard → never dead-end the turn.
-          if (useGame.getState().game === g) s.endTurn();
-          return;
-        }
-        // act
-        const sig = `${g.current}:${g.turnPhase}:${g.dice.filter((d) => !d.discarded && !d.usedBy).length}:${g.units.length}`;
+        // act — one activation at a time; the bot ends it and passes play.
+        const sig = `${g.current}:${g.turnPhase}:${g.dice.filter((d) => !d.usedBy).length}:${g.units.length}`;
         if (pending.current) {
           if (pending.current.sig !== sig) {
             pending.current = null; // the board moved on — re-decide
@@ -109,13 +133,13 @@ export function BotDriver() {
             const a = pending.current.action;
             pending.current = null;
             executeAction(a);
-            if (useGame.getState().game === g) s.endTurn();
+            if (useGame.getState().game === g) s.endActivation();
             return;
           }
         }
         const action = chooseAction(g, lvl);
         if (!action) {
-          s.endTurn();
+          s.endActivation();
           return;
         }
         // Hold the dramatic plays for a human-length beat before committing.
@@ -129,11 +153,11 @@ export function BotDriver() {
           return;
         }
         executeAction(action);
-        if (useGame.getState().game === g) s.endTurn();
+        if (useGame.getState().game === g) s.endActivation();
       } catch (e) {
-        console.warn('MageStone: bot step failed — ending the turn.', e);
+        console.warn('MageStone: bot step failed — ending the activation.', e);
         try {
-          useGame.getState().endTurn();
+          useGame.getState().endActivation();
         } catch {
           /* keep ticking; the next beat retries from fresh state */
         }

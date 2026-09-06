@@ -18,5 +18,15 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Allow `_`-prefixed parameters to go unused — the conventional marker for
+      // an argument kept only to preserve a call signature (e.g. `resolveBolt`
+      // and `resolveNova` still accept an RNG that the rules no longer consult,
+      // because Bolt and Nova became fully deterministic).
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
+    },
   },
 ])

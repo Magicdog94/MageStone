@@ -39,9 +39,12 @@ import {
   canRitual,
   collect,
   combatOdds,
-  discardDie,
-  endTurn,
+
+  endActivation,
+  fleeDestinations,
   graveAt,
+  gravestoneBank,
+  gravestoneCapacity,
   legalMoves,
   magePowerDie,
   moveUnit,
@@ -126,36 +129,26 @@ function quickOdds(nd6: number, defFaces: number): number {
     for (const [s, p] of dist) for (let v = 1; v <= 6; v++) next.set(s + v, (next.get(s + v) ?? 0) + p / 6);
     dist = next;
   }
+  // Ties go to the ATTACKER, so a >= d wins outright — no draw branch and no
+  // renormalising. Must track rules.ts::combatOdds exactly.
   let win = 0;
-  let lose = 0;
   for (const [a, pa] of dist) {
-    for (let d = 1; d <= defFaces; d++) {
-      const p = pa / defFaces;
-      if (a > d) win += p;
-      else if (a < d) lose += p;
-    }
+    for (let d = 1; d <= defFaces; d++) if (a >= d) win += pa / defFaces;
   }
-  const dec = win + lose;
-  const odds = dec > 0 ? win / dec : 0;
-  quickOddsCache.set(key, odds);
-  return odds;
+  quickOddsCache.set(key, win);
+  return win;
 }
 
-/** P(win | not draw) for one aF-faced die against one dF-faced die (duels). */
+/** P(attacker wins) for one aF-faced die against one dF-faced die (duels).
+ *  Ties go to the attacker. */
 const faceOddsCache = new Map<number, number>();
 function faceOdds(aF: number, dF: number): number {
   const key = aF * 100 + dF;
   const hit = faceOddsCache.get(key);
   if (hit !== undefined) return hit;
   let win = 0;
-  let lose = 0;
-  for (let a = 1; a <= aF; a++)
-    for (let d = 1; d <= dF; d++) {
-      if (a > d) win++;
-      else if (a < d) lose++;
-    }
-  const dec = win + lose;
-  const odds = dec > 0 ? win / dec : 0;
+  for (let a = 1; a <= aF; a++) for (let d = 1; d <= dF; d++) if (a >= d) win++;
+  const odds = win / (aF * dF);
   faceOddsCache.set(key, odds);
   return odds;
 }
@@ -179,7 +172,51 @@ function targetValue(state: GameState, t: Unit): number {
   // A mage already holding a winning stone count must die NOW — it wins the
   // moment it walks home. Weigh it like a ritual priest.
   if (BRAIN.eval2 && t.kind === 'mage' && t.activated + t.carried >= STONES_TO_WIN) v += 90;
+  // Activation is permanent, so a Mage's Activated stones are a threat that
+  // cannot be undone: killing it only ever prises ONE of them loose. Price the
+  // approach to six steeply, and count the already-Activated stones lying
+  // within its reach — those need no trip home.
+  if (BRAIN.eval2 && t.kind === 'mage' && t.activated >= 3) {
+    const loose = state.stones.filter(
+      (s) => !s.carrier && s.activated && manhattan(s.cell, t.cell) <= 6,
+    ).length;
+    v += (t.activated - 2) * 12 + Math.min(loose, 3) * 9;
+  }
   return v;
+}
+
+/**
+ * The risk of casting a spell that puts `n` ACTIVATED stones on `cell`.
+ *
+ * Spent stones are never destroyed and never deactivated, so a spell is also a
+ * delivery of live ammunition: any enemy Mage that walks over them counts them
+ * immediately, with no trip home. Priced by how close the nearest enemy Mage
+ * is, and by how badly it needs them — a Mage one stone from six treats a
+ * dropped stone as a gift of the game.
+ */
+function enemyStoneGift(state: GameState, me: PlayerColor, cell: Cell, n: number): number {
+  let worst = 0;
+  for (const u of state.units) {
+    if (u.owner === me || u.kind !== 'mage') continue;
+    const d = manhattan(u.cell, cell);
+    const near = Math.max(0, 1 - d / 9); // 0 at nine squares away, 1 on the spot
+    const need = u.activated + n >= STONES_TO_WIN ? 3.2 : 1;
+    worst = Math.max(worst, near * need * n * 7);
+  }
+  return worst;
+}
+
+/**
+ * How scarce the Gravestone bank has become, 0 (full) → 1 (empty).
+ *
+ * The bank never replenishes, so as it drains a Warrior's death stops being a
+ * setback and becomes permanent attrition. Everything that prices Warriors
+ * scales with this.
+ */
+function graveScarcity(state: GameState): number {
+  const cap = gravestoneCapacity(state);
+  if (cap <= 0) return 1;
+  return 1 - Math.max(0, Math.min(1, gravestoneBank(state) / cap));
 }
 
 /** Enemies orthogonally adjacent to a cell (threat when parking a soft unit). */
@@ -189,17 +226,18 @@ function adjacentEnemies(state: GameState, cell: Cell, me: PlayerColor): number 
   ).length;
 }
 
-// ---- Discard phase ---------------------------------------------------------
+// ---- Die economy -----------------------------------------------------------
 
-/** Per-die usefulness scorer shared by the medium heuristic and (as a combo
- *  ordering hint) the hard planner. */
+/** What a die is worth to its owner right now — how much its unit could
+ *  plausibly do with that value. Only three of five dice are ever spent, so
+ *  this prices the OPPORTUNITY COST of burning one on a given play. */
 function dieUsefulness(state: GameState, level: BotLevel): (d: Die) => number {
   const me = state.current;
   const mine = state.units.filter((u) => u.owner === me);
   const mage = mine.find((u) => u.kind === 'mage');
   const priest = mine.find((u) => u.kind === 'priest');
   const warriors = mine.filter((u) => u.kind === 'warrior');
-  const stones = state.stones.filter((s) => !s.collected).map((s) => s.cell);
+  const stones = state.stones.filter((s) => !s.carrier).map((s) => s.cell);
   const enemies = state.units.filter((u) => u.owner !== me).map((u) => u.cell);
   const graves = state.gravestones.map((g) => g.cell);
   const home = baseCells(state, me);
@@ -232,101 +270,17 @@ function dieUsefulness(state: GameState, level: BotLevel): (d: Die) => number {
   };
 }
 
-/** All k-element subsets of `ids` (k is 1 or 2 in practice). */
-function kSubsets(ids: string[], k: number): string[][] {
-  if (k <= 0) return [[]];
-  const out: string[][] = [];
-  for (let i = 0; i < ids.length; i++) {
-    if (k === 1) out.push([ids[i]]);
-    else for (let j = i + 1; j < ids.length; j++) out.push([ids[i], ids[j]]);
-  }
-  return out;
-}
+/**
+ * There is no discard step any more: a player rolls five dice, keeps them all,
+ * and simply never spends more than three. The old `chooseDiscard` planner (a
+ * staged screen of every keep-set, then deep re-plans of the best few) is gone
+ * with it — the equivalent decision is now made inside `chooseAction`, which
+ * picks WHICH die to commit to this activation, one activation at a time.
+ *
+ * `dieUsefulness` survives because the search still uses it to order candidate
+ * dice, so the deadline cuts off the least promising reads last.
+ */
 
-/** Hard's discard plan for the current roll, cached so both discard steps of a
- *  turn agree (die ids are unique per roll, so the key never collides). */
-let discardPlan: { key: string; ids: string[] } | null = null;
-
-/** The next die to throw away (one per call; the driver re-asks until the
- *  engine flips the phase). Medium scores each die by what its unit could
- *  plausibly do with it; hard test-plans the turn with every keep-set and
- *  discards its way to the best one. */
-export function chooseDiscard(state: GameState, level: BotLevel): string | null {
-  if (state.turnPhase !== 'discard') return null;
-  const live = state.dice.filter((d) => !d.discarded);
-  if (live.length <= 3) return null;
-  if (level === 'easy') return live[(Math.random() * live.length) | 0].id;
-
-  if (level === 'hard') {
-    try {
-      const key = `${state.turn}:${state.current}:${state.dice.map((d) => d.id).join(',')}`;
-      if (discardPlan?.key !== key) {
-        // plan2 spends the SAME wall-clock but stages it: a shallow screen of
-        // every keep-set, then the promising few re-planned a whole turn deep.
-        const staged = plan2Active();
-        const sr = newSearch(performance.now() + SEARCH_BUDGET_MS * (staged ? 1.0 : 1.3));
-        const usefulness = dieUsefulness(state, level);
-        const byId = new Map(live.map((d) => [d.id, usefulness(d)]));
-        // Try discarding every pair; most promising combos (dropping the least
-        // useful dice) go first so a deadline cut still leaves a good plan.
-        const combos = kSubsets(live.map((d) => d.id), live.length - 3).sort(
-          (a, b) =>
-            a.reduce((s, id) => s + (byId.get(id) ?? 0), 0) -
-            b.reduce((s, id) => s + (byId.get(id) ?? 0), 0),
-        );
-        let best = combos[0];
-        let bestV = -Infinity;
-        const scored: { combo: string[]; v: number; s2: GameState }[] = [];
-        for (const combo of combos) {
-          let s2: GameState = state;
-          for (const id of combo) s2 = discardDie(s2, id);
-          const v = turnValue(s2, state.current, BRAIN.wide ? 3 : 2, sr);
-          scored.push({ combo, v, s2 });
-          if (v > bestV) {
-            bestV = v;
-            best = combo;
-          }
-          if (performance.now() > sr.deadline) break;
-        }
-        if (staged && performance.now() < sr.deadline) {
-          // Deepen the top keep-sets a whole turn deep, each inside its own
-          // fair slot — one expensive re-plan must not starve the others into
-          // deadline-cut (artificially shallow) reads.
-          scored.sort((a, b) => b.v - a.v);
-          const finalDeadline = sr.deadline;
-          const slot = (finalDeadline - performance.now()) / 3;
-          let deepBest = -Infinity;
-          for (const e of scored.slice(0, 3)) {
-            if (performance.now() > finalDeadline) break;
-            sr.deadline = Math.min(finalDeadline, performance.now() + slot);
-            const v = turnValue(e.s2, state.current, 5, sr);
-            if (v > deepBest) {
-              deepBest = v;
-              best = e.combo; // a deep read outranks every shallow one
-            }
-          }
-          sr.deadline = finalDeadline;
-        }
-        discardPlan = { key, ids: best };
-      }
-      const next = discardPlan.ids.find((id) => live.some((d) => d.id === id));
-      if (next) return next;
-    } catch {
-      /* fall through to the heuristic — never let the planner stall a turn */
-    }
-  }
-
-  return heuristicDiscard(state, level);
-}
-
-/** The pre-search discard rule: throw the least useful die (medium's chooser,
- *  hard's fallback, and the arena's A/B baseline). */
-function heuristicDiscard(state: GameState, level: BotLevel): string | null {
-  const live = state.dice.filter((d) => !d.discarded);
-  if (live.length <= 3) return null;
-  const usefulness = dieUsefulness(state, level);
-  return [...live].sort((a, b) => usefulness(a) - usefulness(b))[0].id;
-}
 
 // ---- Candidate generation (all levels; move ordering for the search) -------
 
@@ -343,7 +297,7 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
   const me = state.current;
   const mine = state.units.filter((u) => u.owner === me);
   const enemies = state.units.filter((u) => u.owner !== me);
-  const stones = state.stones.filter((s) => !s.collected).map((s) => s.cell);
+  const stones = state.stones.filter((s) => !s.carrier).map((s) => s.cell);
   const home = baseCells(state, me);
   // deterministic wander for hard: the search needs stable candidate order
   const wander = level === 'hard' ? () => 4 : () => Math.random() * 8;
@@ -359,6 +313,7 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
         )
       : undefined;
   const cands: Cand[] = [];
+  const dieWorth = dieUsefulness(state, level);
 
   for (const u of mine) {
     if (canAct(state, u.id)) {
@@ -389,27 +344,31 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
         if (canBolt(state, u.id)) {
           for (const t of boltTargets(state, u.id)) {
             const value = targetValue(state, t);
-            let score: number;
-            if (t.kind === 'mage') {
-              // duel: power die vs power die — only worth it against fat mages
-              const odds = faceOdds(magePowerDie(u.activated), magePowerDie(t.activated));
-              score = odds * value - 14;
-            } else {
-              // guaranteed kill for one stone
-              score = 22 + value * 0.9;
-            }
+            // Bolt is INDEFENSIBLE: whatever it hits dies, a Mage included. So
+            // it is always a guaranteed kill for one stone — the only question
+            // is whether the stone is better spent or kept.
+            let score = 22 + value * 0.9;
+            // The stone is not destroyed: it lands on the target's square, still
+            // Activated, where an enemy Mage may simply pick it up and count it
+            // at once. Discount by how easily the nearest enemy Mage reaches it.
+            score -= enemyStoneGift(state, u.owner, t.cell, 1);
             // one stone from the win? don't burn it on small game
             if (u.activated >= 5 && value < 60) score -= 30;
             cands.push({ a: { type: 'bolt', unitId: u.id, targetId: t.id }, score });
           }
         }
         if (canNova(state, u.id)) {
+          // Nova hits ENEMIES only now — friendly units in the blast are safe,
+          // so there is no friendly-fire term. It costs FOUR stones and lays all
+          // four back on the diagonals, still Activated.
           const vs = novaVictims(state, u.id);
           let gain = 0;
-          for (const v of vs) gain += v.owner === me ? -targetValue(state, v) * 1.1 : targetValue(state, v);
-          // the classic human nova: cornered mage clears the mob around it
+          for (const v of vs) gain += targetValue(state, v);
+          // four stones is a two-tier power drop (d20 -> d6) and four Activated
+          // stones handed to the battlefield right where the fighting is
           const cornered = adjacentEnemies(state, u.cell, me);
-          const score = gain - 26 + (cornered >= 2 ? cornered * 9 : 0);
+          const score =
+            gain - 40 - enemyStoneGift(state, me, u.cell, 4) + (cornered >= 2 ? cornered * 9 : 0);
           cands.push({ a: { type: 'nova', unitId: u.id }, score });
         }
       }
@@ -519,7 +478,14 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
               : 24 + (manhattan(u.cell, raceMage.cell) - manhattan(dest, raceMage.cell)) * 7;
           score = Math.max(score, closeIn);
         }
-        if (score > 0) cands.push({ a: { type: 'move', unitId: u.id, dieId: die.id, dest }, score });
+        // Die ECONOMY now matters: only three of the five dice get spent all
+        // round, so reaching the same square on a cheaper die is strictly better.
+        // Charge each candidate what the die it burns was worth.
+        if (score > 0)
+          cands.push({
+            a: { type: 'move', unitId: u.id, dieId: die.id, dest },
+            score: score - dieWorth(die) * 0.5,
+          });
       }
     }
   }
@@ -562,9 +528,7 @@ interface BrainOpts {
   /** Sharper judgement: hunt-the-winning-mage emergencies, power-die tier
    *  ramps, gated stone-race detection, siege-locked respawn pricing. */
   eval2: boolean;
-  /** Deeper discard planning: screen every keep-set shallow, then re-plan the
-   *  best few a whole turn deep. */
-  plan2: boolean;
+  
   /** Price progress toward the six-stone MageStone victory as a fraction of a
    *  win rather than as material, so the Mage actually runs the race. */
   race: boolean;
@@ -578,7 +542,6 @@ const BRAIN: BrainOpts = {
   jitter: true,
   reply: true,
   eval2: true,
-  plan2: true,
   race: true,
   // 480 -> 700 gained 56%; 1000 REGRESSED to 40% (the Mage chased stones at
   // the expense of the board). 700 is the measured sweet spot.
@@ -590,16 +553,19 @@ const BRAIN: BrainOpts = {
  *  (which need ~300ms to saturate). Small budgets fall back to the classic
  *  cheap rollout so the brain is never WEAKER for having the feature. */
 const replyActive = () => BRAIN.reply && SEARCH_BUDGET_MS >= 300;
-/** Same idea for the staged discard planner: the deep re-plan needs room. */
-const plan2Active = () => BRAIN.plan2 && SEARCH_BUDGET_MS >= 250;
 export function setBrainOpts(o: Partial<BrainOpts>): void {
   Object.assign(BRAIN, o);
 }
 
-/** Board worth of a unit on the evaluation scale. */
-function worth(u: Unit): number {
-  if (u.kind === 'mage') return 42 + u.activated * 13 + u.carried * 7;
-  return u.kind === 'priest' ? 26 : 13;
+/** Board worth of a unit on the evaluation scale. `scarcity` (0→1) is how far
+ *  the Gravestone bank has drained: a Warrior that can still be resurrected is
+ *  a loan, one that cannot is capital, so its worth rises as the bank empties.
+ *  Activated stones are worth more than carried ones — they are permanent, and
+ *  a slain Mage only ever drops one of them. */
+function worth(u: Unit, scarcity = 0): number {
+  if (u.kind === 'mage') return 42 + u.activated * 15 + u.carried * 7;
+  if (u.kind === 'priest') return 26;
+  return 13 + 9 * scarcity;
 }
 
 /** Extra standing value of activated-stone THRESHOLDS — the d12 tier at 2, the
@@ -638,11 +604,12 @@ function expectedDamage(state: GameState, atk: PlayerColor, vic: PlayerColor): n
   const aUnits = state.units.filter((u) => u.owner === atk);
   const warriors = aUnits.filter((u) => u.kind === 'warrior');
   const mage = aUnits.find((u) => u.kind === 'mage');
+  const scarcity = graveScarcity(state);
   const items: number[] = [];
   for (const v of state.units) {
     if (v.owner !== vic) continue;
     const defFaces = v.kind === 'mage' ? magePowerDie(v.activated) : 6;
-    const val = worth(v);
+    const val = worth(v, scarcity);
     if (warriors.length) {
       const reaches = warriors
         .map((w) => reachProb('warrior', manhattan(w.cell, v.cell) - 1))
@@ -656,14 +623,13 @@ function expectedDamage(state: GameState, atk: PlayerColor, vic: PlayerColor): n
     if (mage) {
       const pm = reachProb('mage', manhattan(mage.cell, v.cell) - 1);
       if (pm > 0.05) items.push(pm * faceOdds(magePowerDie(mage.activated), defFaces) * val);
-      // bolt: range = the mage die's roll; only a mage can repel it
+      // bolt: range = the mage die's roll, and it is INDEFENSIBLE — nothing
+      // repels it, so reaching the target is the only uncertainty
       if (mage.activated >= 1) {
         const d = manhattan(mage.cell, v.cell);
         if (d <= 6) {
           const pDie = ((7 - Math.max(1, d)) / 6) * 0.92;
-          const kill =
-            v.kind === 'mage' ? faceOdds(magePowerDie(mage.activated), magePowerDie(v.activated)) : 1;
-          items.push(pDie * kill * Math.max(0, val - 8)); // −8: the spent stone lands back on the board
+          items.push(pDie * Math.max(0, val - 8)); // −8: the spent stone lands back on the board
         }
       }
     }
@@ -705,13 +671,14 @@ function ritualSurvival(state: GameState): number {
         fail *= 1 - reachProb(u.kind, d);
       }
       if (u.kind !== 'priest') {
-        // melee the Priest (it defends d6; a repel leaves the ritual standing)
+        // melee the Priest — it defends d6, and a repel leaves the ritual
+        // standing (it may flee, but never out of a Nexus it wants to hold)
         const reach = reachProb(u.kind, manhattan(u.cell, priest.cell) - 1);
         const odds = u.kind === 'mage' ? faceOdds(magePowerDie(u.activated), 6) : quickOdds(1, 6);
         fail *= 1 - reach * odds;
       }
       if (u.kind === 'mage' && u.activated >= 1) {
-        // bolt the Priest — unrepellable for a priest
+        // bolt the Priest — indefensible, so reaching it is the whole story
         const d = manhattan(u.cell, priest.cell);
         if (d <= 6) fail *= 1 - ((7 - Math.max(1, d)) / 6) * 0.92;
       }
@@ -724,8 +691,22 @@ function ritualSurvival(state: GameState): number {
 /** One side's standing: material plus progress toward its win conditions. */
 function sideScore(state: GameState, p: PlayerColor): number {
   const units = state.units.filter((u) => u.owner === p);
+  const scarcity = graveScarcity(state);
   let s = 0;
-  for (const u of units) s += worth(u);
+  for (const u of units) s += worth(u, scarcity);
+
+  // Warriors that can no longer be brought back are the army you finish with.
+  // Once the bank is dry, holding a bigger surviving force is itself a lead —
+  // this is the attrition half of the endgame, and pursuing Conquest is only
+  // correct when the count is in your favour.
+  if (scarcity > 0.5) {
+    const mine = units.filter((u) => u.kind === 'warrior').length;
+    const rivals = state.players.filter((q) => q !== p && !state.eliminated.includes(q));
+    const best = rivals.length
+      ? Math.max(...rivals.map((q) => state.units.filter((u) => u.owner === q && u.kind === 'warrior').length))
+      : 0;
+    s += (mine - best) * 10 * (scarcity - 0.5) * 2;
+  }
 
   const mage = units.find((u) => u.kind === 'mage');
   if (mage) {
@@ -736,7 +717,7 @@ function sideScore(state: GameState, p: PlayerColor): number {
     } else if (total >= STONES_TO_WIN) {
       s += 380 - 20 * dBase; // get home, activate, win
     } else {
-      const stoneCells = state.stones.filter((st) => !st.collected).map((st) => st.cell);
+      const stoneCells = state.stones.filter((st) => !st.carrier).map((st) => st.cell);
       // When held + loose stones can't reach 6, the race is gated behind
       // killing an enemy mage — chase stones far less, play the board more.
       const gate =
@@ -748,6 +729,14 @@ function sideScore(state: GameState, p: PlayerColor): number {
       if (stoneCells.length)
         s += gate * (BRAIN.race ? 38 - 5 * Math.min(minDist(mage.cell, stoneCells), 7)
                                 : 22 - 3 * Math.min(minDist(mage.cell, stoneCells), 7));
+      // An ALREADY-ACTIVATED loose stone is worth far more than a plain one: it
+      // counts the instant it is picked up, with no trip home, so it is a whole
+      // collect-and-return round-trip cheaper. Pull harder toward those.
+      const hotCells = state.stones
+        .filter((st) => !st.carrier && st.activated)
+        .map((st) => st.cell);
+      if (hotCells.length && BRAIN.race)
+        s += gate * (30 - 4.5 * Math.min(minDist(mage.cell, hotCells), 7));
       if (mage.carried > 0)
         s += BRAIN.race ? 34 - 5 * Math.min(dBase, 6) : 10 - 2 * Math.min(dBase, 5);
     }
@@ -760,7 +749,10 @@ function sideScore(state: GameState, p: PlayerColor): number {
   const priest = units.find((u) => u.kind === 'priest');
   if (priest) {
     if (state.gravestones.length && warriorCount(state, p) < MAX_WARRIORS) {
-      s += 8 - 1.4 * Math.min(minDist(priest.cell, state.gravestones.map((g) => g.cell)), 6);
+      // Every gravestone on the board is a Warrior nobody else can have once it
+      // is spent, and the supply is finite — worth more as the bank runs down.
+      const pull = 8 + 7 * scarcity;
+      s += pull - 1.4 * Math.min(minDist(priest.cell, state.gravestones.map((g) => g.cell)), 6);
     }
     if (!state.ritual) s += 6 - 1.1 * Math.min(minDist(priest.cell, NEXUS_CELLS), 6);
   }
@@ -898,8 +890,8 @@ function outcomes(state: GameState, a: BotAction): { p: number; s: GameState }[]
     case 'ritual':
       return [{ p: 1, s: beginRitual(state, a.unitId) }];
     case 'nova':
-      // the blast itself is deterministic; the rng only scatters spent stones
-      return [{ p: 1, s: resolveNova(state, a.unitId, () => 0.4999) }];
+      // no defence rolls and fixed diagonal stone placement — fully deterministic
+      return [{ p: 1, s: resolveNova(state, a.unitId) }];
     case 'attack': {
       const ids = plannedAttackers(state, a.unitId, a.targetId);
       if (!ids.length) return [{ p: 1, s: state }];
@@ -911,20 +903,9 @@ function outcomes(state: GameState, a: BotAction): { p: number; s: GameState }[]
         { p: 1 - pWin, s: lose },
       ];
     }
-    case 'bolt': {
-      const target = unitById(state, a.targetId);
-      if (!target) return [{ p: 1, s: state }];
-      if (target.kind !== 'mage') {
-        return [{ p: 1, s: resolveBolt(state, a.unitId, a.targetId, seqRng([HI])) }];
-      }
-      const mage = unitById(state, a.unitId);
-      if (!mage) return [{ p: 1, s: state }];
-      const pWin = faceOdds(magePowerDie(mage.activated), magePowerDie(target.activated));
-      return [
-        { p: pWin, s: resolveBolt(state, a.unitId, a.targetId, seqRng([HI, HI, LO])) },
-        { p: 1 - pWin, s: resolveBolt(state, a.unitId, a.targetId, seqRng([LO, LO, HI])) },
-      ];
-    }
+    case 'bolt':
+      // indefensible: no defence roll, so there is a single certain outcome
+      return [{ p: 1, s: resolveBolt(state, a.unitId, a.targetId) }];
   }
 }
 
@@ -947,8 +928,8 @@ const newSearch = (deadline: number): Search => ({ deadline, memo: new Map() });
 function fingerprint(state: GameState): string {
   let s = state.current + state.turnPhase;
   for (const u of state.units) s += `|${u.id}:${u.cell.r},${u.cell.c},${u.carried},${u.activated}`;
-  for (const d of state.dice) s += `~${d.kind[0]}${d.value}${d.discarded ? 'x' : (d.usedBy ?? '-')}`;
-  for (const st of state.stones) if (!st.collected) s += `.${st.cell.r},${st.cell.c}`;
+  for (const d of state.dice) s += `~${d.owner[0]}${d.kind[0]}${d.value}${d.usedBy ?? '-'}`;
+  for (const st of state.stones) if (!st.carrier) s += `.${st.cell.r},${st.cell.c}`;
   for (const g of state.gravestones) s += `+${g.cell.r},${g.cell.c}`;
   s += `!${state.unitsMovedThisTurn.join(',')};${state.unitsActedThisTurn.join(',')}`;
   s += state.ritual ? `R${state.ritual.player}` : '';
@@ -1070,23 +1051,20 @@ function policyPlay(state: GameState, sr: Search): GameState | null {
   return likely.s === state ? null : likely.s; // engine rejected — stop, don't loop
 }
 
-/** Play out the CURRENT player's whole turn (roll → discards → plays → end),
- *  each play chosen by `policyPlay`. `roll` rigs that player's unknown dice. */
+/** Play out the current player's ACTIVATION (rolling the round's dice first if
+ *  they have not been thrown), each play chosen by `policyPlay`, then pass. An
+ *  activation is at most a same-colour bundle, so a handful of plays covers it.
+ *  `roll` rigs the unknown dice. */
 function playOutTurn(state: GameState, sr: Search, roll: () => Rng = typicalRoll): GameState {
   let s = state;
   if (s.turnPhase === 'roll') s = rollDice(s, roll());
-  for (let guard = 0; s.turnPhase === 'discard' && guard < 3; guard++) {
-    const id = heuristicDiscard(s, 'hard');
-    if (!id) break;
-    s = discardDie(s, id);
-  }
   for (let plays = 0; plays < 6 && s.turnPhase === 'act' && !s.winner; plays++) {
     if (performance.now() > sr.deadline) break;
     const next = policyPlay(s, sr);
     if (!next) break;
     s = next;
   }
-  return s.winner ? s : endTurn(s);
+  return s.winner ? s : endActivation(s);
 }
 
 /** One sampled future: finish my turn, give every rival a WHOLE reply turn
@@ -1217,7 +1195,7 @@ function searchAction(state: GameState): BotAction | null {
     // "end my turn right now" gets the same deep look the plays do (endTurn
     // first — otherwise the rollout would spend the dice we propose to pass)
     sr.deadline = until();
-    endDeep = rolloutValue(endTurn(state), me, sr);
+    endDeep = rolloutValue(endActivation(state), me, sr);
     for (const f of finalists.slice(0, nDeep)) {
       if (performance.now() > hardDeadline) break;
       sr.deadline = until();
@@ -1272,6 +1250,57 @@ function greedyAction(state: GameState, level: BotLevel): BotAction | null {
 
 /** The bot's next play. Easy/medium pick greedily; hard runs the search brain
  *  (falling back to greedy if the search ever throws). `null` ends the turn. */
+/**
+ * Answer a repelled Priest's retreat, out of turn.
+ *
+ * Cheap and self-contained rather than a search: the choice is one move by one
+ * unit, and the search machinery is built around the acting player's turn. The
+ * priorities, in order: never abandon a live Ritual, take a free Warrior off a
+ * Gravestone (worth more the emptier the bank), and otherwise get clear of
+ * whatever just swung at it. Returns the destination, or null to hold ground.
+ */
+export function chooseFlee(state: GameState, level: BotLevel): Cell | null {
+  const flee = state.pendingFlee;
+  if (!flee) return null;
+  const priest = unitById(state, flee.priestId);
+  if (!priest) return null;
+
+  // A Priest holding a live Ritual never steps off the Nexus — leaving breaks it.
+  if (state.ritual?.priestId === priest.id && NEXUS_CELLS.some((c) => sameCell(c, priest.cell)))
+    return null;
+
+  const scarcity = graveScarcity(state);
+  const canRes = warriorCount(state, priest.owner) < MAX_WARRIORS;
+  const enemies = state.units.filter((u) => u.owner !== priest.owner).map((u) => u.cell);
+  const nexusWanted = !state.ritual;
+
+  const score = (cell: Cell): number => {
+    let v = 0;
+    // A gravestone underfoot is a Warrior for free, on someone else's turn.
+    if (canRes && graveAt(state, cell)) v += 34 + 22 * scarcity;
+    // Distance from the nearest enemy — the whole point of running.
+    if (enemies.length) v += Math.min(minDist(cell, enemies), 5) * 6;
+    v -= adjacentEnemies(state, cell, priest.owner) * 14;
+    // Easy bots barely think about position; medium/hard also drift toward the
+    // Nexus, since a Priest on it is one action from a Ritual.
+    if (level !== 'easy' && nexusWanted) v += 8 - 1.2 * Math.min(minDist(cell, NEXUS_CELLS), 6);
+    return v;
+  };
+
+  const here = score(priest.cell);
+  let best: Cell | null = null;
+  let bestV = here + 0.5; // move only on a real improvement
+  for (const c of fleeDestinations(state)) {
+    if (sameCell(c, priest.cell)) continue;
+    const v = score(c);
+    if (v > bestV) {
+      bestV = v;
+      best = c;
+    }
+  }
+  return best;
+}
+
 export function chooseAction(state: GameState, level: BotLevel): BotAction | null {
   if (state.turnPhase !== 'act' || state.winner) return null;
   if (level !== 'hard') return greedyAction(state, level);
@@ -1286,9 +1315,8 @@ export function chooseAction(state: GameState, level: BotLevel): BotAction | nul
 if (typeof window !== 'undefined' && import.meta.env?.DEV) {
   (window as unknown as { __bot?: object }).__bot = {
     chooseAction,
-    chooseDiscard,
+    chooseFlee,
     greedyAction,
-    heuristicDiscard,
     setSearchBudget,
     setBrainOpts,
     evaluate,

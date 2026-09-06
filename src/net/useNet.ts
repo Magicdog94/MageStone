@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import type { GameState, PlayerColor } from '../game/types';
 import type { BotLevel } from '../game/bot';
 import { createGame } from '../game/setup';
+import { acceptState } from '../game/migrate';
 import { useGame } from '../store';
 
 export type Screen = 'landing' | 'auth' | 'guest' | 'lobby' | 'game';
@@ -350,13 +351,17 @@ export const useNet = create<NetState>((set, get) => {
         if (raw) {
           sessionStorage.removeItem('ms-recover');
           const snap = JSON.parse(raw);
-          if (snap.kind === 'local' && snap.game) {
+          // A snapshot written by an older client cannot be resumed: MageStone
+          // activation now lives on the token, and an old save doesn't record
+          // which Mage held which stone. Refuse it rather than corrupt a match.
+          const recovered = snap.kind === 'local' ? acceptState(snap.game, 'crash snapshot') : null;
+          if (recovered) {
             useGame.setState({
-              game: snap.game as GameState,
+              game: recovered,
               bots: snap.bots ?? {},
               botController: true,
-              playerColors: snap.playerColors ?? snap.game.players,
-              playerCount: snap.playerCount ?? snap.game.players.length,
+              playerColors: snap.playerColors ?? recovered.players,
+              playerCount: recovered.players.length,
               stoneLayoutId: snap.stoneLayoutId ?? 'diamond',
               settings: { ...useGame.getState().settings, ...(snap.settings ?? {}) },
               online: false,

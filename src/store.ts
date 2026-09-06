@@ -8,21 +8,21 @@ import {
   boltTargets,
   canActivate,
   canCollect,
+  canCommitDie,
   canDieMoveUnit,
   canResurrect,
   canRitual,
   collect,
   combatOdds,
-  discardDie,
-  endTurn,
+  endActivation,
   legalMoves,
-  undoDiscard as undoDiscardRule,
   magePowerDie,
   moveUnit,
   novaVictims,
   plannedAttackers,
   resolveAttack,
   resolveBolt,
+  resolveFlee,
   resolveNova,
   resurrect,
   rollDice,
@@ -46,8 +46,6 @@ export type ModalId = 'newGame' | 'settings' | null;
 
 export type TutActionName =
   | 'roll'
-  | 'discard'
-  | 'undo'
   | 'attack'
   | 'bolt'
   | 'nova'
@@ -55,6 +53,7 @@ export type TutActionName =
   | 'activate'
   | 'resurrect'
   | 'ritual'
+  | 'flee'
   | 'endTurn';
 
 export interface TutRestrict {
@@ -243,14 +242,12 @@ interface UIState {
   setHovered: (unitId: string | null) => void;
 
   roll: () => void;
-  discard: (dieId: string) => void;
-  /** Take back the most recent discard (mis-click fix — allowed until any
-   *  unit moves or acts this turn). */
-  undoDiscard: () => void;
   selectUnit: (unitId: string | null) => void;
   selectDie: (dieId: string | null) => void;
   moveTo: (dest: Cell) => void;
-  endTurn: () => void;
+  /** Finish this activation and pass play on (a round ends when nobody has
+   *  dice left). */
+  endActivation: () => void;
 
   /** Attack `targetId` with the currently selected unit. `attackerIds` lets the
    *  action bar pick the coordination level (single/double/triple); omitted, the
@@ -262,6 +259,9 @@ interface UIState {
   setBoltMode: (on: boolean) => void;
   castBolt: (targetId: string, rng?: () => number) => void;
   castNova: (rng?: () => number) => void;
+  /** Settle a repelled Priest's retreat. `null` (or its own square) stays put.
+   *  Answered by the DEFENDING side, out of turn. */
+  fleePriest: (dest: Cell | null) => void;
   collectStones: () => void;
   activateStones: () => void;
   doResurrect: () => void;
@@ -270,6 +270,10 @@ interface UIState {
 
 // Rate-limits physics-world rebuilds (see bumpPhysicsEpoch).
 let lastEpochBump = 0;
+
+/** How long a repelled Priest's owner gets to choose a retreat before the
+ *  engine holds it in place for them. Purely a liveness guard. */
+const FLEE_TIMEOUT_MS = 15000;
 
 /** In an online match a client may only act on its own colour's turn — except
  *  the bot controller (the host), which also acts for the bot colours. */
@@ -500,27 +504,16 @@ export const useGame = create<UIState>((set, get) => ({
       const s = get();
       if (s.rolling && s.rollNonce === nonce) {
         if (!s.sceneDown) console.warn('MageStone: dice watchdog cleared a stuck roll');
-        s.reportDiceValues(s.game.dice.map((d) => d.value));
+        // only the roller's own five are thrown, so only those are reported
+        s.reportDiceValues(
+          s.game.dice.filter((x) => x.owner === s.game.current).map((x) => x.value),
+        );
       }
     }, grace);
   },
 
   reportDiceValues: (values) =>
     set((s) => (outOfTurn(s) ? {} : { game: setRolledValues(s.game, values), rolling: false })),
-
-  discard: (dieId) =>
-    set((s) =>
-      s.rolling || outOfTurn(s) || !tutAllows(s.tutRestrict, 'discard')
-        ? {}
-        : { game: discardDie(s.game, dieId) },
-    ),
-
-  undoDiscard: () =>
-    set((s) => {
-      if (s.rolling || outOfTurn(s) || !tutAllows(s.tutRestrict, 'undo')) return {};
-      const game = undoDiscardRule(s.game);
-      return game === s.game ? {} : { game, selectedUnitId: null, selectedDieId: null };
-    }),
 
   selectUnit: (unitId) =>
     set((s) => {
@@ -538,7 +531,7 @@ export const useGame = create<UIState>((set, get) => ({
       // manually clicked die still wins (kept above); this only fills the gap.
       if (!dieId && s.game.turnPhase === 'act') {
         const best = s.game.dice
-          .filter((d) => !d.discarded && d.usedBy === null && canDieMoveUnit(d, unit, s.game))
+          .filter((d) => d.usedBy === null && canDieMoveUnit(d, unit, s.game))
           .sort((a, b) => b.value - a.value)[0];
         dieId = best?.id ?? null;
       }
@@ -550,13 +543,29 @@ export const useGame = create<UIState>((set, get) => ({
     set((s) => {
       if (dieId === null) return { selectedDieId: null };
       const die = s.game.dice.find((d) => d.id === dieId);
-      if (!die || die.discarded || die.usedBy !== null) return {};
+      // Only your own unspent dice, and only ones the activation's same-colour
+      // lock still allows.
+      if (!die || !canCommitDie(s.game, die)) return {};
       return { selectedDieId: dieId };
     }),
 
   moveTo: (dest) =>
     set((s) => {
       const { selectedUnitId, selectedDieId } = s;
+      // A repelled Priest's retreat reuses the whole move pipeline: while a
+      // flee is pending the glowing squares ARE the retreat squares (see
+      // moveDestinations), so a tile click lands here and is routed to the
+      // engine's resolveFlee instead of moveUnit.
+      const flee = s.game.pendingFlee;
+      if (flee) {
+        if (!tutAllows(s.tutRestrict, 'flee')) return {};
+        if (s.tutRestrict?.dests && !s.tutRestrict.dests.some((c) => sameCell(c, dest))) return {};
+        // Online: only the Priest's owner (or the host driving that bot) answers.
+        if (s.online && flee.owner !== s.myColor && !(s.botController && s.bots[flee.owner]))
+          return {};
+        const fled = resolveFlee(s.game, dest);
+        return fled === s.game ? {} : { game: fled, selectedUnitId: null, selectedDieId: null };
+      }
       if (!selectedUnitId || !selectedDieId || outOfTurn(s)) return {};
       // Tutorial guardrail: only the square(s) the live task points at.
       if (s.tutRestrict?.dests && !s.tutRestrict.dests.some((c) => sameCell(c, dest))) return {};
@@ -566,11 +575,16 @@ export const useGame = create<UIState>((set, get) => ({
       return { game, selectedDieId: null };
     }),
 
-  endTurn: () =>
+  endActivation: () =>
     set((s) =>
       outOfTurn(s) || !tutAllows(s.tutRestrict, 'endTurn')
         ? {}
-        : { game: endTurn(s.game), selectedUnitId: null, selectedDieId: null, boltMode: false },
+        : {
+            game: endActivation(s.game),
+            selectedUnitId: null,
+            selectedDieId: null,
+            boltMode: false,
+          },
     ),
 
   attack: (targetId, attackerIds, rng) =>
@@ -635,6 +649,18 @@ export const useGame = create<UIState>((set, get) => ({
           out.deathNonce = s.deathNonce + 1;
         }
       }
+      // A repelled Priest may retreat, and the answer comes from the DEFENDING
+      // side out of turn. Arm a watchdog so an idle or absent defender can never
+      // stall the match — after this it simply holds its ground. (fleePriest
+      // itself no-ops on clients that aren't entitled to answer, and endTurn
+      // force-declines too, so this is belt-and-braces.)
+      if (game2.pendingFlee) {
+        const armed = game2.pendingFlee.priestId;
+        window.setTimeout(() => {
+          const now = get().game.pendingFlee;
+          if (now && now.priestId === armed) get().fleePriest(null);
+        }, FLEE_TIMEOUT_MS);
+      }
       return out;
     }),
 
@@ -683,6 +709,18 @@ export const useGame = create<UIState>((set, get) => ({
         if (get().combatIntro?.kind === 'bolt') set({ combatIntro: null });
       }, 4200);
     }
+  },
+
+  fleePriest: (dest) => {
+    const s = get();
+    const flee = s.game.pendingFlee;
+    if (!flee) return;
+    if (!tutAllows(s.tutRestrict, 'flee')) return;
+    // Online: only the Priest's owner (or the host driving that bot) answers.
+    if (s.online && flee.owner !== s.myColor && !(s.botController && s.bots[flee.owner])) return;
+    const game = resolveFlee(s.game, dest);
+    if (game === s.game) return;
+    set({ game, selectedUnitId: null, selectedDieId: null });
   },
 
   castNova: (rng) => {
@@ -777,6 +815,13 @@ export function moveDestinations(
   dieId: string | null,
   restrict?: TutRestrict | null,
 ): Cell[] {
+  // A pending Priest retreat takes over the highlight: the glowing squares are
+  // where that Priest may flee to, whoever's turn it is.
+  if (game.pendingFlee) {
+    const priest = unitById(game, game.pendingFlee.priestId);
+    const all = priest ? legalMoves(game, priest, game.pendingFlee.steps) : [];
+    return restrict?.dests ? all.filter((m) => restrict.dests!.some((c) => sameCell(c, m))) : all;
+  }
   if (game.turnPhase !== 'act' || !unitId || !dieId) return [];
   const unit = unitById(game, unitId);
   const die = game.dice.find((d) => d.id === dieId);
@@ -893,7 +938,6 @@ if (import.meta.env.DEV) {
   (window as unknown as { __engine?: object }).__engine = {
     createGame,
     rollDice,
-    discardDie,
     moveUnit,
     plannedAttackers,
     resolveAttack,
@@ -903,6 +947,6 @@ if (import.meta.env.DEV) {
     beginRitual,
     resolveBolt,
     resolveNova,
-    endTurn,
+    endActivation,
   };
 }

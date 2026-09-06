@@ -1,6 +1,7 @@
 // Initial game-state construction: base formations, MageStone scatter, pools.
 
 import { PLAYER_ROTATION, rotateCell } from './board';
+import { GRAVES_PER_PLAYER } from './rules';
 import type {
   Cell,
   GameState,
@@ -116,11 +117,17 @@ export function stoneCells(layout: StoneLayout, playerCount: number): Cell[] {
 }
 
 function makeStones(layout: StoneLayout, playerCount: number): MageStone[] {
-  return stoneCells(layout, playerCount).map((cell, i) => ({ id: `stone-${i}`, cell, collected: false }));
+  // Every stone starts UNACTIVATED and lying on the board. From here on,
+  // activation is a permanent property of the TOKEN (see types.ts::MageStone).
+  return stoneCells(layout, playerCount).map((cell, i) => ({
+    id: `stone-${i}`,
+    cell,
+    carrier: null,
+    activated: false,
+  }));
 }
 
 const TWO_PLAYER: PlayerColor[] = ['red', 'green'];
-const THREE_PLAYER: PlayerColor[] = ['red', 'blue', 'green'];
 const FOUR_PLAYER: PlayerColor[] = ['red', 'blue', 'green', 'yellow'];
 
 // Seating goes clockwise from the top: red (top) → blue (right) → green
@@ -128,10 +135,15 @@ const FOUR_PLAYER: PlayerColor[] = ['red', 'blue', 'green', 'yellow'];
 // colours a game actually uses.
 const CLOCKWISE: PlayerColor[] = ['red', 'blue', 'green', 'yellow'];
 
+/** MageStone is a **2- or 4-player** game only. Any other count snaps to one of
+ *  those two — 3 rounds UP to 4 so a stale 3-player request never silently
+ *  drops a seat instead of failing loudly in the lobby. */
+export function playerCountFor(count: number): 2 | 4 {
+  return count <= 2 ? 2 : 4;
+}
+
 export function playerSet(count: number): PlayerColor[] {
-  if (count <= 2) return TWO_PLAYER;
-  if (count === 3) return THREE_PLAYER;
-  return FOUR_PLAYER;
+  return playerCountFor(count) === 2 ? TWO_PLAYER : FOUR_PLAYER;
 }
 
 /** Put an arbitrary colour selection into clockwise turn order (dedup + sort). */
@@ -145,7 +157,11 @@ export function orderPlayers(colors: PlayerColor[]): PlayerColor[] {
  * occupies its fixed home edge, so the selection is also a seat selection.
  */
 export function createGame(players: number | PlayerColor[] = 2, layoutId = DEFAULT_LAYOUT.id): GameState {
-  const colors = Array.isArray(players) ? orderPlayers(players) : playerSet(players);
+  let colors = Array.isArray(players) ? orderPlayers(players) : playerSet(players);
+  // Guard the engine's own entry point: an explicit colour list of any length
+  // other than 2 or 4 (e.g. a legacy 3-player room, or a saved state from an
+  // older build) is corrected here rather than building an unsupported board.
+  if (colors.length !== 2 && colors.length !== 4) colors = playerSet(colors.length);
   return buildGame(colors, layoutById(layoutId));
 }
 
@@ -155,21 +171,28 @@ function buildGame(players: PlayerColor[], layout: StoneLayout): GameState {
     players,
     seats,
     current: players[0],
+    roundStarter: players[0],
     turn: 1,
     turnPhase: 'roll',
     dice: [],
     units: makeUnits(players, seats),
     stones: makeStones(layout, players.length),
     gravestones: [],
+    passed: [],
+    activationDice: [],
     unitsMovedThisTurn: [],
     unitsActedThisTurn: [],
     ritual: null,
     lastCombat: null,
     pendingRespawns: [],
+    // Finite shared bank — 4 per participating player. Never replenished.
+    graveBank: GRAVES_PER_PLAYER * players.length,
+    resurrectedThisTurn: [],
+    pendingFlee: null,
     eliminated: [],
     kills: { red: 0, blue: 0, green: 0, yellow: 0 },
     winner: null,
     winMethod: null,
-    log: [`${players[0]} to start. Roll the dice.`],
+    log: [`Round 1: ${players[0]} starts. Roll the dice.`],
   };
 }

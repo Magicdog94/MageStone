@@ -11,7 +11,7 @@ export function TurnTimer({ width }: { width?: number }) {
   const turnSeconds = useGame((s) => s.settings.turnSeconds);
   const modal = useGame((s) => s.modal);
   const tutorial = useGame((s) => s.tutorial);
-  const endTurn = useGame((s) => s.endTurn);
+  const endActivation = useGame((s) => s.endActivation);
 
   const [remaining, setRemaining] = useState<number | null>(turnSeconds);
 
@@ -28,8 +28,8 @@ export function TurnTimer({ width }: { width?: number }) {
 
   // Auto-end the turn once it reaches zero (changes turn → parent remounts us).
   useEffect(() => {
-    if (remaining === 0 && turnSeconds != null && !winner && !modal && !tutorial) endTurn();
-  }, [remaining, turnSeconds, winner, modal, tutorial, endTurn]);
+    if (remaining === 0 && turnSeconds != null && !winner && !modal && !tutorial) endActivation();
+  }, [remaining, turnSeconds, winner, modal, tutorial, endActivation]);
 
   if (turnSeconds == null || remaining == null || tutorial) return null;
 

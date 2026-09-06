@@ -371,11 +371,18 @@ function DiceBodies() {
   const rollNonce = useGame((s) => s.rollNonce);
   const phase = useGame((s) => s.game.turnPhase);
   const report = useGame((s) => s.reportDiceValues);
-  const dice = useGame((s) => s.game.dice);
-  const discard = useGame((s) => s.discard);
+  // Everyone rolls at the start of a round, but the tray belongs to whoever is
+  // activating — show only their five.
+  // NOTE: the filter MUST NOT live inside the zustand selector. A selector that
+  // builds a new array returns a fresh identity on every store read, so the
+  // component re-renders on every update, re-reports the dice, and React bails
+  // out with "Maximum update depth exceeded" — which takes the whole 3D scene
+  // down through SceneBoundary. Select the stable array, memoise the filter.
+  const allDice = useGame((s) => s.game.dice);
   const online = useGame((s) => s.online);
   const myColor = useGame((s) => s.myColor);
   const current = useGame((s) => s.game.current);
+  const dice = useMemo(() => allDice.filter((d) => d.owner === current), [allDice, current]);
 
   // The tray sits behind the CURRENT roller's base, so it hops seat to seat.
   // Under the camera lock the board is rotated by viewOffset quarter-turns —
@@ -393,7 +400,12 @@ function DiceBodies() {
 
   // A remote player doesn't throw — they display the values the roller broadcast.
   const isRemoteViewer = online && current !== myColor;
-  const show = rolling || phase === 'discard';
+  // Visible from the throw until this player actually commits their first die
+  // of the round — the same window the discard step used to occupy. After that
+  // the tray is handed to the combat dice, and the 2D HUD tray keeps showing
+  // what is left.
+  const untouched = dice.every((d) => d.usedBy === null);
+  const show = rolling || (phase === 'act' && untouched);
 
   // Throw fresh on each roll — onto the roller's strip of the table. Guarded:
   // a crashed (poisoned) Rapier world throws on EVERY call — report the
@@ -528,7 +540,7 @@ function DiceBodies() {
   // Remote viewer: settle the dice to the broadcast values (no physics throw).
   useFrame(() => {
     if (!isRemoteViewer || !show) return;
-    const sig = dice.map((d) => `${d?.value}.${d?.discarded}`).join(',');
+    const sig = dice.map((d) => `${d?.value}.${d?.usedBy ?? ''}`).join(',');
     if (sig === remoteSig.current) return;
     if (!bodies.current.every((b) => b)) return;
     remoteSig.current = sig;
@@ -621,16 +633,12 @@ function DiceBodies() {
     }
   }, [show]);
 
-  // During the discard phase the player can click a die to discard it directly
-  // (mirrors clicking the 2D tray). Only the current player may discard.
-  const canDiscard = phase === 'discard' && !rolling && !isRemoteViewer;
-
+  // Nothing is discarded any more, so the physics dice are purely a display of
+  // the throw — selection happens in the 2D tray.
   return (
     <group visible={show}>
       {DIE_KINDS.map((kind, i) => {
-        const d = dice[i];
-        const discarded = d?.discarded ?? false;
-        const clickable = canDiscard && !!d && !discarded;
+        const discarded = false;
         return (
           <RigidBody
             // Stable index key — dice ids change every roll, and remounting would
@@ -646,21 +654,7 @@ function DiceBodies() {
             linearDamping={0.5}
             position={[trayToWorld(seat, i * 1.2 - 2.4, 0)[0], TABLE_SURF + H, trayToWorld(seat, i * 1.2 - 2.4, 0)[1]]}
           >
-            <DieMesh
-              kind={kind}
-              visible={!discarded}
-              onClick={(e) => {
-                if (!clickable) return;
-                e.stopPropagation();
-                discard(d!.id);
-              }}
-              onPointerOver={() => {
-                if (clickable) document.body.style.cursor = 'pointer';
-              }}
-              onPointerOut={() => {
-                document.body.style.cursor = 'auto';
-              }}
-            />
+            <DieMesh kind={kind} visible={!discarded} />
           </RigidBody>
         );
       })}

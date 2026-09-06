@@ -7,8 +7,9 @@ import {
   boltTargets,
   canBolt,
   canNova,
-  canUndoDiscard,
-  discardsLeft,
+  canCommitDie,
+  diceLeft,
+  DICE_PER_ROUND,
   gravestoneBank,
   gravestoneCapacity,
   hasPlayLeft,
@@ -57,21 +58,29 @@ function CamFixToggle() {
   );
 }
 
-/** Always-visible turn structure — each stage ticks off as the turn advances. */
+/** Always-visible round structure — roll once, then alternate activations. */
 function PhaseTrack() {
   const game = useGame((s) => s.game);
   if (game.winner) return null;
   const phase = game.turnPhase;
-  const dleft = phase === 'discard' ? discardsLeft(game) : 0;
+  const left = diceLeft(game, game.current);
   const steps = [
-    { key: 'roll', label: '1 · Roll 5 dice', done: phase !== 'roll', active: phase === 'roll' },
     {
-      key: 'discard',
-      label: phase === 'discard' ? `2 · Discard ${dleft} more` : '2 · Discard 2',
-      done: phase === 'act',
-      active: phase === 'discard',
+      key: 'roll',
+      label: '1 · Everyone rolls 5 dice',
+      done: phase !== 'roll',
+      active: phase === 'roll',
     },
-    { key: 'act', label: '3 · Move & act', done: false, active: phase === 'act' },
+    {
+      key: 'act',
+      label:
+        phase === 'act'
+          ? `2 · Activate — ${left} of ${DICE_PER_ROUND} dice left`
+          : `2 · Activate (${DICE_PER_ROUND} dice each)`,
+      done: false,
+      active: phase === 'act',
+    },
+    { key: 'pass', label: '3 · Pass to your opponent', done: false, active: false },
   ];
   return (
     <div className="phase-track" aria-label="Turn phases">
@@ -160,8 +169,33 @@ function CombatAnnounce() {
       </span>
       <span className="ca-dot">·</span>
       <span className="ca-faces">
-        {intro.attackFaces} vs {intro.defenseFaces} · ties re-roll
+        {intro.attackFaces} vs {intro.defenseFaces} · ties go to the attacker
       </span>
+    </div>
+  );
+}
+
+/**
+ * A Priest that won its defence may retreat up to its defence roll. The legal
+ * squares already glow (moveDestinations takes over while a flee is pending),
+ * so this is just the prompt plus the "hold ground" opt-out. It self-resolves
+ * after a timeout, so it can never block a match.
+ */
+function FleePrompt() {
+  const flee = useGame((s) => s.game.pendingFlee);
+  const fleePriest = useGame((s) => s.fleePriest);
+  const label = usePlayerLabel();
+  if (!flee) return null;
+  return (
+    <div className="flee-prompt" style={{ '--accent': COLORS[flee.owner] } as CSSProperties}>
+      <span className="flee-text">
+        <strong>{label(flee.owner)}’s Priest repels the attack.</strong> It may flee up to{' '}
+        {flee.steps} {flee.steps === 1 ? 'square' : 'squares'} — click a glowing square, or hold
+        your ground. Landing on a Gravestone resurrects a Warrior on the spot.
+      </span>
+      <button className="ghost sm" onClick={() => fleePriest(null)}>
+        Hold ground
+      </button>
     </div>
   );
 }
@@ -171,10 +205,9 @@ export function HUD() {
   const selectedUnitId = useGame((s) => s.selectedUnitId);
   const selectedDieId = useGame((s) => s.selectedDieId);
   const roll = useGame((s) => s.roll);
-  const discard = useGame((s) => s.discard);
-  const undoDiscard = useGame((s) => s.undoDiscard);
+
   const selectDie = useGame((s) => s.selectDie);
-  const endTurn = useGame((s) => s.endTurn);
+  const endActivation = useGame((s) => s.endActivation);
   const collectStones = useGame((s) => s.collectStones);
   const activateStones = useGame((s) => s.activateStones);
   const doResurrect = useGame((s) => s.doResurrect);
@@ -252,8 +285,6 @@ export function HUD() {
   const attackOpts = myTurn ? attackOptions(game, selectedUnitId, tutRestrict) : [];
   const phase = game.turnPhase;
 
-  const dleft = phase === 'discard' ? discardsLeft(game) : 0;
-  const discardLabel = `Discard ${dleft} ${dleft === 1 ? 'die' : 'dice'}`;
 
   const graveBank = gravestoneBank(game);
   const graveCap = gravestoneCapacity(game);
@@ -290,7 +321,7 @@ export function HUD() {
         </span>
         <span
           className="grave-bank tip"
-          data-tip={`Gravestone bank: ${graveBank} left to place · up to ${graveCap} on the board (3 per active player).`}
+          data-tip={`Gravestone bank: ${graveBank} of ${graveCap} left. It never refills — every Warrior death and every resurrection spends one for good.`}
         >
           {graveUrl ? (
             <img className="grave-token" src={graveUrl} alt="" width={22} height={22} />
@@ -305,6 +336,7 @@ export function HUD() {
           {myTurn ? 'Your turn' : `${label(game.current)}'s turn`}
         </div>
       )}
+      <FleePrompt />
       <SiegeBanner />
       <EliminationToast />
       {/* no Settings during the guided tutorial — its Main Menu / New Game
@@ -346,21 +378,22 @@ export function HUD() {
               // Kind tags under the dice, in each die's colour: M · P · W1 W2
               // W3 — so players always know which die drives which unit.
               let warriorNo = 0;
-              return game.dice.map((d) => {
-                const state = d.discarded
-                  ? 'discarded'
-                  : d.usedBy
-                    ? 'used'
-                    : d.id === selectedDieId
-                      ? 'selected'
-                      : 'idle';
-                const click = !myTurn
-                  ? undefined
-                  : phase === 'discard' && !d.discarded
-                    ? () => discard(d.id)
-                    : phase === 'act' && !d.discarded && !d.usedBy
-                      ? () => selectDie(d.id)
-                      : undefined;
+              // Only the ACTIVE player's own five dice — everyone rolled, but
+              // the tray belongs to whoever is activating.
+              return game.dice
+                .filter((d) => d.owner === game.current)
+                .map((d) => {
+                const state = d.usedBy
+                  ? 'used'
+                  : d.id === selectedDieId
+                    ? 'selected'
+                    : canCommitDie(game, d)
+                      ? 'idle'
+                      : 'locked'; // dimmed but readable: out of budget, or wrong colour now
+                const click =
+                  myTurn && phase === 'act' && canCommitDie(game, d)
+                    ? () => selectDie(d.id)
+                    : undefined;
                 const label =
                   d.kind === 'mage' ? 'M' : d.kind === 'priest' ? 'P' : `W${++warriorNo}`;
                 return (
@@ -392,8 +425,8 @@ export function HUD() {
               <div className="muted unit-ability">{KIND_ABILITY[selectedUnit.kind]}</div>
               {selectedUnit.kind === 'mage' && (
                 <div className="muted">
-                  carrying {selectedUnit.carried} · activated {selectedUnit.activated} · attack d
-                  {magePowerDie(selectedUnit.activated)}
+                  carrying {selectedUnit.carried} unactivated · {selectedUnit.activated} Activated
+                  · attack d{magePowerDie(selectedUnit.activated)}
                 </div>
               )}
               {/* the assigned die + how far this unit can still march */}
@@ -424,7 +457,7 @@ export function HUD() {
                   </button>
                 ))}
                 {/* Mage sorcery: BOLT (ranged, 1 stone) arms click-to-target
-                    mode; NOVA (3 stones) blasts everything within 1 square. */}
+                    mode; NOVA (4 stones) blasts every ENEMY within 1 square. */}
                 {myTurn && selectedUnit.kind === 'mage' && canBolt(game, selectedUnit.id) && tutAllows(tutRestrict, 'bolt') && (
                   <button
                     className={`primary attack-btn${boltMode ? ' arming' : ''}`}
@@ -433,7 +466,7 @@ export function HUD() {
                     title={
                       boltTargets(game, selectedUnit.id).length === 0
                         ? 'No enemies within range'
-                        : 'Spend 1 activated stone — click any enemy in range. Only an enemy Mage can repel. The stone lands on the target square, still activated.'
+                        : 'Spend 1 Activated stone — click any enemy in range. Indefensible: no defence roll is made. The stone lands on the target square, still Activated, for anyone to claim.'
                     }
                   >
                     {boltMode ? 'Pick a target…' : 'Bolt'}
@@ -444,10 +477,10 @@ export function HUD() {
                   <button
                     className="primary attack-btn"
                     onClick={() => castNova()}
-                    title="Spend 3 activated stones — destroys EVERY unit within 1 square (diagonals too, friend or foe). Nothing can repel it. The stones scatter nearby, still activated."
+                    title="Spend 4 Activated stones — destroys every ENEMY unit in the 8 surrounding squares (diagonals too). No defence rolls; friendly units are unharmed. The 4 stones land on the diagonals, still Activated."
                   >
                     Nova
-                    <small>3 stones · {novaVictims(game, selectedUnit.id).length} caught</small>
+                    <small>4 stones · {novaVictims(game, selectedUnit.id).length} enemies caught</small>
                   </button>
                 )}
                 {actions.collect && <button onClick={collectStones}>Collect</button>}
@@ -456,8 +489,8 @@ export function HUD() {
                 {actions.ritual && <button onClick={doRitual}>Begin Ritual</button>}
               </div>
             </>
-          ) : phase === 'discard' ? (
-            <strong>{discardLabel}</strong>
+          ) : phase === 'act' && diceLeft(game, game.current) === 0 ? (
+            <strong>No dice left — pass</strong>
           ) : phase === 'roll' ? (
             /* pre-roll: name whose turn it is right here, where the eyes are */
             <>
@@ -485,28 +518,23 @@ export function HUD() {
             </span>
           ) : (
             <>
-              {/* mis-clicked a discard? take it back — until anything moves/acts
-                  (available in the hands-on tutorial too — it teaches it) */}
-              {canUndoDiscard(game) && tutAllows(tutRestrict, 'undo') && (
-                <button
-                  className="ghost"
-                  onClick={undoDiscard}
-                  title="Take back the last discarded die"
-                >
-                  Undo
-                </button>
-              )}
               {phase === 'roll' && (
                 <button className="primary" onClick={roll}>
                   Roll Dice
                 </button>
               )}
               {phase === 'act' && tutAllows(tutRestrict, 'endTurn') && (
-                <button className="primary" onClick={endTurn}>
-                  End Turn
+                <button
+                  className="primary"
+                  onClick={endActivation}
+                  title="Finish this activation and pass play to your opponent"
+                >
+                  End Activation
                 </button>
               )}
-              {phase === 'act' && !hasPlayLeft(game) && <span className="muted">No plays left</span>}
+              {phase === 'act' && !hasPlayLeft(game) && (
+                <span className="muted">No dice left this round</span>
+              )}
             </>
           )}
         </div>

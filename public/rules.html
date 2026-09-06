@@ -30,45 +30,55 @@ td,th{border:1px solid rgba(201,162,74,.35);padding:6px 12px;text-align:center}
 </nav>
 <main>
 <h1>MageStone — Complete Rules</h1>
-<p>MageStone is played by 2 or 4 players on a 16×16 board with cut corners. Each player commands <strong>1 Mage, 1 Priest and 6 Warriors</strong>, arrayed along their home edge. The central 8×8 holds the MageStones (4 per player); the centre 2×2 is the <strong>Nexus</strong>.</p>
+<p>MageStone is played by <strong>2 or 4 players</strong> (there is no 3-player game) on a 16×16 board with cut corners. Each player commands <strong>1 Mage, 1 Priest and 6 Warriors</strong>, arrayed along their home edge as Warrior · Warrior · Warrior · Priest · Mage · Warrior · Warrior · Warrior. The central 8×8 holds the MageStones (4 per player: 8 for two players, 16 for four); the centre 2×2 is the <strong>Nexus</strong>.</p>
 
-<h2>Turn structure</h2>
+<h2>Rounds and activations</h2>
+<p>Play is not turn-at-a-time — players <strong>alternate activations</strong> within a shared round.</p>
 <ol>
-<li><strong>Roll 5 dice</strong>: 1 Mage die, 1 Priest die, 3 Warrior dice (all d6).</li>
-<li><strong>Discard 2 dice</strong> — 3 remain.</li>
-<li><strong>Movement</strong> — move up to 3 units. A die only moves its matching unit kind. Movement is an orthogonal route that may bend, up to the die value, through empty squares; units block, stones and gravestones do not.</li>
-<li><strong>Actions</strong> — each activated unit may take one action: attack, collect MageStones, activate MageStones, resurrect, or begin the ritual. An action reuses the unit's move die, or takes a free matching die.</li>
-<li><strong>End turn</strong>, passing clockwise.</li>
+<li><strong>Every player rolls 5 dice</strong> at the start of the round: 1 Mage die, 1 Priest die, 3 Warrior dice (all d6).</li>
+<li><strong>Nothing is discarded.</strong> All five stay available and visible, but each player may spend only <strong>3 of their 5</strong> per round. Unused dice are simply ignored when the round ends.</li>
+<li><strong>Take one activation, then pass.</strong> An activation is: choose 1 unused die, activate its matching unit, move it up to the die's value, and immediately resolve that unit's action. Then play passes to the next player.</li>
+<li><strong>Same-colour bundle</strong> — the one exception to alternating. You may spend 2 or 3 unused dice of the <em>same colour</em> in a single activation: all their units move and resolve together (so Warriors can march in and coordinate an attack as one activation) and play passes only when the whole bundle is finished.</li>
+<li>Players keep alternating until nobody has dice left to spend. Then the round ends, everyone rolls again, and the <strong>starting player alternates</strong> each round.</li>
 </ol>
+<p>Movement is an orthogonal route that may bend, up to the die value, through empty squares; units block, stones and gravestones do not. A die only ever activates its matching unit kind, and a unit may take only one die per round. Actions are: attack, collect MageStones, activate MageStones, resurrect, or begin the ritual.</p>
 
 <h2>Combat</h2>
 <p>Warriors and Mages attack an enemy on an orthogonally adjacent square; Priests never attack. One Warrior rolls 1d6; two or three Warriors adjacent to the same target <strong>coordinate</strong> for 2d6 or 3d6 summed. The Mage rolls its power die — d6 with 0–1 activated MageStones, d12 with 2–3, d20 with 4+.</p>
-<p>The defender rolls 1d6 (a defending Mage rolls its own power die). Higher total wins; <strong>ties are re-rolled</strong> until decisive. If the attacker wins, the target is defeated; if the defender wins, one attacker falls — except against a defending Priest, which repels the attack without killing.</p>
+<p>The defender rolls 1d6 (a defending Mage rolls its own power die). Higher total wins and <strong>ties go to the attacker</strong>. If the attacker wins, the target is defeated; if the defender wins, one attacker falls — except against a defending Priest, which never kills its attacker and may instead flee up to the value of its defence roll.</p>
 <table>
 <tr><th>Attacker</th><th>vs d6</th><th>vs d12</th><th>vs d20</th></tr>
-<tr><td>1 Warrior (1d6)</td><td>50%</td><td>23%</td><td>13%</td></tr>
-<tr><td>2 Warriors (2d6)</td><td>90%</td><td>55%</td><td>32%</td></tr>
-<tr><td>3 Warriors (3d6)</td><td>99%</td><td>81%</td><td>50%</td></tr>
-<tr><td>Mage d12</td><td>77%</td><td>50%</td><td>29%</td></tr>
-<tr><td>Mage d20</td><td>87%</td><td>71%</td><td>50%</td></tr>
+<tr><td>1 Warrior (1d6)</td><td>58%</td><td>29%</td><td>18%</td></tr>
+<tr><td>2 Warriors (2d6)</td><td>91%</td><td>58%</td><td>35%</td></tr>
+<tr><td>3 Warriors (3d6)</td><td>99%</td><td>83%</td><td>52%</td></tr>
+<tr><td>Mage d12</td><td>79%</td><td>54%</td><td>33%</td></tr>
+<tr><td>Mage d20</td><td>87%</td><td>72%</td><td>52%</td></tr>
 </table>
+
+<h2>Mage sorcery</h2>
+<p>Activated MageStones can be spent as spells. A spent stone is never destroyed and never deactivated — it leaves the Mage, lands back on the board still Activated, and can be claimed by any Mage, including an opponent's.</p>
+<ul>
+<li><strong>Bolt (1 Activated stone)</strong> — an <strong>indefensible</strong> ranged attack on any enemy within the mage die's value in orthogonal steps. No defence roll is made by anything, a Mage included; the target is defeated immediately. The spent stone lands on the square that was hit, still Activated.</li>
+<li><strong>Nova (4 Activated stones)</strong> — an indefensible area attack. Every <strong>enemy</strong> unit in the 8 squares surrounding the Mage is defeated with no defence roll; friendly units are unharmed. The four spent stones are placed on the four diagonal squares around the Mage, all still Activated.</li>
+</ul>
 
 <h2>Defeat, gravestones and respawns</h2>
 <ul>
-<li>A fallen <strong>Warrior</strong> leaves a gravestone — only while the shared bank (3 per player) has stock, never on the Nexus, and never stacked on another gravestone.</li>
-<li>A fallen <strong>Mage</strong> drops its unactivated stones plus one activated stone where it fell, keeps the rest, and respawns at its base. A fallen <strong>Priest</strong> respawns at its base.</li>
+<li>A fallen <strong>Warrior</strong> leaves a gravestone — only while the shared bank still holds one, never on the Nexus, and never stacked on another gravestone. The bank is <strong>finite and never replenished</strong>: it starts at 4 per player (8 in a 2-player game, 16 in a 4-player game), a Warrior's death spends one, and a resurrection removes that gravestone from the game rather than returning it. Once the bank empties, Warrior losses are permanent.</li>
+<li>A fallen <strong>Mage</strong> drops its Unactivated stones plus exactly one Activated stone where it fell, keeps the rest, and respawns at its base. The dropped stone <strong>stays Activated</strong>. A fallen <strong>Priest</strong> respawns at its base.</li>
 <li>If an enemy occupies your base, you are <strong>under siege</strong>: respawns wait until the base is clear. A player whose last units are locked out is eliminated.</li>
 </ul>
 
 <h2>MageStones</h2>
-<p>The Mage collects a stone by ending its move on it, and may <strong>activate</strong> carried stones only while standing on its own base. Activated stones power the Mage's combat die and count toward victory.</p>
+<p>The Mage collects a stone by ending its move on it, and may <strong>activate</strong> carried stones only while standing on its own base. Activated stones power the Mage's combat die (d6 with 0–1, d12 with 2–3, d20 with 4–5) and count toward victory; Unactivated stones do neither.</p>
+<p><strong>Activation is permanent.</strong> Once a MageStone has ever been Activated it can never become Unactivated again — not when it is dropped, not when its Mage is killed, not when it is spent on a spell, and not when an enemy takes it. A Mage that picks up an already-Activated stone counts it immediately and does not need to carry it home. More of the board's stones therefore become instantly useful as a game goes on.</p>
 
 <h2>The Priest</h2>
-<p>A Priest standing on any gravestone may <strong>resurrect</strong> a Warrior there (up to 6 alive), stepping back one square. A Priest in the Nexus with all four Nexus squares free of enemies may <strong>begin the ritual</strong>.</p>
+<p>A Priest standing on any gravestone may <strong>resurrect</strong> a Warrior there (up to 6 alive), stepping back one square; that gravestone then leaves the game for good. Normally only one gravestone may be resurrected per turn. A Priest that wins its defence roll may flee up to the value of that roll, and if it lands on a gravestone it may resurrect from it immediately, even outside its own turn. A Priest in the Nexus with all four Nexus squares free of enemies may <strong>begin the ritual</strong>.</p>
 
 <h2>Victory</h2>
 <ol>
-<li><strong>MageStone</strong> — your Mage stands on your own base with 6+ activated MageStones. Instant win.</li>
+<li><strong>MageStone</strong> — your Mage stands on your own base holding 6 Activated MageStones. Instant win. Picking up a sixth Activated stone away from home does not win on its own — the Mage still has to reach its base.</li>
 <li><strong>Ritual</strong> — your Priest still holds a clear Nexus when play returns to you a full round after beginning the ritual.</li>
 <li><strong>Conquest</strong> — every rival is eliminated.</li>
 </ol>

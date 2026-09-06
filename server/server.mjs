@@ -554,7 +554,8 @@ async function handle(ws, s, m) {
     }
     case 'createGame': {
       if (!s.username) return send(ws, { t: 'error', message: 'Not signed in.' });
-      const pc = [2, 3, 4].includes(m.playerCount) ? m.playerCount : 2;
+      // MageStone is a 2- or 4-player game only — anything else falls back to 2.
+      const pc = [2, 4].includes(m.playerCount) ? m.playerCount : 2;
       const salt = randomBytes(12).toString('hex');
       const g = {
         id: genId(),

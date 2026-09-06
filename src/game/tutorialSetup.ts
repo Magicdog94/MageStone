@@ -5,6 +5,7 @@
 // of the many turns it would take from the default home formations.
 
 import { createGame } from './setup';
+import { syncStones } from './rules';
 import type { Cell, GameState } from './types';
 
 export function createTutorialGame(): GameState {
@@ -24,9 +25,13 @@ export function createTutorialGame(): GameState {
   place('red-w3', { r: 6, c: 4 }); // the mover → steps to (6,6), west of target
 
   // Give the red Mage a couple of carried stones so the "activated MageStones"
-  // metric has something to point at during the UI tour.
+  // metric has something to point at during the UI tour. Carrying is a property
+  // of the TOKEN, so hand it two real (still Unactivated) stones rather than
+  // writing the derived counter.
   const mage = g.units.find((u) => u.id === 'red-m');
-  if (mage) mage.carried = 2;
+  if (mage) {
+    for (const s of g.stones.filter((x) => !x.carrier).slice(0, 2)) s.carrier = mage.id;
+  }
 
-  return g;
+  return syncStones(g);
 }

@@ -627,7 +627,7 @@ function UnitPiece({ unit }: { unit: Unit }) {
   // into a stone/gravestone) — one disk-height per token at the cell.
   const tokenLift = useMemo(() => {
     let n = 0;
-    for (const st of game.stones) if (!st.collected && sameCell(st.cell, unit.cell)) n++;
+    for (const st of game.stones) if (!st.carrier && sameCell(st.cell, unit.cell)) n++;
     for (const g of game.gravestones) if (sameCell(g.cell, unit.cell)) n++;
     return n * DISK_H;
   }, [game.stones, game.gravestones, unit.cell]);
@@ -894,7 +894,7 @@ export function BoardTokens() {
     };
     for (const g of graves) add(g.cell, { id: g.id, kind: 'gravestone', cell: g.cell, grow: true });
     for (const s of stones)
-      if (!s.collected)
+      if (!s.carrier)
         add(s.cell, { id: s.id, kind: s.activated ? 'activated' : 'unactivated', cell: s.cell, grow: false });
     return m;
   }, [stones, graves]);

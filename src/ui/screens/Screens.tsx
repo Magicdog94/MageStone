@@ -735,7 +735,7 @@ function CreateJoin() {
           <div className="entry-field">
             <span>Players</span>
             <div className="seg-row">
-              {[2, 3, 4].map((n) => (
+              {[2, 4].map((n) => (
                 <button
                   key={n}
                   className={`seg ${players === n ? 'on' : ''}`}

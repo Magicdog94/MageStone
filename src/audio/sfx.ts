@@ -279,9 +279,10 @@ export function initSfx(): () => void {
     // dice: physical roll begins / a die discarded
     if (s.rolling && !prev.rolling) sfx.diceRoll();
     if (g !== pg) {
-      const discNow = g.dice.filter((d) => d.discarded).length;
-      const discBefore = pg.dice.filter((d) => d.discarded).length;
-      if (discNow > discBefore && g.turnPhase !== 'roll') sfx.discard();
+      // a die committed to an activation (the old discard cue)
+      const spentNow = g.dice.filter((d) => d.usedBy !== null).length;
+      const spentBefore = pg.dice.filter((d) => d.usedBy !== null).length;
+      if (spentNow > spentBefore && g.turnPhase !== 'roll') sfx.discard();
 
       // movement — like a chess piece sliding
       if (g.unitsMovedThisTurn.length > pg.unitsMovedThisTurn.length) sfx.move();

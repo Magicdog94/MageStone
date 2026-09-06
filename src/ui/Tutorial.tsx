@@ -149,17 +149,17 @@ function Divider() {
   );
 }
 
-// Win chances taken straight from the engine's `combatOdds` (rules.ts): draws are
-// re-rolled, so each is the decisive-outcome chance P(win | not draw), then
+// Win chances taken straight from the engine's `combatOdds` (rules.ts). TIES GO
+// TO THE ATTACKER, so each cell is P(attack roll >= defence roll), then
 // Math.round(win × 100) — identical to the % badge shown in-game (Pieces.tsx).
 // Rows = the attacker's roll; columns = the defender's die (d6, or a defending
 // Mage's power die). Regenerate with scratchpad/odds.mjs if the combat maths change.
 const ODDS: { roll: string; vs: [number, number, number] }[] = [
-  { roll: 'd6', vs: [50, 23, 13] },
-  { roll: '2d6', vs: [90, 55, 32] },
-  { roll: '3d6', vs: [99, 81, 50] },
-  { roll: 'd12', vs: [77, 50, 29] },
-  { roll: 'd20', vs: [87, 71, 50] },
+  { roll: 'd6', vs: [58, 29, 18] },
+  { roll: '2d6', vs: [91, 58, 35] },
+  { roll: '3d6', vs: [99, 83, 52] },
+  { roll: 'd12', vs: [79, 54, 33] },
+  { roll: 'd20', vs: [87, 72, 52] },
 ];
 const oddsBand = (v: number) => (v >= 67 ? 'hi' : v >= 34 ? 'mid' : 'lo');
 
@@ -218,9 +218,10 @@ const SECTIONS: Section[] = [
         <p className="htp-p">There are three ways to win MageStone:</p>
         <ol className="htp-win">
           <li>
-            <span className="htp-win-title">Mage Victory</span>
-            Return your Mage to your base carrying 6 or more Activated MageStones — the moment it steps onto
-            your base with at least 6, you win instantly.
+            <span className="htp-win-title">MageStone Victory</span>
+            Return your Mage to your own base holding 6 Activated MageStones — the moment it steps
+            onto your base with six, you win instantly. Picking up a sixth already-Activated stone
+            out on the board is <em>not</em> enough on its own: you still have to get home.
           </li>
           <li>
             <span className="htp-win-title">Priest Ritual Victory</span>
@@ -271,8 +272,12 @@ const SECTIONS: Section[] = [
           owns them: any Mage may collect any stone.
         </p>
         <p className="htp-p">
-          The shared Gravestone bank starts at <span className="htp-em">3 Gravestones per player</span>{' '}
-          (6 in a 2-player game, 12 with four players).
+          MageStone is played by <span className="htp-em">2 or 4 players</span> — there is no
+          3-player game.
+        </p>
+        <p className="htp-p">
+          The shared Gravestone bank starts at <span className="htp-em">4 Gravestones per player</span>{' '}
+          (8 in a 2-player game, 16 with four players) and is never refilled.
         </p>
         <SetupDiagram />
       </>
@@ -284,10 +289,14 @@ const SECTIONS: Section[] = [
     icon: 'dice',
     body: (
       <>
-        <p className="htp-p">On your turn:</p>
+        <p className="htp-p">
+          Each round every player rolls, then you take turns{' '}
+          <span className="htp-em">activating</span> — one die at a time, back and
+          forth.
+        </p>
         <ol className="htp-ol">
           <li>
-            Roll 5 dice:
+            At the start of the round, <span className="htp-em">every player</span> rolls 5 dice:
             <ul className="htp-list htp-list--sub htp-list--dice">
               <li>
                 <span className="htp-die htp-die--w" />3 Warrior dice (Red)
@@ -301,29 +310,42 @@ const SECTIONS: Section[] = [
             </ul>
           </li>
           <li>
-            Discard exactly 2 dice. Mis-clicked? The <span className="htp-em">Undo</span> button
-            takes the last discard back — until any unit moves or acts.
+            <span className="htp-em">Nothing is discarded.</span> All five stay on the table and
+            visible — but you may only ever spend <span className="htp-em">3 of your 5</span> in a
+            round. Whatever you don’t use is simply ignored when the round ends.
           </li>
           <li>
-            Move up to 3 units — one die per unit, up to the die’s value.
+            Take one <span className="htp-em">activation</span>, then pass to your opponent:
             <ul className="htp-list htp-list--sub">
-              <li>Movement is orthogonal (never diagonal), through empty squares. The path may turn.</li>
-              <li>A die only moves its matching unit type.</li>
+              <li>Choose 1 unused die.</li>
+              <li>Move its matching unit up to the die’s value — orthogonal (never diagonal), through empty squares; the path may turn.</li>
+              <li>
+                Immediately resolve that unit’s action: attack (Warrior: Single, Double, Triple;
+                Mage), collect or activate a MageStone, resurrect a Warrior, or start a Nexus
+                Ritual.
+              </li>
+              <li>Play passes to the other player.</li>
             </ul>
           </li>
           <li>
-            After moving, resolve actions:
-            <ul className="htp-list htp-list--sub">
-              <li>Attack (Warrior: Single, Double, Triple; Mage)</li>
-              <li>Collect or Activate a MageStone (Mage)</li>
-              <li>Resurrect a Warrior (Priest)</li>
-              <li>Start a Nexus Ritual (Priest)</li>
-            </ul>
+            You alternate like that until both players have spent their 3 dice. Then the round ends
+            and everyone rolls again — with the{' '}
+            <span className="htp-em">starting player alternating</span> each round.
           </li>
         </ol>
+        <h4 className="htp-sub">Spending the same colour together</h4>
+        <p className="htp-p">
+          The one exception to strict alternation: you may spend{' '}
+          <span className="htp-em">2 or 3 unused dice of the same colour</span> in a single
+          activation. All of their units move and resolve together — so two or three Warriors can
+          march in and make a coordinated attack as one activation — and play only passes once the
+          whole bundle is done.
+        </p>
         <div className="htp-note">
-          <strong>Important:</strong> Discard the Mage or Priest die and that unit cannot move this
-          turn. The three Warrior dice are shared by all your Warriors — one die per Warrior.
+          <strong>Important:</strong> the Mage die moves only your Mage and the Priest die only your
+          Priest, so there is exactly one of each. The three Warrior dice are shared by all your
+          Warriors — one die per Warrior. Spend three dice on Warriors and your Mage and Priest sit
+          out the round entirely.
         </div>
         <MoveDiagram />
       </>
@@ -353,16 +375,26 @@ const SECTIONS: Section[] = [
           <li>4 or more stones: rolls 1d20</li>
         </ul>
         <p className="htp-p">
-          A defeated Mage drops all Unactivated stones plus 1 Activated stone where it fell, then
-          respawns at your base — unless an enemy is holding the base (see Conquest). Activated
-          stones can also be SPENT on sorcery — see <span className="htp-em">Mage Powers</span>.
+          A defeated Mage drops all Unactivated stones plus exactly 1 Activated stone where it fell
+          — and that dropped stone <span className="htp-em">stays Activated</span>. It keeps the
+          rest and respawns at your base, unless an enemy is holding the base (see Conquest).
+          Activated stones can also be SPENT on sorcery — see{' '}
+          <span className="htp-em">Mage Powers</span>.
         </p>
 
         <h4 className="htp-sub htp-sub--p">Priest</h4>
         <p className="htp-p">Your support unit — it cannot attack.</p>
         <ul className="htp-list">
           <li>Resurrects Warriors from Gravestones and performs the Nexus Ritual.</li>
-          <li>A Priest that wins its defence only repels the attack — the attacker survives.</li>
+          <li>
+            A Priest that wins its defence never kills its attacker. It repels the attack and may
+            then <span className="htp-em">flee</span> up to the value of its defence roll — as far
+            as it likes, or not at all.
+          </li>
+          <li>
+            A fleeing Priest that lands on a Gravestone may resurrect from it immediately, even
+            outside its own turn.
+          </li>
           <li>If defeated, it respawns at your base (no Gravestone).</li>
         </ul>
       </>
@@ -375,9 +407,10 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p className="htp-p">
-          Attacker and defender each roll their die — highest wins. Ties are re-rolled, so combat
-          never ends in a draw. The loser is defeated, with one exception: a Priest that wins its
-          defence only repels the attack (the attacker survives).
+          Attacker and defender each roll their die — highest wins, and{' '}
+          <span className="htp-em">ties go to the attacker</span>. The loser is defeated, with one
+          exception: a Priest that wins its defence only repels the attack (the attacker survives)
+          and may then flee.
         </p>
 
         <h4 className="htp-sub">Coordinated Warrior Attacks</h4>
@@ -414,10 +447,20 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p className="htp-p">
-          Your Mage collects a stone by landing on it — the stone is then{' '}
-          <span className="htp-em">Unactivated</span> (carried, silver). Back on your own base the
-          Mage can <span className="htp-em">Activate</span> its stones (gold) — these power its
-          attack die and count toward Mage Victory (6 Activated on your base wins instantly).
+          Your Mage collects a stone by landing on it. A stone taken from the board starts{' '}
+          <span className="htp-em">Unactivated</span> (carried, silver): it adds no combat power and
+          counts for nothing. Carry it back to your own base and{' '}
+          <span className="htp-em">Activate</span> it (gold) — Activated stones drive the Mage’s
+          power die and count toward MageStone Victory.
+        </p>
+        <h4 className="htp-sub">Activation is permanent</h4>
+        <p className="htp-p">
+          Once a stone has been Activated it can <span className="htp-em">never</span> become
+          Unactivated again — not by being dropped, not when its Mage dies, not when it is spent on
+          Bolt or Nova, and not when an enemy takes it. Any Mage that picks up an already-Activated
+          stone counts it <span className="htp-em">immediately</span>, with no trip home required.
+          As a game goes on, more and more of the stones lying on the board are live ammunition for
+          whoever reaches them first.
         </p>
         <StoneDiagram />
       </>
@@ -441,19 +484,24 @@ const SECTIONS: Section[] = [
             action (whether or not the Mage moved with it).
           </li>
           <li>
-            Only an enemy <span className="htp-em">Mage</span> can repel it: both Mages roll their
-            power dice, highest wins (ties re-roll). Every other unit is destroyed outright.
+            Bolt is <span className="htp-em">indefensible</span> — no defence roll is made, by a
+            Mage or by anything else. Whatever it hits is defeated outright.
           </li>
-          <li>The spent stone lands on the target’s square, still activated.</li>
+          <li>
+            The stone is not destroyed: it leaves your Mage and lands on the square that was hit,{' '}
+            <span className="htp-em">still Activated</span>, ready for any Mage to claim.
+          </li>
         </ul>
-        <h4 className="htp-sub htp-sub--m">Nova — 3 Activated stones</h4>
+        <h4 className="htp-sub htp-sub--m">Nova — 4 Activated stones</h4>
         <ul className="htp-list">
           <li>
-            Destroys <span className="htp-em">every</span> unit within 1 square of the Mage —
-            diagonals included, friend or foe. Nothing can repel it.
+            Destroys every <span className="htp-em">enemy</span> unit in the 8 squares surrounding
+            the Mage — diagonals included. No defence rolls are made, and friendly units are
+            unharmed.
           </li>
           <li>
-            The 3 spent stones scatter to random squares of the 3×3 blast area, still activated.
+            The 4 spent stones are placed on the four <span className="htp-em">diagonal</span>{' '}
+            squares around the Mage, all still Activated — and claimable by your opponents too.
           </li>
         </ul>
       </>
@@ -472,10 +520,20 @@ const SECTIONS: Section[] = [
         </p>
         <h4 className="htp-sub">The Gravestone bank</h4>
         <ul className="htp-list">
-          <li>The bank holds 3 Gravestones per player — 6 in a 2-player game, 12 in a 4-player game.</li>
-          <li>Placing a Gravestone draws one from the bank; resurrecting a Warrior returns one to it.</li>
-          <li>When the bank is empty, a defeated Warrior leaves no Gravestone — the bank caps how many can sit on the board at once.</li>
-          <li>The bank shrinks by 3 for each player eliminated (down to 3 per remaining player).</li>
+          <li>
+            The bank starts at 4 Gravestones per player — 8 in a 2-player game, 16 in a 4-player
+            game — and is <span className="htp-em">never replenished</span>.
+          </li>
+          <li>A defeated Warrior takes one Gravestone out of the bank and leaves it on its square.</li>
+          <li>
+            Resurrecting removes that Gravestone from the game entirely. It does{' '}
+            <span className="htp-em">not</span> return to the bank, so the bank only ever counts
+            down: 16 → 15 → 14 → … → 0.
+          </li>
+          <li>
+            When the bank reaches zero a defeated Warrior leaves nothing behind and can never be
+            brought back. Armies decay, and killing becomes permanent.
+          </li>
         </ul>
         <h4 className="htp-sub">Placement &amp; resurrection</h4>
         <ul className="htp-list">
@@ -494,10 +552,13 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p className="htp-p">
-          The Nexus is the 2×2 heart of the board. A Priest standing on it — with no enemies on
-          its four squares — may declare a ritual. Hold the Nexus for one full round and you win.
-          The ritual breaks if the Priest is killed, if the Priest leaves the Nexus, or if any
-          enemy unit steps onto a Nexus square.
+          The Nexus is the 2×2 heart of the board. A Priest standing on it — with no enemy on any
+          of its four squares — may declare the Rite of the Nexus; declaring it is that Priest’s
+          action for the turn. Friendly units may hold the other Nexus squares. Every other player
+          then takes one full turn, and if the Ritual is still standing when play returns to you,
+          you win immediately. It breaks if the Priest is killed, if the Priest leaves or flees out
+          of the Nexus, or if any enemy unit occupies a Nexus square. An attack from outside the
+          Nexus does not by itself stop it.
         </p>
         <NexusDiagram />
       </>
@@ -509,12 +570,13 @@ const SECTIONS: Section[] = [
     icon: 'scroll',
     body: (
       <ol className="htp-ol">
-        <li>Roll 5 dice — 3 Warrior (red), 1 Mage (blue), 1 Priest (green).</li>
-        <li>Discard exactly 2 dice.</li>
-        <li>Move up to 3 units using the remaining dice.</li>
-        <li>Resolve actions after movement.</li>
+        <li>Every player rolls 5 dice — 3 Warrior (red), 1 Mage (blue), 1 Priest (green).</li>
+        <li>Nothing is discarded; you may spend 3 of your 5 this round.</li>
+        <li>Take turns activating: 1 die → move that unit → resolve its action → pass.</li>
+        <li>Or spend 2–3 same-colour dice together as one activation.</li>
         <li>Fight, collect stones, activate stones, resurrect Warriors, or attempt the Nexus Ritual.</li>
-        <li>Win by Mage Victory, Priest Ritual Victory, or Conquest Victory.</li>
+        <li>When both players are done, the round ends and the starting player alternates.</li>
+        <li>Win by MageStone Victory, Priest Ritual Victory, or Conquest Victory.</li>
       </ol>
     ),
   },

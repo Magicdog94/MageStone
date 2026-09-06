@@ -1,9 +1,9 @@
 import { useGame, type TutRestrict } from '../../store';
-import { legalMoves, siegedPlayers, unitById, warriorCount } from '../../game/rules';
+import { legalMoves, siegedPlayers, syncStones, unitById, warriorCount } from '../../game/rules';
 import { NEXUS_CELLS } from '../../game/board';
 import { createGame } from '../../game/setup';
 import type { Callout } from './useTutorial';
-import type { Cell, Die, DieKind, GameState } from '../../game/types';
+import type { Cell, Die, DieKind, GameState, PlayerColor } from '../../game/types';
 import { useTutorial } from './useTutorial';
 
 const g = () => useGame.getState();
@@ -58,7 +58,7 @@ const dist = (a: Cell, b: Cell) => Math.abs(a.r - b.r) + Math.abs(a.c - b.c);
 //
 // Each task also carries GUARDRAILS (store.tutRestrict): while the task is
 // live, only the interaction the step teaches is accepted — wrong units,
-// wrong squares, wrong actions and End Turn simply don't respond, so the
+// wrong squares, wrong actions and End Activation simply don't respond, so the
 // player can explore clicks freely without ever wrecking the staged lesson.
 
 async function playerTask(
@@ -113,22 +113,40 @@ async function playerTask(
 // ---- staging ---------------------------------------------------------------
 
 let diceNonce = 0;
-function mkDice(kinds: DieKind[], values: number[]): Die[] {
+function mkDice(kinds: DieKind[], values: number[], owner: PlayerColor = 'red'): Die[] {
   return kinds.map((kind, i) => ({
     id: `tut-die-${diceNonce++}`,
+    owner,
     kind,
     value: values[i],
-    discarded: false,
     usedBy: null,
   }));
 }
 
 /** Replace the game with a fresh red-vs-blue board, mutated by `build`, already
  *  in red's action phase with hand-picked dice. */
+/** Hand `unitId` real MageStone tokens for a staged lesson. Activation lives on
+ *  the token, so the demo boards are built by REASSIGNING stones, never by
+ *  writing the derived `carried`/`activated` counters. */
+function giveStones(st: GameState, unitId: string, carried: number, activated: number): void {
+  const free = st.stones.filter((s) => !s.carrier);
+  let i = 0;
+  for (let n = 0; n < carried && i < free.length; n++, i++) {
+    free[i].carrier = unitId;
+    free[i].activated = false;
+  }
+  for (let n = 0; n < activated && i < free.length; n++, i++) {
+    free[i].carrier = unitId;
+    free[i].activated = true;
+  }
+}
+
 function stage(build: (st: GameState) => void): void {
   const st = createGame(['red', 'blue'], 'diamond');
   st.turnPhase = 'act';
   build(st);
+  // Refresh the derived stone mirrors after any staging mutation.
+  Object.assign(st, syncStones(st));
   // Also clear transient combat/sorcery UI from the previous lesson — an armed
   // bolt or a lingering roll announcement must not leak onto the fresh board.
   useGame.setState({
@@ -142,12 +160,14 @@ function stage(build: (st: GameState) => void): void {
   });
 }
 
-/** Move `unitId` as far toward `target` as this turn's matching die allows. */
+/** Move `unitId` as far toward `target` as this round's matching die allows. */
 function stepToward(unitId: string, target: Cell): boolean {
   const st = g().game;
   const u = unitById(st, unitId);
   if (!u) return false;
-  const die = st.dice.find((d) => !d.discarded && d.usedBy === null && d.kind === u.kind);
+  const die = st.dice.find(
+    (d) => d.owner === st.current && d.usedBy === null && d.kind === u.kind,
+  );
   if (!die) return false;
   const moves = legalMoves(st, u, die.value);
   if (moves.length === 0) return false;
@@ -163,7 +183,9 @@ function scriptMove(unitId: string, dest: Cell): void {
   const st = g().game;
   const u = unitById(st, unitId);
   if (!u) return;
-  const die = st.dice.find((d) => !d.discarded && d.usedBy === null && d.kind === u.kind);
+  const die = st.dice.find(
+    (d) => d.owner === st.current && d.usedBy === null && d.kind === u.kind,
+  );
   if (!die) return;
   g().selectUnit(unitId);
   g().selectDie(die.id);
@@ -203,7 +225,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'chips',
       title: 'Round & gravestones',
-      body: 'These chips track the round number and the shared gravestone bank — fallen Warriors will draw on it later.',
+      body: 'These chips track the round number and the shared gravestone bank. The bank is FINITE and never refills — every Warrior death and every resurrection spends one for good.',
       anchor: '.grave-bank',
       placement: 'bottom',
     });
@@ -237,29 +259,18 @@ export async function runTutorial(onDone: () => void) {
     });
 
     // ---- YOU discard -------------------------------------------------------
-    await playerTask(
-      null,
-      {
-        id: 'task-discard',
-        title: 'Discard 2 dice',
-        body: 'You keep only 3 — click any TWO dice to throw them away. Think about which units you want to use this turn. (Misclick? The UNDO button takes it back.)',
-        anchor: '.tray',
-        placement: 'top',
-      },
-      () => g().game.turnPhase === 'act',
-      () => {
-        const live = g().game.dice.filter((d) => !d.discarded);
-        const worst = [...live].sort((a, b) => a.value - b.value).slice(0, 2);
-        for (const d of worst) g().discard(d.id);
-      },
-      // Any two dice are a fine choice — but ONLY discarding (and its Undo).
-      { restrict: { units: [], dests: [], actions: ['discard', 'undo'] } },
-    );
+    await note({
+      id: 'roll-read',
+      title: 'Five dice — you spend three',
+      body: 'Nothing is discarded. All five stay on the table, and you simply never get to use more than THREE of them this round. Choosing which three, and when, is the whole game.',
+      anchor: '.tray',
+      placement: 'top',
+    });
     await wait(300);
     await note({
       id: 'kept',
-      title: 'Three dice, three plays',
-      body: 'Your kept dice are your whole turn: each die can move its matching unit, and each unit may also take ONE action — attack, collect, resurrect… Let’s move.',
+      title: 'You alternate — one activation each',
+      body: 'An activation is ONE die: pick a die, move its matching unit, resolve its action — then play passes to your opponent. Back and forth until you have each spent three dice. (The exception: 2 or 3 dice of the SAME colour can be spent together, so Warriors can gang up in one go.)',
       placement: 'bottom',
     });
 
@@ -274,24 +285,16 @@ export async function runTutorial(onDone: () => void) {
       },
       () => g().game.unitsMovedThisTurn.length >= 1,
       () => {
-        // The player may have Undone back into the discard phase after the
-        // previous task was accepted — finish the discards first, then move.
-        if (g().game.turnPhase === 'discard') {
-          const live = g().game.dice.filter((d) => !d.discarded);
-          const worst = [...live].sort((a, b) => a.value - b.value).slice(0, live.length - 3);
-          for (const d of worst) g().discard(d.id);
-        }
         const st = g().game;
         const w = st.units.find(
           (u) =>
             u.owner === st.current &&
-            st.dice.some((d) => !d.discarded && !d.usedBy && d.kind === u.kind),
+            st.dice.some((d) => d.owner === st.current && !d.usedBy && d.kind === u.kind),
         );
         if (w) stepToward(w.id, { r: 8, c: 8 });
       },
-      // Any unit, any legal square — movement (plus discard/undo, in case the
-      // player just Undid back into the discard phase), but no ending the turn.
-      { restrict: { actions: ['discard', 'undo'] } },
+      // Any unit, any legal square — but not ending the activation yet.
+      { restrict: { actions: [] } },
     );
     await wait(500);
     await note({
@@ -321,7 +324,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'oddsgrid',
       title: 'Know your odds',
-      body: 'Your roll (row) against the defender’s die (column). Defenders roll a d6 — except a Mage, whose defence die grows with its stones (more on that soon). Ties always re-roll, so every fight ends decisively.',
+      body: 'Your roll (row) against the defender’s die (column). Defenders roll a d6 — except a Mage, whose defence die grows with its stones (more on that soon). TIES GO TO THE ATTACKER, so equal rolls kill.',
       placement: 'center',
       showOdds: true,
     });
@@ -376,7 +379,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'graverules',
       title: 'A gravestone drops',
-      body: 'A fallen Warrior leaves a gravestone — but only while the shared bank (3 per player) has stock, and never on the Nexus. Gravestones matter, because…',
+      body: 'A fallen Warrior leaves a gravestone — but only while the shared bank (4 per player: 8 here, 16 in a 4-player game) still has one, and never on the Nexus. Once the bank is empty, Warriors die for good. Gravestones matter, because…',
       anchor: '.grave-bank',
       placement: 'bottom',
     });
@@ -395,7 +398,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'priest',
       title: 'The Priest',
-      body: 'Priests never attack — and if one WINS its defence it only repels the attacker (nobody dies). Their gift is RESURRECTION. One of your Warriors is down; there’s the gravestone.',
+      body: 'Priests never attack — and a Priest that WINS its defence kills nobody: it repels the attack, then may FLEE up to its defence roll (landing on a gravestone lets it resurrect on the spot, even out of turn). Their gift is RESURRECTION. One of your Warriors is down; there’s the gravestone.',
       placement: 'bottom',
     });
     await playerTask(
@@ -420,7 +423,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'res-done',
       title: 'A Warrior returns',
-      body: 'The Warrior revives on the grave square and the Priest steps back the way it came; the gravestone returns to the bank. A Priest can use ANY gravestone — and you can never have more than 6 Warriors.',
+      body: 'The Warrior revives on the grave square and the Priest steps back the way it came. That gravestone is now GONE FROM THE GAME — it does not return to the bank. A Priest can use ANY gravestone, one per turn, and you can never have more than 6 Warriors.',
       placement: 'bottom',
     });
 
@@ -429,7 +432,7 @@ export async function runTutorial(onDone: () => void) {
       stage((st) => {
         const mage = st.units.find((u) => u.id === 'red-m')!;
         mage.cell = { r: 4, c: 8 };
-        const stone = st.stones.find((x) => !x.collected)!;
+        const stone = st.stones.find((x) => !x.carrier)!;
         stone.cell = { r: 5, c: 8 };
         st.dice = mkDice(['mage'], [2]);
       });
@@ -456,7 +459,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'carried',
       title: 'Carried — not yet yours',
-      body: 'The silver counter ticked up: the stone is CARRIED. Carried stones score nothing yet — and if your Mage dies, it drops them where it fell.',
+      body: 'The silver counter ticked up: the stone is CARRIED but UNACTIVATED. It scores nothing and adds no power yet — and if your Mage dies it drops every one of them where it fell.',
       anchor: '[data-tut="carried"]',
       placement: 'bottom',
     });
@@ -464,7 +467,7 @@ export async function runTutorial(onDone: () => void) {
       stage((st) => {
         const mage = st.units.find((u) => u.id === 'red-m')!;
         mage.cell = { r: 0, c: 8 }; // standing on its own base
-        mage.carried = 1;
+        giveStones(st, 'red-m', 1, 0);
         st.dice = mkDice(['mage'], [2]);
       });
     stageActivate();
@@ -498,7 +501,7 @@ export async function runTutorial(onDone: () => void) {
       stage((st) => {
         const mage = st.units.find((u) => u.id === 'red-m')!;
         mage.cell = { r: 8, c: 5 };
-        mage.activated = 4;
+        giveStones(st, 'red-m', 0, 4);
         st.units.find((u) => u.id === 'blue-w1')!.cell = { r: 8, c: 8 };
         st.dice = mkDice(['mage'], [4]);
       });
@@ -509,7 +512,7 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-bolt',
         title: 'Cast BOLT — 1 stone',
-        body: 'A ranged kill: range = the mage die (4 here); only an enemy MAGE can repel it. CLICK your Mage, press BOLT — enemies in range glow — then click the Blue Warrior.',
+        body: 'A ranged kill: range = the mage die (4 here). Bolt is INDEFENSIBLE — no defence roll, whatever it hits. CLICK your Mage, press BOLT — enemies in range glow — then click the Blue Warrior.',
         placement: 'bottom',
       },
       () => !unitById(g().game, 'blue-w1'),
@@ -527,7 +530,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'bolt-stone',
       title: 'The stone disperses',
-      body: 'Look at the target’s square: your spent stone landed THERE — still activated, claimable by any Mage. And the cost is real: your Mage dropped from 4 stones (d20) to 3 (d12).',
+      body: 'Look at the target’s square: that same stone landed THERE — never destroyed, never deactivated, and claimable by any Mage. Once a stone has been Activated it stays Activated for the rest of the game, whoever ends up holding it. The cost is real: your Mage dropped from 4 stones (d20) to 3 (d12).',
       placement: 'bottom',
     });
 
@@ -536,7 +539,7 @@ export async function runTutorial(onDone: () => void) {
       stage((st) => {
         const mage = st.units.find((u) => u.id === 'red-m')!;
         mage.cell = { r: 5, c: 5 };
-        mage.activated = 3;
+        giveStones(st, 'red-m', 0, 4);
         st.units.find((u) => u.id === 'blue-w1')!.cell = { r: 4, c: 5 };
         st.units.find((u) => u.id === 'blue-w2')!.cell = { r: 6, c: 6 }; // diagonal!
         st.units.find((u) => u.id === 'blue-w3')!.cell = { r: 5, c: 6 };
@@ -547,8 +550,8 @@ export async function runTutorial(onDone: () => void) {
     await wait(700);
     await note({
       id: 'nova-intro',
-      title: 'NOVA — 3 stones',
-      body: 'Your Mage is mobbed — three enemies, one of them DIAGONAL. Nova destroys EVERY unit within 1 square, diagonals included… and note your own Warrior standing beside it. Nova spares nobody.',
+      title: 'NOVA — 4 stones',
+      body: 'Your Mage is mobbed — three enemies, one of them DIAGONAL. Nova destroys every ENEMY unit in the 8 squares around your Mage, diagonals included, with no defence roll. Your own Warrior beside it is unharmed.',
       placement: 'bottom',
     });
     await playerTask(
@@ -573,7 +576,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'nova-stones',
       title: 'Count the cost',
-      body: 'All three Blue Warriors fell — and so did your own. The three spent stones lie scattered across the blast, still activated, free to claim. Your Mage is back to a d6. Sorcery is power spent — choose your moment.',
+      body: 'All three Blue Warriors fell; your own Warrior stands untouched. The four spent stones now sit on the four DIAGONALS around your Mage — still ACTIVATED, and claimable by anyone, your enemy included. Your Mage is back to a d6. Sorcery is power lent to the battlefield — choose your moment.',
       placement: 'bottom',
     });
 
@@ -582,7 +585,7 @@ export async function runTutorial(onDone: () => void) {
       stage((st) => {
         const mage = st.units.find((u) => u.id === 'red-m')!;
         mage.cell = { r: 1, c: 8 };
-        mage.carried = 6;
+        giveStones(st, 'red-m', 6, 0);
         st.dice = mkDice(['mage'], [2]);
       });
     stageWin1();
@@ -657,16 +660,16 @@ export async function runTutorial(onDone: () => void) {
       anchor: '.ritual-flag',
       placement: 'top',
     });
-    g().endTurn();
+    g().endActivation();
     await wait(600);
     await note({
       id: 'ritual-blue',
       title: 'Blue can’t reach',
-      body: 'Blue would need to touch the Nexus or kill the Priest THIS turn — its army is home. The round passes…',
+      body: 'Blue would need to touch the Nexus or kill the Priest before the round ends — its army is home. The round passes…',
       anchor: '.player-strip',
       placement: 'bottom',
     });
-    g().endTurn();
+    g().endActivation();
     await wait(700);
     await note({
       id: 'win2-done',
@@ -720,16 +723,10 @@ export async function runTutorial(onDone: () => void) {
       anchor: '.siege-alert',
       placement: 'bottom',
     });
-    g().endTurn();
+    g().endActivation();
     await wait(600);
     g().tutorialRoll([3, 3, 6, 3, 2]);
     await wait(500);
-    {
-      const dice = g().game.dice;
-      g().discard(dice[0].id); // mage die
-      g().discard(dice[1].id); // priest die
-    }
-    await wait(400);
     await note({
       id: 'siege-still',
       title: 'A turn later — still locked out',

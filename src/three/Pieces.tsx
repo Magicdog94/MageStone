@@ -567,6 +567,80 @@ function pctTexture(pct: number): THREE.CanvasTexture {
   return tex;
 }
 
+/** What each unit kind is called on its hover plate. */
+const KIND_NAME: Record<UnitKind, string> = {
+  warrior: 'Warrior',
+  priest: 'Priest',
+  mage: 'Mage',
+};
+
+// One plate per kind + team colour — there are at most 12, so they are built
+// once and kept.
+const nameTexCache = new Map<string, THREE.CanvasTexture>();
+function nameTexture(kind: UnitKind, color: string): THREE.CanvasTexture {
+  const key = `${kind}|${color}`;
+  const hit = nameTexCache.get(key);
+  if (hit) return hit;
+  const W = 320;
+  const H = 96;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext('2d')!;
+  const pad = 6;
+  const x = pad;
+  const y = pad;
+  const w = W - pad * 2;
+  const h = H - pad * 2;
+  const r = 22;
+  const plate = () => {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  };
+  // dark emerald plate with the game's gilt keyline
+  plate();
+  ctx.fillStyle = 'rgba(7,14,12,0.9)';
+  ctx.fill();
+  plate();
+  ctx.strokeStyle = 'rgba(202,168,94,0.85)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  // the name, in the owning team's colour
+  ctx.font = 'bold 46px Cinzel, Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = color;
+  ctx.fillText(KIND_NAME[kind], W / 2, H / 2 + 3);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  nameTexCache.set(key, tex);
+  return tex;
+}
+
+/**
+ * Floating name plate ("Warrior" / "Priest" / "Mage") shown over the unit the
+ * pointer is on, in that team's colour. Its mesh takes no raycast hits: if the
+ * plate could swallow the pointer it would trigger the unit's own onPointerOut,
+ * hiding the plate, un-hiding it, and flickering forever.
+ */
+function NameLabel({ y, kind, color }: { y: number; kind: UnitKind; color: string }) {
+  const tex = useMemo(() => nameTexture(kind, color), [kind, color]);
+  return (
+    <Billboard position={[0, y, 0]}>
+      <mesh renderOrder={31} raycast={() => null}>
+        <planeGeometry args={[0.92, 0.276]} />
+        <meshBasicMaterial map={tex} transparent depthTest={false} />
+      </mesh>
+    </Billboard>
+  );
+}
+
 /** Floating "chance of victory" badge shown above a unit you could attack. */
 function WinLabel({ y, pct }: { y: number; pct: number }) {
   const tex = useMemo(() => pctTexture(pct), [pct]);
@@ -586,6 +660,7 @@ function UnitPiece({ unit }: { unit: Unit }) {
   const selectUnit = useGame((s) => s.selectUnit);
   const attack = useGame((s) => s.attack);
   const setHovered = useGame((s) => s.setHovered);
+  const hovered = useGame((s) => s.hoveredUnitId === unit.id);
   const online = useGame((s) => s.online);
   const myColor = useGame((s) => s.myColor);
 
@@ -795,6 +870,10 @@ function UnitPiece({ unit }: { unit: Unit }) {
           <coneGeometry args={[0.16, 0.3, 4]} />
           <meshBasicMaterial color={'#ff5a4d'} />
         </mesh>
+      )}
+      {/* name plate on hover; the win-% badge sits above it when both show */}
+      {hovered && (
+        <NameLabel y={TARGET_HEIGHT + 0.42} kind={unit.kind} color={COLORS[unit.owner]} />
       )}
       {isTarget && winPct !== null && <WinLabel y={TARGET_HEIGHT + 0.95} pct={winPct} />}
     </group>

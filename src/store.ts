@@ -54,6 +54,7 @@ export type TutActionName =
   | 'resurrect'
   | 'ritual'
   | 'flee'
+  | 'undo'
   | 'endTurn';
 
 export interface TutRestrict {
@@ -150,6 +151,13 @@ interface UIState {
   selectedUnitId: string | null;
   selectedDieId: string | null;
   hoveredUnitId: string | null;
+  /**
+   * The board as it stood at the START of the activation in progress — what
+   * "Undo" puts back. Null when there is nothing to take back: no die committed
+   * yet, or the activation has already resolved a fight (undoing a fight would
+   * hand the player a free re-roll, so a resolved kill stands).
+   */
+  undoPoint: GameState | null;
 
   /** True while the 3D dice are tumbling (before values are reported). */
   rolling: boolean;
@@ -248,6 +256,8 @@ interface UIState {
   /** Finish this activation and pass play on (a round ends when nobody has
    *  dice left). */
   endActivation: () => void;
+  /** Take the whole activation back to how it began (see `undoPoint`). */
+  undoActivation: () => void;
 
   /** Attack `targetId` with the currently selected unit. `attackerIds` lets the
    *  action bar pick the coordination level (single/double/triple); omitted, the
@@ -285,6 +295,7 @@ export const useGame = create<UIState>((set, get) => ({
   selectedUnitId: null,
   selectedDieId: null,
   hoveredUnitId: null,
+  undoPoint: null,
   rolling: false,
   rollNonce: 0,
   lastDeath: null,
@@ -346,6 +357,7 @@ export const useGame = create<UIState>((set, get) => ({
       selectedUnitId: null,
       selectedDieId: null,
       hoveredUnitId: null,
+      undoPoint: null,
       rolling: false,
     }),
 
@@ -410,6 +422,7 @@ export const useGame = create<UIState>((set, get) => ({
         selectedUnitId: null,
         selectedDieId: null,
         hoveredUnitId: null,
+        undoPoint: null,
         rolling: false,
         modal: null,
         started: true,
@@ -584,8 +597,21 @@ export const useGame = create<UIState>((set, get) => ({
             selectedUnitId: null,
             selectedDieId: null,
             boltMode: false,
+            undoPoint: null,
           },
     ),
+
+  undoActivation: () =>
+    set((s) => {
+      if (!s.undoPoint || outOfTurn(s) || !tutAllows(s.tutRestrict, 'undo')) return {};
+      return {
+        game: s.undoPoint,
+        undoPoint: null,
+        selectedUnitId: null,
+        selectedDieId: null,
+        boltMode: false,
+      };
+    }),
 
   attack: (targetId, attackerIds, rng) =>
     set((s) => {
@@ -792,6 +818,37 @@ export const useGame = create<UIState>((set, get) => ({
       return game === s.game ? {} : { game };
     }),
 }));
+
+/**
+ * Keep `undoPoint` — the board as the current activation began — up to date.
+ *
+ * Done here rather than inside each action because every play routes through
+ * `game`, and the state to return to is simply the one BEFORE the first die of
+ * the activation was committed. A resolved fight closes the door: undoing it
+ * would let a player re-roll a bad result, so any dice roll or defeat clears the
+ * snapshot for the rest of the activation.
+ */
+const totalKills = (g: GameState) =>
+  g.players.reduce((n, p) => n + (g.kills[p] ?? 0), 0);
+
+useGame.subscribe((s, prev) => {
+  const g = s.game;
+  const p = prev.game;
+  if (g === p) return; // not a game change (and stops this from re-entering)
+  const fought =
+    (g.lastCombat !== p.lastCombat && g.lastCombat !== null) ||
+    totalKills(g) !== totalKills(p) ||
+    (g.pendingFlee !== p.pendingFlee && g.pendingFlee !== null);
+  if (fought) {
+    if (s.undoPoint) useGame.setState({ undoPoint: null });
+    return;
+  }
+  if (p.activationDice.length === 0 && g.activationDice.length > 0) {
+    useGame.setState({ undoPoint: p });
+  } else if (g.activationDice.length === 0 && s.undoPoint) {
+    useGame.setState({ undoPoint: null });
+  }
+});
 
 // Camera-lock view offset: whenever a HUMAN's turn begins (or the toggle
 // flips), rotate the board so their home edge faces the fixed camera (visual

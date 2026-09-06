@@ -208,6 +208,8 @@ export function HUD() {
 
   const selectDie = useGame((s) => s.selectDie);
   const endActivation = useGame((s) => s.endActivation);
+  const undoActivation = useGame((s) => s.undoActivation);
+  const canUndo = useGame((s) => s.undoPoint !== null);
   const collectStones = useGame((s) => s.collectStones);
   const activateStones = useGame((s) => s.activateStones);
   const doResurrect = useGame((s) => s.doResurrect);
@@ -524,13 +526,35 @@ export function HUD() {
                 </button>
               )}
               {phase === 'act' && tutAllows(tutRestrict, 'endTurn') && (
-                <button
-                  className="primary"
-                  onClick={endActivation}
-                  title="Finish this activation and pass play to your opponent"
-                >
-                  End Activation
-                </button>
+                <>
+                  {tutAllows(tutRestrict, 'undo') && (
+                    <button
+                      className="ghost"
+                      onClick={undoActivation}
+                      disabled={!canUndo}
+                      title={
+                        canUndo
+                          ? 'Take this activation back and start it again'
+                          : game.activationDice.length === 0
+                            ? 'Nothing to undo yet — you have not committed a die'
+                            : 'The dice have been rolled — a resolved fight cannot be taken back'
+                      }
+                    >
+                      Undo
+                    </button>
+                  )}
+                  <button
+                    className="primary"
+                    onClick={endActivation}
+                    title={
+                      game.activationDice.length > 0
+                        ? 'Commit this activation and pass play on'
+                        : 'Nothing committed — this passes, leaving your remaining dice unused'
+                    }
+                  >
+                    Submit Move
+                  </button>
+                </>
               )}
               {phase === 'act' && !hasPlayLeft(game) && (
                 <span className="muted">No dice left this round</span>

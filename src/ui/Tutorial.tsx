@@ -563,11 +563,13 @@ const SECTIONS: Section[] = [
           player’s colour.
         </p>
         <p className="htp-p">
-          Every other player then gets a complete turn. If the Rite is still standing when play
-          returns to you, you win immediately. Because the starting player rotates each round, an
-          opponent who activates before you next round gets one last chance to break it — a single
-          enemy stepping anywhere into the circle is enough. It also breaks if the Priest is killed
-          or leaves the Nexus.
+          The round you declare it in is already part-spent, so it does not count. The Rite must
+          then survive one <span className="htp-em">full round</span> — and it is won at the{' '}
+          <span className="htp-em">start of the round after that</span>, before anyone acts in it.
+          Declare in round 12 and you win as round 14 opens, with round 13 being the whole round
+          every opponent has to break it in. A single enemy stepping onto any Nexus square is
+          enough, and it also breaks if the Priest is killed or leaves the Nexus. The HUD flag
+          shows the round it pays out on.
         </p>
         <NexusDiagram />
       </>

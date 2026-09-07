@@ -17,6 +17,7 @@ import {
   mageActionDieValue,
   magePowerDie,
   novaVictims,
+  ritualWinsOnRound,
   unitById,
 } from '../game/rules';
 import { useTokenUrl } from '../three/tokens';
@@ -491,8 +492,14 @@ export function HUD() {
         <div className="spacer" />
 
         {game.ritual && (
-          <span className="ritual-flag" title="A ritual is in progress">
-            Ritual · {game.ritual.player}
+          <span
+            className="ritual-flag"
+            title={
+              `${label(game.ritual.player)}'s Rite of the Nexus completes at the start of round ` +
+              `${ritualWinsOnRound(game)} — it must survive every round until then.`
+            }
+          >
+            Ritual · {label(game.ritual.player)} · wins R{ritualWinsOnRound(game)}
           </span>
         )}
 

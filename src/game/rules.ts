@@ -1170,9 +1170,9 @@ export function beginRitual(state: GameState, unitId: string): GameState {
     ...state,
     dice,
     activationDice,
-    // Stamped with the round it began in. The win lands when play RETURNS to
-    // this player in a later round — not at the round boundary — so a rival who
-    // activates before them next round gets one last chance to break it.
+    // Stamped with the round it began in. That round is already part-spent, so
+    // it does not count: the Rite must then survive one FULL round, and pays out
+    // as the round after that opens (see RITUAL_HOLD_ROUNDS).
     ritual: { player: priest.owner, priestId: unitId, round: state.turn },
     unitsActedThisTurn: markActed(state, unitId),
     log: [...state.log, `${priest.owner}'s Priest begins the Ritual in the Nexus!`],
@@ -1283,41 +1283,31 @@ export function endActivation(state: GameState): GameState {
 
   const next = nextActivator(after, after.current);
   if (next) {
-    return claimRitual(
-      resolveRespawns({
-        ...after,
-        current: next,
-        activationDice: [],
-        lastCombat: null,
-        log: [...after.log, `— ${next} activates (${diceLeft(after, next)} dice left).`],
-      }),
-    );
+    return resolveRespawns({
+      ...after,
+      current: next,
+      activationDice: [],
+      lastCombat: null,
+      log: [...after.log, `— ${next} activates (${diceLeft(after, next)} dice left).`],
+    });
   }
   return newRound(after);
 }
 
 /**
- * Award the Ritual the moment play RETURNS to the ritualist in a later round.
+ * How many rounds must tick over before a Rite pays out.
  *
- * The Rite is declared as one of a player's activations; every other player then
- * gets a complete turn, and if the circle is still held when that player is next
- * handed an activation, they win. Judging it here rather than at the round
- * boundary is what gives a rival who activates EARLIER in the following round
- * one final move to break it.
+ * The round it is DECLARED in is already part-spent, so it does not count: the
+ * Rite has to survive one whole round after that. Declared in round 12, it is
+ * won at the START of round 14 — round 13 being the full round it had to hold
+ * through, in which every player, the ritualist included, gets a complete turn
+ * to break it or defend it.
  */
-function claimRitual(state: GameState): GameState {
-  const rit = state.ritual;
-  if (!rit || state.winner) return state;
-  if (state.current !== rit.player || state.turn <= rit.round) return state;
-  if (!ritualIntact(state)) {
-    return { ...state, ritual: null, log: [...state.log, `The Ritual was broken.`] };
-  }
-  return {
-    ...state,
-    winner: rit.player,
-    winMethod: 'Ritual',
-    log: [...state.log, `${rit.player} completes the Rite of the Nexus and wins!`],
-  };
+export const RITUAL_HOLD_ROUNDS = 2;
+
+/** The round at whose start a declared Rite pays out, or null if none is running. */
+export function ritualWinsOnRound(state: GameState): number | null {
+  return state.ritual ? state.ritual.round + RITUAL_HOLD_ROUNDS : null;
 }
 
 /**
@@ -1353,13 +1343,23 @@ function newRound(state: GameState): GameState {
     log: [...state.log, `— Round ${turn}. ${starter} starts. Roll the dice.`],
   });
 
-  // A ritual that has already been broken is cleared here; the WIN itself is
-  // judged by claimRitual when play next reaches the ritualist — which may be
-  // several activations into this new round if a rival starts it.
-  if (s.ritual && !ritualIntact(s)) {
-    s = { ...s, ritual: null, log: [...s.log, `The Ritual was broken.`] };
+  // The Rite is judged HERE, at the round boundary, and only once a full round
+  // has passed since it was declared (see RITUAL_HOLD_ROUNDS). Declared in round
+  // 12: round 13 is the round it must hold through, and it pays out as round 14
+  // opens — before anyone acts in it.
+  if (s.ritual) {
+    if (!ritualIntact(s)) {
+      s = { ...s, ritual: null, log: [...s.log, `The Ritual was broken.`] };
+    } else if (turn >= s.ritual.round + RITUAL_HOLD_ROUNDS) {
+      return {
+        ...s,
+        winner: s.ritual.player,
+        winMethod: 'Ritual',
+        log: [...s.log, `${s.ritual.player} completes the Rite of the Nexus and wins!`],
+      };
+    }
   }
-  return claimRitual(s);
+  return s;
 }
 
 /** Whether the current player can still do anything in this activation — a unit

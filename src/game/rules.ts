@@ -623,7 +623,7 @@ export function resolveAttack(
   targetId: string,
   rng: RNG = defaultRng,
 ): GameState {
-  if (state.turnPhase !== 'act' || state.winner) return state;
+  if (state.turnPhase !== 'act' || gameOver(state)) return state;
   const target = unitById(state, targetId);
   const attackers = attackerIds.map((id) => unitById(state, id)).filter((u): u is Unit => !!u);
   if (!target || attackers.length === 0) return state;
@@ -910,7 +910,7 @@ export function resolveBolt(
   targetId: string,
   _rng: RNG = defaultRng,
 ): GameState {
-  if (state.turnPhase !== 'act' || state.winner) return state;
+  if (state.turnPhase !== 'act' || gameOver(state)) return state;
   const mage = unitById(state, mageId);
   const target = unitById(state, targetId);
   if (!mage || !target || !canBolt(state, mageId)) return state;
@@ -994,7 +994,7 @@ function diagonalsOf(cell: Cell): Cell[] {
  * all still ACTIVATED and free for any Mage to collect.
  */
 export function resolveNova(state: GameState, mageId: string, _rng: RNG = defaultRng): GameState {
-  if (state.turnPhase !== 'act' || state.winner) return state;
+  if (state.turnPhase !== 'act' || gameOver(state)) return state;
   const mage = unitById(state, mageId);
   if (!mage || !canNova(state, mageId)) return state;
   const dice = spendActionDie(state, mageId);
@@ -1181,8 +1181,57 @@ export function beginRitual(state: GameState, unitId: string): GameState {
 
 // ---- Victory -------------------------------------------------------------
 
+/** The player whose home edge this cell belongs to, or null off the bases. */
+function baseOwnerAt(state: GameState, cell: Cell): PlayerColor | null {
+  const rot = edgeRotation(cell.r, cell.c);
+  if (rot === null) return null;
+  return state.players.find((p) => seatOf(state, p) === rot) ?? null;
+}
+
+/** Is this unit standing on somebody ELSE's base? */
+function onEnemyBase(state: GameState, unit: Unit): boolean {
+  const owner = baseOwnerAt(state, unit.cell);
+  return owner !== null && owner !== unit.owner;
+}
+
+/**
+ * The mutual-siege DEADLOCK — a genuine stalemate, and the one position the
+ * game cannot resolve on its own.
+ *
+ * It is reached when every remaining player has been reduced to Warriors that
+ * are ALL sitting on an enemy base, while their own base is held and their Mage
+ * and Priest are stuck in the respawn queue. The classic shape is two players
+ * with one Warrior each, parked in the other's base.
+ *
+ * Nothing can happen from there. No Mage is on the board, so no MageStone
+ * victory; no Priest, so no Rite and no resurrection; and Conquest is
+ * unreachable because the moment you march your besieger off to go hunting, the
+ * opponent you were holding down gets their Mage and Priest back behind you.
+ * Every player is simultaneously the hostage and the captor, so the position
+ * repeats for ever — it is a draw.
+ */
+function mutualSiegeDeadlock(state: GameState): boolean {
+  const alive = activePlayers(state);
+  if (alive.length < 2) return false;
+  return alive.every((p) => {
+    const units = state.units.filter((u) => u.owner === p);
+    // Nothing on the board is an elimination, not a stalemate — leave it be.
+    if (units.length === 0) return false;
+    // Every last unit committed to besieging someone else.
+    if (!units.every((u) => u.kind === 'warrior' && onEnemyBase(state, u))) return false;
+    // …while their own Mage/Priest are queued behind a siege of their own.
+    if (!state.pendingRespawns.some((pr) => pr.owner === p)) return false;
+    return enemyInBase(state, p);
+  });
+}
+
+/** Has the game finished — won by somebody, or drawn? */
+export function gameOver(state: GameState): boolean {
+  return state.winner !== null || state.winMethod === 'Draw';
+}
+
 export function checkVictory(state: GameState): GameState {
-  if (state.winner) return state;
+  if (gameOver(state)) return state;
   // Safety net: every path that can change stone ownership funnels through here,
   // so the derived mirrors are guaranteed fresh before victory is judged.
   state = syncStones(state);
@@ -1226,6 +1275,21 @@ export function checkVictory(state: GameState): GameState {
       log: [...s.log, `${alive[0]} wins by conquest!`],
     };
   }
+
+  // Stalemate: everyone left is besieging and besieged at once, with nothing
+  // on the board but the Warriors holding each other's bases down. Checked
+  // LAST, so a real victory always takes precedence over a draw.
+  if (mutualSiegeDeadlock(s)) {
+    return {
+      ...s,
+      winner: null,
+      winMethod: 'Draw',
+      log: [
+        ...s.log,
+        'Stalemate — every army is pinned on an enemy base with nothing left to bring back. The game is a draw.',
+      ],
+    };
+  }
   return s;
 }
 
@@ -1265,7 +1329,7 @@ function nextActivator(state: GameState, from: PlayerColor): PlayerColor | null 
  * the round ends, the starting player rotates, and a fresh roll begins.
  */
 export function endActivation(state: GameState): GameState {
-  if (state.winner) return state;
+  if (gameOver(state)) return state;
   const base = state;
 
   // Ending an activation without having committed anything is a PASS: that

@@ -11,6 +11,7 @@ import {
   canCommitDie,
   diceLeft,
   DICE_PER_ROUND,
+  gameOver,
   gravestoneBank,
   gravestoneCapacity,
   hasPlayLeft,
@@ -63,7 +64,7 @@ function CamFixToggle() {
 /** Always-visible round structure — roll once, then alternate activations. */
 function PhaseTrack() {
   const game = useGame((s) => s.game);
-  if (game.winner) return null;
+  if (gameOver(game)) return null;
   const phase = game.turnPhase;
   const left = diceLeft(game, game.current);
   const steps = [
@@ -216,8 +217,11 @@ export function HUD() {
   const [showFeedback, setShowFeedback] = useState(false);
   const tutorial = useGame((s) => s.tutorial);
   const fbPrompted = useRef(false);
+  // A primitive, so the effect depends on "has it ended" rather than the whole
+  // game object (which changes on every activation).
+  const finished = gameOver(game);
   useEffect(() => {
-    if (!game.winner) {
+    if (!finished) {
       fbPrompted.current = false;
       return;
     }
@@ -225,7 +229,7 @@ export function HUD() {
     fbPrompted.current = true;
     const t = window.setTimeout(() => setShowFeedback(true), 2600);
     return () => window.clearTimeout(t);
-  }, [game.winner, tutorial]);
+  }, [finished, tutorial]);
   // Match the turn-timer bar to the width of the two central player cards.
   const [timerWidth, setTimerWidth] = useState<number | undefined>(undefined);
   useEffect(() => {
@@ -270,13 +274,24 @@ export function HUD() {
 
   return (
     <div className="hud">
-      {game.winner && (
-        <div className="winner" style={{ '--accent': COLORS[game.winner] } as CSSProperties}>
-          {/* name the METHOD of victory (MageStone / Ritual / Conquest) */}
+      {finished && (
+        <div
+          className="winner"
+          style={{ '--accent': game.winner ? COLORS[game.winner] : 'var(--gold)' } as CSSProperties}
+        >
+          {/* name the METHOD (MageStone / Ritual / Conquest), or the stalemate */}
           <span className="winner-eyebrow">
-            {game.winMethod ? `${game.winMethod} Victory` : 'Victory'}
+            {game.winMethod === 'Draw'
+              ? 'Stalemate'
+              : game.winMethod
+                ? `${game.winMethod} Victory`
+                : 'Victory'}
           </span>
-          <span className="winner-name">{`${label(game.winner)} wins`}</span>
+          <span className="winner-name">
+            {game.winner
+              ? `${label(game.winner)} wins`
+              : 'A draw — neither side can break the siege'}
+          </span>
           {online ? (
             <button className="primary" onClick={exitToLobby}>
               Back to Lobby

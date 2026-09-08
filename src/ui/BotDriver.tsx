@@ -14,6 +14,7 @@
 import { useEffect, useRef } from 'react';
 import { useGame } from '../store';
 import { chooseAction, type BotAction } from '../game/bot';
+import { gameOver } from '../game/rules';
 
 /** Pause between bot steps, ms (a touch quicker between discards). */
 const stepDelay = (phase: string) => (phase === 'discard' ? 550 : 800);
@@ -60,7 +61,7 @@ function executeAction(a: BotAction): void {
 export function BotDriver() {
   // A boolean regime flag (not the game object) — the interval below reads
   // fresh state each tick, so it survives bot-to-bot turn handoffs untouched.
-  const enabled = useGame((s) => !!s.bots[s.game.current] && s.botController && !s.game.winner);
+  const enabled = useGame((s) => !!s.bots[s.game.current] && s.botController && !gameOver(s.game));
   const lastStep = useRef(0);
   // A momentous play (attack, sorcery, ritual) is HELD briefly before it is
   // executed — the pause reads as the bot weighing the decision, like a human
@@ -78,8 +79,8 @@ export function BotDriver() {
       const s = useGame.getState();
       const g = s.game;
       const lvl = s.bots[g.current];
-      if (!lvl || !s.botController || g.winner || s.rolling || s.tutorial) {
-        dbg.__botLast = `guard:${!lvl ? 'lvl' : !s.botController ? 'ctl' : g.winner ? 'win' : s.rolling ? 'rolling' : 'tutorial'}`;
+      if (!lvl || !s.botController || gameOver(g) || s.rolling || s.tutorial) {
+        dbg.__botLast = `guard:${!lvl ? 'lvl' : !s.botController ? 'ctl' : gameOver(g) ? 'over' : s.rolling ? 'rolling' : 'tutorial'}`;
         return;
       }
       const now = performance.now();

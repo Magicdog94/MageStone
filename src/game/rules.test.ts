@@ -22,6 +22,7 @@ import {
   collect,
   combatOdds,
   defeatUnit,
+  gameOver,
   gravestoneBank,
   gravestoneCapacity,
   hasPlayLeft,
@@ -1185,6 +1186,96 @@ describe('Priest — repel only, never flees', () => {
   it('a Priest that loses its defence is defeated and respawns', () => {
     const g = attackPriest([HI, LO]);
     expect(at(g, 'blue-p').cell).toEqual({ r: 15, c: 8 }); // back at blue's base
+  });
+});
+
+// ---- Stalemate: the mutual siege ------------------------------------------
+
+describe('Stalemate — mutual siege', () => {
+  /** The reported position: both sides down to ONE Warrior, each parked in the
+   *  other's base, with both Mages and Priests stuck in the respawn queue. */
+  const mutualSiege = () => {
+    let g = acting(['red', 'blue']);
+    // Strip both armies to a single Warrior apiece.
+    g = {
+      ...g,
+      units: g.units.filter((u) => ['red-w1', 'blue-w1'].includes(u.id)),
+      pendingRespawns: [
+        { id: 'red-m', owner: 'red', kind: 'mage' as const },
+        { id: 'red-p', owner: 'red', kind: 'priest' as const },
+        { id: 'blue-m', owner: 'blue', kind: 'mage' as const },
+        { id: 'blue-p', owner: 'blue', kind: 'priest' as const },
+      ],
+    };
+    g = place(g, 'red-w1', { r: 15, c: 8 }); // red's Warrior on BLUE's base
+    g = place(g, 'blue-w1', { r: 0, c: 8 }); // blue's Warrior on RED's base
+    return g;
+  };
+
+  it('is declared a draw, with no winner', () => {
+    const g = checkVictory(mutualSiege());
+    expect(g.winMethod).toBe('Draw');
+    expect(g.winner).toBeNull();
+    expect(gameOver(g)).toBe(true);
+    expect(g.log[g.log.length - 1]).toMatch(/[Ss]talemate/);
+  });
+
+  it('stops play — no further activation changes anything', () => {
+    const g = checkVictory(mutualSiege());
+    expect(endActivation(g)).toBe(g);
+    expect(hasPlayLeft(g)).toBe(false);
+    // and re-judging keeps it a draw rather than overwriting it
+    expect(checkVictory(g).winMethod).toBe('Draw');
+  });
+
+  it('is NOT called while either side still has a unit in reserve', () => {
+    let g = mutualSiege();
+    // Blue keeps a second Warrior back home — it can still break the siege.
+    const spare = { ...at(g, 'blue-w1'), id: 'blue-w2', cell: { r: 12, c: 8 } };
+    g = checkVictory({ ...g, units: [...g.units, spare] });
+    expect(g.winMethod).toBeNull();
+    expect(gameOver(g)).toBe(false);
+  });
+
+  it('is NOT called when a Warrior is merely out in the open', () => {
+    let g = mutualSiege();
+    g = place(g, 'red-w1', { r: 8, c: 8 }); // mid-board, besieging nobody
+    expect(checkVictory(g).winMethod).toBeNull();
+  });
+
+  it('is NOT called while anyone still has a Mage or Priest on the board', () => {
+    let g = mutualSiege();
+    const mage = { ...at(g, 'red-w1'), id: 'red-m', kind: 'mage' as const, cell: { r: 15, c: 9 } };
+    g = checkVictory({
+      ...g,
+      units: [...g.units, mage],
+      pendingRespawns: g.pendingRespawns.filter((pr) => pr.id !== 'red-m'),
+    });
+    expect(g.winMethod).toBeNull(); // a Mage on the board can still win the game
+  });
+
+  it('lets a real victory take precedence over the draw', () => {
+    // Same shape, but red's "Warrior" is really a Mage holding six Activated
+    // stones on its OWN base — that is a MageStone win, not a stalemate.
+    let g = mutualSiege();
+    g = {
+      ...g,
+      units: g.units.map((u) =>
+        u.id === 'red-w1' ? { ...u, id: 'red-m', kind: 'mage' as const, cell: { r: 0, c: 9 } } : u,
+      ),
+      pendingRespawns: g.pendingRespawns.filter((pr) => pr.id !== 'red-m'),
+    };
+    g = checkVictory(give(g, 'red-m', 0, 6));
+    expect(g.winner).toBe('red');
+    expect(g.winMethod).toBe('MageStone');
+  });
+
+  it('prefers Conquest when one side is actually wiped out', () => {
+    let g = mutualSiege();
+    g = { ...g, units: g.units.filter((u) => u.owner === 'red') };
+    g = checkVictory(g);
+    expect(g.winMethod).toBe('Conquest');
+    expect(g.winner).toBe('red');
   });
 });
 

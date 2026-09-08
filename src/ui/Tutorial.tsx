@@ -239,6 +239,17 @@ const SECTIONS: Section[] = [
             never respawn.
           </li>
         </ol>
+        <h4 className="htp-sub">Stalemate — the one draw</h4>
+        <p className="htp-p">
+          There is a single dead position, and the game calls it rather than letting you sit in it.
+          If every remaining player is reduced to Warriors that are <em>all</em> standing on an
+          enemy base, while their own base is held and their Mage and Priest are stuck in the
+          respawn queue, nobody can ever win: no Mage is on the board for a MageStone victory, no
+          Priest for a Rite, and marching your besieger off to go hunting simply hands that
+          opponent their army back behind you. That is declared a{' '}
+          <span className="htp-em">draw</span>. The classic shape is two players with one Warrior
+          each, parked in the other's base.
+        </p>
         <BoardOverview />
       </>
     ),

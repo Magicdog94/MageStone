@@ -172,7 +172,8 @@ export interface GameState {
   /** Enemy units each player has defeated (kill counter). */
   kills: Record<PlayerColor, number>;
   winner: PlayerColor | null;
-  /** How the winner won — shown on the victory panel. */
-  winMethod: 'MageStone' | 'Ritual' | 'Conquest' | null;
+  /** How the game ended — shown on the victory panel. 'Draw' is the mutual-
+   *  siege stalemate, and is the one outcome with no `winner`. */
+  winMethod: 'MageStone' | 'Ritual' | 'Conquest' | 'Draw' | null;
   log: string[];
 }

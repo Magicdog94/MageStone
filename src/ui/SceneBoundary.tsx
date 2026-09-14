@@ -1,6 +1,7 @@
 import { Component, type ReactNode } from 'react';
 import { useGame } from '../store';
 import { useNet } from '../net/useNet';
+import { allowUnload } from '../net/sessionKeeper';
 
 export const RECOVER_KEY = 'ms-recover';
 const RECOVER_COUNT_KEY = 'ms-recover-count';
@@ -35,6 +36,7 @@ function hardRecover() {
   } catch {
     /* storage unavailable — reload anyway; worst case the menu comes back */
   }
+  allowUnload(); // our own reload — no "Leave site?" prompt
   location.reload();
   return true;
 }

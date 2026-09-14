@@ -1,6 +1,6 @@
 // Pre-game entry flow: landing → sign in/up → lobby (create or join a game).
 import { useEffect, useState, type FormEvent } from 'react';
-import { eloTier, useNet, type LbRow } from '../../net/useNet';
+import { eloTier, readResume, useNet, type LbRow } from '../../net/useNet';
 import { useGame } from '../../store';
 import { BOT_LABEL, BOT_LEVELS } from '../../game/bot';
 import { COLORS } from '../../three/coords';
@@ -390,10 +390,13 @@ function LeaderboardModal({ onClose }: { onClose: () => void }) {
 function Landing() {
   const playLocal = useNet((s) => s.playLocal);
   const playTutorial = useNet((s) => s.playTutorial);
+  const resumeSaved = useNet((s) => s.resumeSaved);
   const username = useNet((s) => s.username);
   const setScreen = useNet((s) => s.setScreen);
   const openSettings = useGame((s) => s.openModal);
   const [showTutorial, setShowTutorial] = useState(false);
+  // An unfinished hotseat match left behind when the tab or app was closed.
+  const [saved, setSaved] = useState(() => readResume());
   // ONE route into a match: "Play MageStone" expands the ways to play.
   const [playOpen, setPlayOpen] = useState(false);
   // Hotseat first nudges newcomers toward the guided tutorial.
@@ -407,6 +410,16 @@ function Landing() {
   return (
     <Shell bare>
       <nav className="entry-menu">
+        {saved && (
+          <button
+            className="menu-item menu-primary"
+            onClick={() => {
+              if (!resumeSaved()) setSaved(null);
+            }}
+          >
+            Resume Match · Round {saved.game.turn}
+          </button>
+        )}
         <button className="menu-item menu-primary" onClick={() => setPlayOpen((v) => !v)}>
           Play MageStone
         </button>

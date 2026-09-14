@@ -308,6 +308,49 @@ function WasdPan({ speed = 10, bound = 11 }: { speed?: number; bound?: number })
   return null;
 }
 
+/**
+ * Browsers reclaim WebGL contexts under memory pressure — typically while the
+ * player is in another app or window — which leaves a dead black board. Rebuild
+ * the 3D view as soon as the browser hands the context back, or, if it never
+ * does, once the player is looking at the page again.
+ */
+function ContextGuard() {
+  const gl = useThree((s) => s.gl);
+  useEffect(() => {
+    const canvas = gl.domElement;
+    let timer: number | undefined;
+    let disposed = false;
+    const check = () => {
+      if (disposed || !gl.getContext().isContextLost()) return;
+      if (document.visibilityState === 'hidden') {
+        timer = window.setTimeout(check, 1000);
+        return;
+      }
+      useGame.getState().rebuildScene();
+    };
+    const onLost = (e: Event) => {
+      if (disposed) return;
+      e.preventDefault(); // tells the browser we want the context back
+      window.clearTimeout(timer);
+      timer = window.setTimeout(check, 2500);
+    };
+    const onRestored = () => {
+      if (disposed) return;
+      window.clearTimeout(timer);
+      useGame.getState().rebuildScene();
+    };
+    canvas.addEventListener('webglcontextlost', onLost);
+    canvas.addEventListener('webglcontextrestored', onRestored);
+    return () => {
+      disposed = true;
+      window.clearTimeout(timer);
+      canvas.removeEventListener('webglcontextlost', onLost);
+      canvas.removeEventListener('webglcontextrestored', onRestored);
+    };
+  }, [gl]);
+  return null;
+}
+
 export function Scene() {
   const clearSelection = useGame((s) => s.selectUnit);
   const lowGfx = useGame((s) => s.settings.lowGfx);
@@ -328,6 +371,7 @@ export function Scene() {
       <fog attach="fog" args={['#241f17', 110, 380]} />
 
       <FogBackdrop />
+      <ContextGuard />
       <StudioEnv />
       <ArenaEnvironment />
       <Suspense fallback={null}>

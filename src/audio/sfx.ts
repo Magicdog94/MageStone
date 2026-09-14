@@ -280,8 +280,11 @@ export function initSfx(): () => void {
     if (s.rolling && !prev.rolling) sfx.diceRoll();
     if (g !== pg) {
       // a die committed to an activation (the old discard cue)
-      const spentNow = g.dice.filter((d) => d.usedBy !== null).length;
-      const spentBefore = pg.dice.filter((d) => d.usedBy !== null).length;
+      // (the pool is shared, so count every player's claims, not claimed dice)
+      const claims = (dice: typeof g.dice) =>
+        dice.reduce((n, d) => n + Object.keys(d.usedBy ?? {}).length, 0);
+      const spentNow = claims(g.dice);
+      const spentBefore = claims(pg.dice);
       if (spentNow > spentBefore && g.turnPhase !== 'roll') sfx.discard();
 
       // movement — like a chess piece sliding

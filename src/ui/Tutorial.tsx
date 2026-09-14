@@ -338,6 +338,7 @@ const SECTIONS: Section[] = [
             <ul className="htp-list htp-list--sub">
               <li>Choose 1 unused die.</li>
               <li>Move its matching unit up to the die’s value — orthogonal (never diagonal), through empty squares; the path may turn.</li>
+              <li>A short move never wastes a big die: the LOWEST die of that colour that covers the move is the one used up (walk 3 squares with Warrior dice 2, 3 and 6 and the 3 is spent).</li>
               <li>
                 Immediately resolve that unit’s action: attack (Warrior: Single, Double, Triple;
                 Mage), collect or activate a MageStone, resurrect a Warrior, or start a Nexus

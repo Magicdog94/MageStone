@@ -3354,6 +3354,11 @@ body.ui-mobile .tut-gotit {
   background: var(--accent);
   font-weight: 600;
 }
+/* online connection dropped — shown in the turn banner's row while reconnecting */
+.turn-banner.net-down {
+  color: #ffcf8a;
+  border-color: #b9774a;
+}
 
 /* siege alert — enemy standing on a player's base (respawns are blocked) */
 .siege-alert {

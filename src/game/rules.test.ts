@@ -48,7 +48,9 @@ import {
   syncStones,
   unitById,
   canDieMoveUnit,
+  cheapestMoveDie,
   legalMoves,
+  moveDistance,
 } from './rules';
 import type { Cell, Die, GameState, MageStone, PlayerColor, Unit } from './types';
 
@@ -287,6 +289,73 @@ describe('TEST 1 — turn dice', () => {
     expect(at(g, 'red-w1').cell).toEqual({ r: 5, c: 4 });
     const again = moveUnit(g, 'red-w1', 'd1', { r: 6, c: 4 });
     expect(again).toBe(g); // refused — already moved
+  });
+});
+
+// ---- Cheapest die ------------------------------------------------------------
+
+describe('A move uses up the LOWEST die that covers it', () => {
+  // Warrior dice 2 · 3 · 6, with red-w1 out in the open so every route is clear.
+  const open = () => {
+    const g = withDice(acting(), ['warrior', 'warrior', 'warrior'], [2, 3, 6]);
+    return place(g, 'red-w1', { r: 6, c: 6 });
+  };
+  const die = (g: GameState, id: string) => g.dice.find((d) => d.id === id)!;
+
+  it('moving 3 with the 6 selected spends the 3 and keeps the 6', () => {
+    const g = moveUnit(open(), 'red-w1', 'd2', { r: 9, c: 6 });
+    expect(at(g, 'red-w1').cell).toEqual({ r: 9, c: 6 });
+    expect(spentBy(die(g, 'd1'), 'red')).toBe('red-w1');
+    expect(spentBy(die(g, 'd2'), 'red')).toBeNull();
+    expect(spentBy(die(g, 'd0'), 'red')).toBeNull();
+    expect(g.activationDice).toEqual(['d1']);
+    expect(diceSpent(g, 'red')).toBe(1);
+  });
+
+  it('moving 1 spends the 2, the lowest die available', () => {
+    const g = moveUnit(open(), 'red-w1', 'd2', { r: 7, c: 6 });
+    expect(spentBy(die(g, 'd0'), 'red')).toBe('red-w1');
+    expect(spentBy(die(g, 'd2'), 'red')).toBeNull();
+  });
+
+  it('a move only the 6 can reach still spends the 6', () => {
+    const g = moveUnit(open(), 'red-w1', 'd2', { r: 11, c: 6 });
+    expect(spentBy(die(g, 'd2'), 'red')).toBe('red-w1');
+    expect(spentBy(die(g, 'd1'), 'red')).toBeNull();
+  });
+
+  it('measures the real route, so a detour around a unit needs a bigger die', () => {
+    // A blocker directly below makes (8,6) a 4-step walk instead of 2.
+    let g = open();
+    g = place(g, 'red-w2', { r: 7, c: 6 });
+    expect(moveDistance(g, at(g, 'red-w1'), { r: 8, c: 6 }, 6)).toBe(4);
+    g = moveUnit(g, 'red-w1', 'd2', { r: 8, c: 6 });
+    expect(spentBy(die(g, 'd2'), 'red')).toBe('red-w1'); // 2 and 3 fall short
+  });
+
+  it('ignores dice this player already spent, and dice of another kind', () => {
+    let g = withDice(acting(), ['warrior', 'warrior', 'warrior', 'priest'], [1, 3, 6, 1]);
+    g = place(g, 'red-w1', { r: 6, c: 6 });
+    g = { ...g, dice: g.dice.map((d) => (d.id === 'd0' ? { ...d, usedBy: { red: 'red-w9' } } : d)) };
+    const u = at(g, 'red-w1');
+    expect(cheapestMoveDie(g, u, die(g, 'd2'), 1).id).toBe('d1');
+  });
+
+  it("an opponent having used the low die does not stop this player taking it", () => {
+    let g = open();
+    g = { ...g, dice: g.dice.map((d) => (d.id === 'd1' ? { ...d, usedBy: { blue: 'blue-w1' } } : d)) };
+    g = moveUnit(g, 'red-w1', 'd2', { r: 9, c: 6 });
+    expect(spentBy(die(g, 'd1'), 'red')).toBe('red-w1');
+    expect(spentBy(die(g, 'd1'), 'blue')).toBe('blue-w1');
+  });
+
+  it('a Warrior attacking without moving spends the lowest Warrior die', () => {
+    let g = withDice(acting(), ['warrior', 'warrior', 'warrior'], [6, 2, 4]);
+    g = place(g, 'red-w1', { r: 8, c: 8 });
+    g = place(g, 'blue-w1', { r: 8, c: 9 });
+    g = resolveAttack(g, ['red-w1'], 'blue-w1', seq([HI, LO]));
+    expect(spentBy(die(g, 'd1'), 'red')).toBe('red-w1');
+    expect(spentBy(die(g, 'd0'), 'red')).toBeNull();
   });
 });
 

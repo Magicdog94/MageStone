@@ -434,13 +434,61 @@ export function legalMoves(state: GameState, unit: Unit, steps: number): Cell[] 
   return out;
 }
 
+/**
+ * Length of the shortest route from the unit to `dest` under the same rules as
+ * `legalMoves` (orthogonal, bending, empty cells only), or null when `dest`
+ * cannot be reached within `maxSteps`.
+ */
+export function moveDistance(state: GameState, unit: Unit, dest: Cell, maxSteps: number): number | null {
+  if (sameCell(unit.cell, dest)) return 0;
+  const seen = new Set<string>([`${unit.cell.r},${unit.cell.c}`]);
+  let frontier: Cell[] = [unit.cell];
+  for (let dist = 1; dist <= maxSteps; dist++) {
+    const next: Cell[] = [];
+    for (const cell of frontier) {
+      for (const { dr, dc } of DIRS) {
+        const n = { r: cell.r + dr, c: cell.c + dc };
+        const key = `${n.r},${n.c}`;
+        if (seen.has(key)) continue;
+        if (!cellExists(n)) continue;
+        if (unitAt(state, n)) continue;
+        if (sameCell(n, dest)) return dist;
+        seen.add(key);
+        next.push(n);
+      }
+    }
+    frontier = next;
+  }
+  return null;
+}
+
+/**
+ * The die a move of `steps` squares actually uses up: the LOWEST die of the
+ * chosen die's kind that the player could commit to this unit and that still
+ * covers the distance. Selecting a Warrior shows the reach of the best die, but
+ * walking 3 squares with Warrior dice 2·3·6 spends the 3 and keeps the 6.
+ * On a tie in value the chosen die itself is kept.
+ */
+export function cheapestMoveDie(state: GameState, unit: Unit, chosen: Die, steps: number): Die {
+  let best = chosen;
+  for (const d of state.dice) {
+    if (d.id === chosen.id || d.kind !== chosen.kind || d.value < steps) continue;
+    if (!canDieMoveUnit(d, unit, state)) continue;
+    if (d.value < best.value) best = d;
+  }
+  return best;
+}
+
 export function moveUnit(state: GameState, unitId: string, dieId: string, dest: Cell): GameState {
   if (state.turnPhase !== 'act') return state;
   const unit = unitById(state, unitId);
   const die = state.dice.find((d) => d.id === dieId);
   if (!unit || !die) return state;
   if (!canDieMoveUnit(die, unit, state)) return state;
-  if (!legalMoves(state, unit, die.value).some((c) => sameCell(c, dest))) return state;
+  const steps = moveDistance(state, unit, dest, die.value);
+  if (steps === null || steps === 0) return state;
+  // Never burn a bigger die than the move needed.
+  const spent = cheapestMoveDie(state, unit, die, steps).id;
 
   // A move may vacate an enemy from someone's base → let queued units return.
   // And a Mage stepping onto its own base with 6+ activated stones wins on the
@@ -452,12 +500,12 @@ export function moveUnit(state: GameState, unitId: string, dieId: string, dest: 
         units: state.units.map((u) =>
           u.id === unitId ? { ...u, prevCell: u.cell, cell: dest } : u,
         ),
-        dice: spendDie(state.dice, dieId, state.current, unitId),
+        dice: spendDie(state.dice, spent, state.current, unitId),
         // Committing a die opens (or joins) the current activation. Everything
         // in it must share a kind — that IS the same-colour bundle rule.
-        activationDice: state.activationDice.includes(dieId)
+        activationDice: state.activationDice.includes(spent)
           ? state.activationDice
-          : [...state.activationDice, dieId],
+          : [...state.activationDice, spent],
         unitsMovedThisTurn: [...state.unitsMovedThisTurn, unitId],
       }),
     ),
@@ -486,7 +534,12 @@ function spendActionDie(state: GameState, unitId: string): Die[] | null {
   if (existing) return state.dice;
   const unit = unitById(state, unitId);
   if (!unit) return null;
-  const free = availableDice(state).find((d) => d.kind === unit.kind);
+  // Acting in place: a Warrior's or Priest's die value plays no part, so spend
+  // the LOWEST one. A Mage's die value is its Bolt range, so it takes the best
+  // (matching `mageActionDieValue`).
+  const free = availableDice(state)
+    .filter((d) => d.kind === unit.kind)
+    .sort((a, b) => (unit.kind === 'mage' ? b.value - a.value : a.value - b.value))[0];
   if (!free) return null;
   return spendDie(state.dice, free.id, state.current, unitId);
 }

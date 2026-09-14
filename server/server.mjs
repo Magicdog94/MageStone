@@ -446,7 +446,26 @@ function authSuccess(ws, s, key, display) {
   send(ws, { t: 'authOk', username: display, token });
 }
 
+// A phone locking or a browser parking a background tab drops the socket for a
+// while. Keep an abandoned room — and its match state — long enough for the
+// players to come back, instead of deleting it the instant the last socket goes.
+const ROOM_GRACE_MS = 10 * 60 * 1000;
+function scheduleReap(g) {
+  clearTimeout(g.reapTimer);
+  g.reapTimer = setTimeout(() => {
+    if (games.get(g.id) === g && g.players.every((p) => !p.ws)) games.delete(g.id);
+  }, ROOM_GRACE_MS);
+  g.reapTimer.unref?.();
+}
+
+// Guests have no account, so a dropped connection used to make them a stranger
+// locked out of their own match. Each guest session gets a random resume token;
+// presenting it again restores the same identity (and so the same seat).
+const guestTokens = new Map(); // token -> { username, display }
+
 function joinRoom(ws, s, g) {
+  clearTimeout(g.reapTimer);
+  g.reapTimer = null;
   s.gameId = g.id;
   let p = g.players.find((p) => p.username === s.username);
   if (!p) {
@@ -545,12 +564,22 @@ async function handle(ws, s, m) {
       // Account-free alpha play: a display name is all that's needed. The key
       // is namespaced + randomised so guests can never collide with accounts
       // (and never touch stats or ELO — see recordResult / findRanked).
+      const resume = typeof m.token === 'string' ? guestTokens.get(m.token) : null;
+      if (resume) {
+        s.username = resume.username;
+        s.display = resume.display;
+        s.guest = true;
+        return send(ws, { t: 'guestOk', username: resume.display, token: m.token });
+      }
       const name = (m.name || '').trim().slice(0, 20);
       if (name.length < 2) return send(ws, { t: 'authErr', message: 'Pick a name (2+ characters).' });
       s.username = `guest:${name.toLowerCase()}#${randomBytes(3).toString('hex')}`;
       s.display = name;
       s.guest = true;
-      return send(ws, { t: 'guestOk', username: name });
+      const token = randomBytes(18).toString('hex');
+      guestTokens.set(token, { username: s.username, display: name });
+      if (guestTokens.size > 5000) guestTokens.delete(guestTokens.keys().next().value);
+      return send(ws, { t: 'guestOk', username: name, token });
     }
     case 'createGame': {
       if (!s.username) return send(ws, { t: 'error', message: 'Not signed in.' });
@@ -743,6 +772,9 @@ async function handle(ws, s, m) {
     }
     case 'leaveGame':
       return leaveRoom(ws, s);
+    case 'ping':
+      // A client back from the background checks its socket is really alive.
+      return send(ws, { t: 'pong' });
   }
 }
 
@@ -829,7 +861,7 @@ wss.on('connection', (ws) => {
       if (g) {
         const p = g.players.find((p) => p.ws === ws);
         if (p) p.ws = null; // keep the slot for reconnect
-        if (g.players.every((p) => !p.ws)) games.delete(g.id);
+        if (g.players.every((p) => !p.ws)) scheduleReap(g);
         else broadcastLobby(g);
       }
     }

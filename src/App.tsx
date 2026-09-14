@@ -14,6 +14,7 @@ import { FullscreenToggle } from './ui/FullscreenToggle';
 import { useMusic } from './audio/music';
 import { initSfx } from './audio/sfx';
 import { useNet } from './net/useNet';
+import { initSessionKeeper } from './net/sessionKeeper';
 import { useGame } from './store';
 import './App.css';
 
@@ -21,6 +22,11 @@ export default function App() {
   const screen = useNet((s) => s.screen);
   const init = useNet((s) => s.init);
   useEffect(() => init(), [init]);
+  // Autosave the live match so a tab the browser reloads or discards while the
+  // player is in another window comes straight back (after init has restored).
+  useEffect(() => initSessionKeeper(), []);
+  // Bumped when the browser takes the WebGL context away: remount a fresh scene.
+  const sceneEpoch = useGame((s) => s.sceneEpoch);
 
   // Compact phone layout: a body class scopes the CSS overrides so it also
   // reaches the entry screens, modals and floating toggles (Settings → Layout).
@@ -63,7 +69,7 @@ export default function App() {
         <div className="app">
           {/* A physics/WebGL crash must never take the HUD + bots down with it. */}
           <SceneBoundary>
-            <Scene />
+            <Scene key={sceneEpoch} />
           </SceneBoundary>
           <HUD />
           <BotDriver />

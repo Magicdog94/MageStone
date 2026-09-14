@@ -205,6 +205,9 @@ export function HUD() {
   const label = usePlayerLabel();
   // A bot's turn is never "my turn" — the BotDriver plays it; humans watch.
   const myTurn = !bots[game.current] && (!online || game.current === myColor);
+  const netStatus = useNet((s) => s.status);
+  const netRoom = useNet((s) => s.room);
+  const netDown = netStatus !== 'online' || !netRoom;
   const exitToLobby = () => {
     useNet.getState().leaveRoom();
     useNet.setState({ screen: 'lobby' });
@@ -324,11 +327,18 @@ export function HUD() {
           {graveBank}
         </span>
       </div>
-      {online && (
-        <div className={`turn-banner ${myTurn ? 'mine' : ''}`} style={{ '--accent': COLORS[game.current] } as CSSProperties}>
-          {myTurn ? 'Your turn' : `${label(game.current)}'s turn`}
-        </div>
-      )}
+      {online &&
+        (netDown ? (
+          // The phone or browser dropped the connection while the player was
+          // elsewhere; useNet is already reconnecting them to their seat.
+          <div className="turn-banner net-down" role="status">
+            {netRoom ? 'Connection lost — reconnecting…' : 'This match is no longer on the server'}
+          </div>
+        ) : (
+          <div className={`turn-banner ${myTurn ? 'mine' : ''}`} style={{ '--accent': COLORS[game.current] } as CSSProperties}>
+            {myTurn ? 'Your turn' : `${label(game.current)}'s turn`}
+          </div>
+        ))}
 
       <SiegeBanner />
       <EliminationToast />

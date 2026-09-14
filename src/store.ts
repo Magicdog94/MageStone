@@ -175,6 +175,11 @@ interface UIState {
    *  resolve from engine values almost immediately instead of waiting 10s. */
   sceneDown: boolean;
   setSceneDown: (down: boolean) => void;
+  /** Bumped to throw the whole 3D view away and build a fresh one — used when
+   *  the browser takes the WebGL context (typically while the player is in
+   *  another app or window) and a dead black board would otherwise remain. */
+  sceneEpoch: number;
+  rebuildScene: () => void;
   /** Camera-lock view: quarter-turns applied to the BOARD so the acting human's
    *  edge faces the fixed camera (0 when the lock is off; bots don't move it). */
   viewOffset: number;
@@ -275,6 +280,8 @@ interface UIState {
 
 // Rate-limits physics-world rebuilds (see bumpPhysicsEpoch).
 let lastEpochBump = 0;
+// Rate-limits whole-scene rebuilds (see rebuildScene).
+let lastSceneRebuild = 0;
 
 /** In an online match a client may only act on its own colour's turn — except
  *  the bot controller (the host), which also acts for the bot colours. */
@@ -293,6 +300,7 @@ export const useGame = create<UIState>((set, get) => ({
   deathNonce: 0,
   physicsEpoch: 0,
   sceneDown: false,
+  sceneEpoch: 0,
   boltMode: false,
   combatNonce: 0,
   combatRoll: null,
@@ -472,6 +480,14 @@ export const useGame = create<UIState>((set, get) => ({
     set((s) => ({ physicsEpoch: s.physicsEpoch + 1 }));
   },
   setSceneDown: (down) => set({ sceneDown: down }),
+  rebuildScene: () => {
+    // Throttled so a context that keeps dying can't remount in a tight loop.
+    const now = Date.now();
+    if (now - lastSceneRebuild < 3000) return;
+    lastSceneRebuild = now;
+    console.warn('MageStone: the 3D view lost its graphics context — rebuilding it.');
+    set((s) => ({ sceneEpoch: s.sceneEpoch + 1 }));
+  },
 
   showCombatRoll: (info) =>
     set((s) => ({

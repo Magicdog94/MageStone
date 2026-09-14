@@ -39,7 +39,8 @@ import {
   canRitual,
   collect,
   combatOdds,
-
+  diceLeft,
+  dieSpentBy,
   endActivation,
   graveAt,
   gravestoneBank,
@@ -48,7 +49,9 @@ import {
   magePowerDie,
   moveUnit,
   novaVictims,
+  NOVA_COST,
   RITUAL_AREA,
+  RITUAL_HOLD_ROUNDS,
   plannedAttackers,
   resolveAttack,
   resolveBolt,
@@ -58,9 +61,10 @@ import {
   rollDice,
   stonesAt,
   unitById,
+  unitDie,
   warriorCount,
 } from './rules';
-import { NEXUS_CELLS, allCells, edgeRotation, sameCell } from './board';
+import { N, NEXUS_CELLS, allCells, edgeRotation, exists, sameCell } from './board';
 import type { Cell, Die, GameState, PlayerColor, Unit, UnitKind } from './types';
 
 export type BotLevel = 'easy' | 'medium' | 'hard';
@@ -391,12 +395,20 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
     // ---- moves (a die of the unit's kind must be free, unit not yet used) ----
     if (state.unitsMovedThisTurn.includes(u.id) || state.unitsActedThisTurn.includes(u.id)) continue;
     const seen = new Set<number>();
-    const dice = availableDice(state).filter(
-      (d) => canDieMoveUnit(d, u, state) && !seen.has(d.value) && !!seen.add(d.value),
-    );
+    const dice = availableDice(state)
+      .filter((d) => canDieMoveUnit(d, u, state) && !seen.has(d.value) && !!seen.add(d.value))
+      // Cheapest first: the engine spends the lowest die that covers a move,
+      // so a square a small die reaches is the SAME play on a bigger one.
+      .sort((a, b) => a.value - b.value);
+    const covered = new Set<number>();
     for (const die of dice) {
       const dests = legalMoves(state, u, die.value);
       for (const dest of dests) {
+        if (BRAIN.known) {
+          const key = dest.r * N + dest.c;
+          if (covered.has(key)) continue;
+          covered.add(key);
+        }
         let score: number;
         if (u.kind === 'mage') {
           const onStone = stonesAt(state, dest).length > 0;
@@ -549,6 +561,13 @@ interface BrainOpts {
   /** Worth of a COMPLETE six-stone race, spread over the climb toward it.
    *  Exposed so the arena can A/B how hard the Mage should chase stones. */
   raceValue: number;
+  /** Play the CURRENT turn structure: read the shared dice everyone can see
+   *  (an opponent's reach this round is known, not guessed), expect ONE
+   *  activation in reply rather than a whole turn, price a pass as forfeiting
+   *  the dice still in hand, and judge the Rite over its full-round hold. */
+  known: boolean;
+  /** Worth of each activation still to come this round (see `evaluate`). */
+  tempo: number;
 }
 const BRAIN: BrainOpts = {
   rollouts: true,
@@ -556,6 +575,8 @@ const BRAIN: BrainOpts = {
   jitter: true,
   reply: true,
   eval2: true,
+  known: true,
+  tempo: 6,
   race: true,
   // 480 -> 700 gained 56%; 1000 REGRESSED to 40% (the Mage chased stones at
   // the expense of the board). 700 is the measured sweet spot.
@@ -652,48 +673,319 @@ function expectedDamage(state: GameState, atk: PlayerColor, vic: PlayerColor): n
   return (items[0] ?? 0) + (items[1] ?? 0) * 0.75 + (items[2] ?? 0) * 0.5;
 }
 
-/** Is the ritual (if any) currently intact — priest alive, in the Nexus, and no
- *  enemy anywhere in the 16-square ritual area (Nexus + its 12-square circle)? */
+// ---- The dice on the table ---------------------------------------------------
+//
+// The round's five dice are SHARED, already rolled, and visible to everyone. So
+// for the rest of a round nobody's reach is a matter of chance: an opponent can
+// use exactly the dice they have not spent yet. The brain above predates that —
+// it rolled imaginary dice for its opponents and gave them a whole three-dice
+// turn to reply with, when play now ALTERNATES and what comes back is ONE
+// activation. These helpers read the real dice instead. (No peeking: the pool
+// is on the table for every player, human or bot.)
+
+const DIRS4: ReadonlyArray<readonly [number, number]> = [
+  [-1, 0],
+  [1, 0],
+  [0, -1],
+  [0, 1],
+];
+
+/** Which squares hold a unit — a flat 16×16 grid for fast route-finding. */
+function occupancyOf(state: GameState): Uint8Array {
+  const g = new Uint8Array(N * N);
+  for (const u of state.units) g[u.cell.r * N + u.cell.c] = 1;
+  return g;
+}
+
+/** Route length from `from` to every square within `max` steps (255 = out of
+ *  reach): orthogonal, bending, through empty squares — rules.ts::legalMoves. */
+function routeDist(occ: Uint8Array, from: Cell, max: number): Uint8Array {
+  const dist = new Uint8Array(N * N).fill(255);
+  const start = from.r * N + from.c;
+  dist[start] = 0;
+  let frontier = [start];
+  for (let d = 1; d <= max && frontier.length; d++) {
+    const next: number[] = [];
+    for (const i of frontier) {
+      const r = (i / N) | 0;
+      const c = i % N;
+      for (const [dr, dc] of DIRS4) {
+        const nr = r + dr;
+        const nc = c + dc;
+        if (!exists(nr, nc)) continue;
+        const j = nr * N + nc;
+        if (dist[j] !== 255 || occ[j]) continue;
+        dist[j] = d;
+        next.push(j);
+      }
+    }
+    frontier = next;
+  }
+  return dist;
+}
+
+/** Steps for a unit to stand orthogonally beside `target`: 0 if it already
+ *  does, 255 if it cannot get there. */
+function stepsBeside(dist: Uint8Array, occ: Uint8Array, from: Cell, target: Cell): number {
+  if (manhattan(from, target) === 1) return 0;
+  let best = 255;
+  for (const [dr, dc] of DIRS4) {
+    const r = target.r + dr;
+    const c = target.c + dc;
+    if (!exists(r, c) || occ[r * N + c]) continue;
+    best = Math.min(best, dist[r * N + c]);
+  }
+  return best;
+}
+
+/** What a player can still commit THIS round, read off the shared pool. */
+interface Hand {
+  /** Unspent Warrior dice, highest first. */
+  warrior: number[];
+  /** Their best unspent Mage / Priest die (0 = none left). */
+  mage: number;
+  priest: number;
+  /** Dice they may still spend under the three-dice budget. */
+  budget: number;
+  /** Activations still to come — the budget, capped by dice actually left. */
+  acts: number;
+}
+
+/** `p`'s hand for the rest of the round, or null when `p` gets no further
+ *  activation in it (passed, out of budget, eliminated, or between rounds). */
+function handOf(state: GameState, p: PlayerColor): Hand | null {
+  if (state.turnPhase !== 'act' || state.eliminated.includes(p) || state.passed.includes(p)) return null;
+  const budget = diceLeft(state, p);
+  if (budget <= 0) return null;
+  let free = 0;
+  let mage = 0;
+  let priest = 0;
+  const warrior: number[] = [];
+  for (const d of state.dice) {
+    if (dieSpentBy(d, p) !== null) continue;
+    free++;
+    if (d.kind === 'warrior') warrior.push(d.value);
+    else if (d.kind === 'mage') mage = Math.max(mage, d.value);
+    else priest = Math.max(priest, d.value);
+  }
+  if (!free) return null;
+  warrior.sort((a, b) => b - a);
+  return { warrior, mage, priest, budget, acts: Math.min(budget, free) };
+}
+
+/**
+ * What `atk` can destroy of `vic`'s with its NEXT activation, on the dice it
+ * actually holds. The options are a Warrior gang (each Warrior matched to its
+ * own die that covers its walk; Warriors that already moved this round and
+ * stand beside the victim join free), a Mage melee, a Bolt (move, then strike
+ * within the same die's range, with no defence), or a Nova. Each is priced the
+ * way the attacker would weigh it: the expected kill minus the expected loss of
+ * whichever attacker falls in a failed fight. The best option counts in full;
+ * with dice to spare the runner-up counts a little, since they strike again
+ * after the victim's reply.
+ */
+function knownThreat(state: GameState, atk: PlayerColor, vic: PlayerColor, hand: Hand, occ: Uint8Array): number {
+  const victims = state.units.filter((u) => u.owner === vic);
+  if (!victims.length) return 0;
+  const scarcity = graveScarcity(state);
+  const moved = state.unitsMovedThisTurn;
+  const acted = state.unitsActedThisTurn;
+  const maxW = hand.warrior[0] ?? 0;
+  const wAsc = [...hand.warrior].reverse();
+  const wCap = Math.min(hand.budget, wAsc.length);
+
+  const gang = state.units
+    .filter((u) => u.owner === atk && u.kind === 'warrior' && !acted.includes(u.id))
+    .map((w) => {
+      const fresh = !moved.includes(w.id);
+      return { w, fresh, dist: fresh && maxW > 0 ? routeDist(occ, w.cell, maxW) : null };
+    });
+  const warriorLoss = gang.length ? worth(gang[0].w, scarcity) : 0;
+
+  const mage = state.units.find((u) => u.owner === atk && u.kind === 'mage' && !acted.includes(u.id));
+  const mageFresh = !!mage && !moved.includes(mage.id);
+  // a Mage that already moved acts on its move die; a fresh one needs a Mage die
+  const mageDie = mage ? (mageFresh ? hand.mage : (unitDie(state, mage.id)?.value ?? 0)) : 0;
+  const mageDist = mage && mageFresh && hand.mage > 0 ? routeDist(occ, mage.cell, hand.mage) : null;
+  const mageSpots: Cell[] = [];
+  if (mage && mageDie > 0) {
+    if (mageDist) {
+      for (let i = 0; i < N * N; i++) if (mageDist[i] <= hand.mage) mageSpots.push({ r: (i / N) | 0, c: i % N });
+    } else {
+      mageSpots.push(mage.cell);
+    }
+  }
+
+  const options: number[] = [];
+  for (const v of victims) {
+    const defFaces = v.kind === 'mage' ? magePowerDie(v.activated) : 6;
+    const val = worth(v, scarcity);
+
+    let free = 0;
+    const needs: number[] = [];
+    for (const g of gang) {
+      if (!g.fresh) {
+        if (manhattan(g.w.cell, v.cell) === 1) free++;
+      } else if (g.dist) {
+        const s = stepsBeside(g.dist, occ, g.w.cell, v.cell);
+        if (s <= maxW) needs.push(s);
+      }
+    }
+    // shortest walks first, each taking the smallest die that covers it
+    needs.sort((a, b) => a - b);
+    const used = wAsc.map(() => false);
+    let matched = 0;
+    for (const need of needs) {
+      if (matched >= wCap) break;
+      const k = wAsc.findIndex((value, i) => !used[i] && value >= need);
+      if (k < 0) continue;
+      used[k] = true;
+      matched++;
+    }
+    const n = Math.min(3, free + matched);
+    if (n > 0) {
+      const odds = quickOdds(n, defFaces);
+      options.push(odds * val - (1 - odds) * warriorLoss);
+    }
+
+    if (mage && mageDie > 0) {
+      const beside = mageDist
+        ? stepsBeside(mageDist, occ, mage.cell, v.cell) <= hand.mage
+        : manhattan(mage.cell, v.cell) === 1;
+      if (beside) {
+        // a lost melee kills the Mage itself
+        const odds = faceOdds(magePowerDie(mage.activated), defFaces);
+        options.push(odds * val - (1 - odds) * worth(mage, scarcity));
+      }
+      if (mage.activated >= 1 && mageSpots.some((c) => manhattan(c, v.cell) <= mageDie)) {
+        options.push(val - 8); // −8: the spent stone lands back on the board
+      }
+    }
+  }
+  if (mage && mageDie > 0 && mage.activated >= NOVA_COST) {
+    let nova = 0;
+    for (const c of mageSpots) {
+      let sum = 0;
+      for (const v of victims) {
+        if (Math.max(Math.abs(v.cell.r - c.r), Math.abs(v.cell.c - c.c)) === 1) sum += worth(v, scarcity);
+      }
+      nova = Math.max(nova, sum - 30);
+    }
+    if (nova > 0) options.push(nova);
+  }
+  if (!options.length) return 0;
+  options.sort((a, b) => b - a);
+  const second = hand.acts >= 2 ? Math.max(0, options[1] ?? 0) : 0;
+  return Math.max(0, options[0]) + 0.3 * second;
+}
+
+/** Can `mage` reach its own base — and so win — with the owner's next
+ *  activation? (A Mage with six in hand but not yet all Activated walks home
+ *  and activates in that same activation.) */
+function mageGetsHome(state: GameState, mage: Unit, hand: Hand, occ: Uint8Array): boolean {
+  if (state.unitsActedThisTurn.includes(mage.id)) return false;
+  const home = baseCells(state, mage.owner);
+  if (state.unitsMovedThisTurn.includes(mage.id)) {
+    return mage.activated < STONES_TO_WIN && home.some((c) => sameCell(c, mage.cell));
+  }
+  if (hand.mage <= 0) return false;
+  const dist = routeDist(occ, mage.cell, hand.mage);
+  return home.some((c) => dist[c.r * N + c.c] <= hand.mage);
+}
+
+/** Is the ritual (if any) currently intact — Priest alive, in the Nexus, and
+ *  no enemy on a Nexus square? */
 function ritualStands(state: GameState): boolean {
   return ritualIntact(state);
 }
 
-/** Chance a standing ritual survives the coming round: every enemy must fail
- *  both to step into an open Nexus cell and to kill the Priest (melee or
- *  bolt). Open cells matter — a Nexus packed with the ritualist's own units
- *  can only be broken by killing through to the Priest. */
-function ritualSurvival(state: GameState): number {
+/** Rounds of dice NOBODY has rolled yet that a standing Rite must still outlast
+ *  before it pays out. Declared this round → the whole next round; declared
+ *  last round → none (it wins as the next round opens). */
+function ritualBlindRounds(state: GameState): number {
+  const rit = state.ritual;
+  if (!rit) return 0;
+  const inRound = state.turnPhase === 'act' ? 1 : 0;
+  return Math.max(0, rit.round + RITUAL_HOLD_ROUNDS - state.turn - inRound);
+}
+
+/** Chance `p` CANNOT break the Rite over one round of dice not yet rolled:
+ *  every unit must fail to reach an open Nexus square and to kill the Priest. */
+function blindRoundFail(state: GameState, p: PlayerColor, priest: Unit, open: Cell[]): number {
+  let fail = 1;
+  for (const u of state.units) {
+    if (u.owner !== p) continue;
+    if (open.length) {
+      const d = Math.min(...open.map((c) => manhattan(u.cell, c)));
+      fail *= 1 - reachProb(u.kind, d);
+    }
+    if (u.kind !== 'priest') {
+      // melee the Priest — it defends d6, and a repel leaves the Rite standing
+      const reach = reachProb(u.kind, manhattan(u.cell, priest.cell) - 1);
+      const odds = u.kind === 'mage' ? faceOdds(magePowerDie(u.activated), 6) : quickOdds(1, 6);
+      fail *= 1 - reach * odds;
+    }
+    if (u.kind === 'mage' && u.activated >= 1) {
+      // bolt the Priest — indefensible, so reaching it is the whole story
+      const d = manhattan(u.cell, priest.cell);
+      if (d <= 6) fail *= 1 - ((7 - Math.max(1, d)) / 6) * 0.92;
+    }
+  }
+  return fail;
+}
+
+/** Chance `p` breaks the Rite with its NEXT activation, on the dice it holds:
+ *  walking any unit onto an open Nexus square or Bolting the Priest is certain;
+ *  a melee on the Priest is a fight. */
+function breakChanceNow(state: GameState, p: PlayerColor, hand: Hand, occ: Uint8Array, priest: Unit, open: Cell[]): number {
+  let best = 0;
+  const maxW = hand.warrior[0] ?? 0;
+  for (const u of state.units) {
+    if (u.owner !== p || state.unitsActedThisTurn.includes(u.id)) continue;
+    const fresh = !state.unitsMovedThisTurn.includes(u.id);
+    const die = fresh ? (u.kind === 'warrior' ? maxW : u.kind === 'mage' ? hand.mage : hand.priest) : 0;
+    const dist = die > 0 ? routeDist(occ, u.cell, die) : null;
+    if (dist && open.some((c) => dist[c.r * N + c.c] <= die)) return 1;
+    if (u.kind === 'priest') continue;
+    const range = fresh ? die : (unitDie(state, u.id)?.value ?? 0);
+    if (u.kind === 'mage' && u.activated >= 1 && range > 0) {
+      if (manhattan(u.cell, priest.cell) <= range) return 1;
+      if (dist) {
+        for (let i = 0; i < N * N; i++) {
+          if (dist[i] > die) continue;
+          if (Math.abs(((i / N) | 0) - priest.cell.r) + Math.abs((i % N) - priest.cell.c) <= range) return 1;
+        }
+      }
+    }
+    const beside = dist
+      ? stepsBeside(dist, occ, u.cell, priest.cell) <= die
+      : !fresh && manhattan(u.cell, priest.cell) === 1;
+    if (beside) best = Math.max(best, u.kind === 'mage' ? faceOdds(magePowerDie(u.activated), 6) : quickOdds(1, 6));
+  }
+  return best;
+}
+
+/**
+ * Chance a standing Rite survives to pay out. It is declared in one round, must
+ * hold through the whole NEXT round, and wins as the round after opens. So it
+ * faces two kinds of threat: the rest of the current round, on dice every
+ * player can already see, and each full round still to come, on dice nobody has
+ * rolled. (A sure break is discounted a touch: the ritualist may get to screen
+ * the square or kill the breaker first.) Open squares matter — a Nexus packed
+ * with the ritualist's own units can only be broken by killing the Priest.
+ */
+function ritualSurvival(state: GameState, occ: Uint8Array = occupancyOf(state)): number {
   const rit = state.ritual;
   const priest = rit && unitById(state, rit.priestId);
   if (!rit || !priest) return 0;
-  // ANY free square of the 16-cell ritual area breaks it, not just the Nexus —
-  // that is a far wider perimeter to screen, and the survival odds have to say
-  // so or the bot will keep buying rituals it cannot hold.
-  const open = RITUAL_AREA.filter((c) => !state.units.some((u) => sameCell(u.cell, c)));
+  const open = RITUAL_AREA.filter((c) => !occ[c.r * N + c.c]);
+  const blind = BRAIN.known ? ritualBlindRounds(state) : 1;
   let survive = 1;
   for (const p of state.players) {
     if (p === rit.player || state.eliminated.includes(p)) continue;
-    let fail = 1; // chance this enemy CANNOT break the ritual
-    for (const u of state.units) {
-      if (u.owner !== p) continue;
-      if (open.length) {
-        const d = Math.min(...open.map((c) => manhattan(u.cell, c)));
-        fail *= 1 - reachProb(u.kind, d);
-      }
-      if (u.kind !== 'priest') {
-        // melee the Priest — it defends d6, and a repel leaves the ritual
-        // standing (it may flee, but never out of a Nexus it wants to hold)
-        const reach = reachProb(u.kind, manhattan(u.cell, priest.cell) - 1);
-        const odds = u.kind === 'mage' ? faceOdds(magePowerDie(u.activated), 6) : quickOdds(1, 6);
-        fail *= 1 - reach * odds;
-      }
-      if (u.kind === 'mage' && u.activated >= 1) {
-        // bolt the Priest — indefensible, so reaching it is the whole story
-        const d = manhattan(u.cell, priest.cell);
-        if (d <= 6) fail *= 1 - ((7 - Math.max(1, d)) / 6) * 0.92;
-      }
-    }
-    survive *= fail;
+    const hand = BRAIN.known ? handOf(state, p) : null;
+    if (hand) survive *= 1 - 0.9 * breakChanceNow(state, p, hand, occ, priest, open);
+    for (let k = 0; k < blind; k++) survive *= blindRoundFail(state, p, priest, open);
   }
   return survive;
 }
@@ -812,22 +1104,47 @@ function nextActivePlayer(state: GameState, after: PlayerColor): PlayerColor | n
  */
 function evaluate(state: GameState, me: PlayerColor): number {
   if (state.winner) return state.winner === me ? WIN : -WIN;
+  if (state.winMethod === 'Draw') return 0;
   if (state.eliminated.includes(me)) return -WIN * 0.8;
   const nextP = nextActivePlayer(state, me);
+  // Dice still in hand this round. Every one is another activation, so a hand
+  // is worth something in itself — which is also what makes a pass (giving the
+  // rest of the round to the opponent) cost what it really costs.
+  const occ = BRAIN.known ? occupancyOf(state) : null;
+  const myHand = occ ? handOf(state, me) : null;
   let v = sideScore(state, me);
+  if (myHand) v += BRAIN.tempo * myHand.acts;
   for (const e of state.players) {
     if (e === me || state.eliminated.includes(e)) continue;
     const w = state.players.length === 2 || e === nextP ? 1 : 0.7;
     v -= sideScore(state, e);
-    v -= w * expectedDamage(state, e, me);
-    v += 0.45 * expectedDamage(state, me, e);
+    const eHand = occ ? handOf(state, e) : null;
+    if (eHand && occ) {
+      // They act again this round, on dice everyone can see: read them exactly.
+      v -= w * knownThreat(state, e, me, eHand, occ);
+      v -= BRAIN.tempo * eHand.acts;
+    } else {
+      // Their next move comes next round, on dice nobody has rolled yet.
+      v -= w * (occ ? 0.8 : 1) * expectedDamage(state, e, me);
+    }
+    if (myHand && occ) v += 0.4 * knownThreat(state, me, e, myHand, occ);
+    else v += (occ ? 0.35 : 0.45) * expectedDamage(state, me, e);
 
     // ---- imminent-win reads (the "block or lose" instincts) ----
     const eUnits = state.units.filter((u) => u.owner === e);
     const eMage = eUnits.find((u) => u.kind === 'mage');
     if (eMage) {
       const dHome = minDist(eMage.cell, baseCells(state, e));
-      if (eMage.activated >= STONES_TO_WIN) {
+      if (
+        eHand &&
+        occ &&
+        eMage.activated + eMage.carried >= STONES_TO_WIN &&
+        mageGetsHome(state, eMage, eHand, occ)
+      ) {
+        // Their next activation walks it home and wins, on a die already on the
+        // table. Nothing else on the board matters unless this activation stops it.
+        v -= WIN * 0.4;
+      } else if (eMage.activated >= STONES_TO_WIN) {
         // they win the moment that mage steps home — price it at the actual
         // chance their next roll covers the distance
         v -= 1600 * reachProb('mage', dHome);
@@ -856,11 +1173,17 @@ function evaluate(state: GameState, me: PlayerColor): number {
   v += state.eliminated.filter((p) => p !== me).length * 200;
 
   if (state.ritual && ritualStands(state)) {
+    const p = ritualSurvival(state, occ ?? undefined);
+    // Past its last chance to be broken, a Rite is simply the result.
+    const settled = !!occ && p >= 0.98 && ritualBlindRounds(state) === 0;
     if (state.ritual.player === me) {
       // Squared: a coin-flip ritual is a cheap lottery ticket that bleeds the
       // Priest — only near-unstoppable rituals should outshine the board game.
-      const p = ritualSurvival(state);
-      v += 5200 * p * p;
+      v += settled ? WIN * 0.4 : 5200 * p * p;
+    } else if (occ) {
+      // Priced by how likely it is to survive what WE can still throw at it —
+      // a Rite we hold a sure break for costs little, one we can't touch is lost.
+      v -= settled ? WIN * 0.4 : 6500 * p;
     } else {
       // If the ritualist plays next, nobody else gets a turn to break it —
       // ending our turn like this is close to losing outright.
@@ -953,6 +1276,7 @@ function fingerprint(state: GameState): string {
  *  (ending the turn immediately is always on the table). */
 function turnValue(state: GameState, me: PlayerColor, depth: number, sr: Search): number {
   if (state.winner) return state.winner === me ? WIN : -WIN;
+  if (state.winMethod === 'Draw') return 0;
   if (depth <= 0 || performance.now() > sr.deadline) return evaluate(state, me);
   const key = depth >= 2 ? `${fingerprint(state)}#${depth}` : null;
   if (key) {
@@ -1155,7 +1479,14 @@ function searchAction(state: GameState): BotAction | null {
   const sr = newSearch(BRAIN.rollouts && replyActive() ? passEnd : hardDeadline);
   const cands = candidateActions(state, 'hard');
   if (!cands.length) return null;
-  const endNow = evaluate(state, me);
+  // Before a die is committed, "do nothing" is a PASS: it forfeits every die
+  // still in hand for the rest of the round. Judge standing pat as exactly
+  // that — otherwise any turn where no single play beats the board as it
+  // stands hands the whole rest of the round to the opponent.
+  const endNow =
+    BRAIN.known && state.activationDice.length === 0
+      ? evaluate({ ...state, passed: [...state.passed, me] }, me)
+      : evaluate(state, me);
 
   const pass1 = rootCandidates(cands).map((c) => ({ c, v: actionValue(state, c.a, me, 2, sr) }));
   pass1.sort((a, b) => b.v - a.v);

@@ -93,7 +93,9 @@ export function BotDriver() {
           return;
         }
         // act — one activation at a time; the bot ends it and passes play.
-        const sig = `${g.current}:${g.turnPhase}:${g.dice.filter((d) => !d.usedBy).length}:${g.units.length}`;
+        // (dice claims, not dice: the pool is shared and `usedBy` is per player)
+        const claims = g.dice.reduce((n, d) => n + Object.keys(d.usedBy).length, 0);
+        const sig = `${g.current}:${g.turnPhase}:${claims}:${g.units.length}`;
         if (pending.current) {
           if (pending.current.sig !== sig) {
             pending.current = null; // the board moved on — re-decide

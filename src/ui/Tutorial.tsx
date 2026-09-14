@@ -499,20 +499,26 @@ const SECTIONS: Section[] = [
             action (whether or not the Mage moved with it).
           </li>
           <li>
-            Bolt is <span className="htp-em">indefensible</span> — no defence roll is made, by a
-            Mage or by anything else. Whatever it hits is defeated outright.
+            <span className="htp-em">Only a Mage can block a Bolt.</span> Anything else gets no
+            defence roll and is defeated outright.
           </li>
           <li>
-            The stone is not destroyed: it leaves your Mage and lands on the square that was hit,{' '}
-            <span className="htp-em">still Activated</span>, ready for any Mage to claim.
+            A targeted Mage rolls its power die against yours (ties re-roll). If it wins, the Bolt
+            is blocked — it does not bounce back, so your Mage is unharmed. If it loses, it is
+            defeated as normal.
+          </li>
+          <li>
+            Blocked or not, the stone is not destroyed: it leaves your Mage and lands on the
+            target’s square, <span className="htp-em">still Activated</span> — so a Mage that
+            blocks is standing on it and can pick it up on its turn.
           </li>
         </ul>
         <h4 className="htp-sub htp-sub--m">Nova — 4 Activated stones</h4>
         <ul className="htp-list">
           <li>
             Destroys every <span className="htp-em">enemy</span> unit in the 8 squares surrounding
-            the Mage — diagonals included. No defence rolls are made, and friendly units are
-            unharmed.
+            the Mage — diagonals included. <span className="htp-em">Nothing can block a Nova</span>,
+            not even a Mage: no defence rolls are made, and friendly units are unharmed.
           </li>
           <li>
             The 4 spent stones are placed on the four <span className="htp-em">diagonal</span>{' '}

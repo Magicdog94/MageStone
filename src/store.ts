@@ -686,7 +686,11 @@ export const useGame = create<UIState>((set, get) => ({
     const faces = magePowerDie(mage.activated);
     const game2 = resolveBolt(game, mageId, targetId, rng);
     if (game2 === game) return;
-    const repelled = !game2.units.every((u) => u.id !== targetId) && target.kind === 'mage';
+    // Only a Mage rolls to block, and then its duel plays out on the combat dice
+    // like any fight. (A slain Mage respawns under the same id, so read the
+    // outcome, not whether the unit still exists.)
+    const duel = target.kind === 'mage' ? game2.lastCombat : null;
+    const repelled = duel?.outcome === 'lose';
     const out: Partial<UIState> = {
       game: game2,
       boltMode: false,
@@ -710,7 +714,7 @@ export const useGame = create<UIState>((set, get) => ({
     }
     set(out);
     // Unopposed bolts have no dice to sweep the banner away — clear it after a beat.
-    if (target.kind !== 'mage') {
+    if (!duel) {
       window.setTimeout(() => {
         if (get().combatIntro?.kind === 'bolt') set({ combatIntro: null });
       }, 4200);

@@ -150,8 +150,8 @@ function CombatAnnounce() {
         <span className="ca-dot">·</span>
         <span className="ca-faces">
           {intro.defenderKind === 'mage'
-            ? `${intro.attackFaces} vs ${intro.defenseFaces} — only a Mage can repel`
-            : 'no defence'}
+            ? `${intro.attackFaces} vs ${intro.defenseFaces} — the Mage tries to block`
+            : 'no defence — only a Mage can block'}
         </span>
       </div>
     );
@@ -478,7 +478,7 @@ export function HUD() {
                     title={
                       boltTargets(game, selectedUnit.id).length === 0
                         ? 'No enemies within range'
-                        : 'Spend 1 Activated stone — click any enemy in range. Indefensible: no defence roll is made. The stone lands on the target square, still Activated, for anyone to claim.'
+                        : 'Spend 1 Activated stone — click any enemy in range. Only an enemy Mage can block it (its power die against yours); nothing else gets a defence roll. Blocked or not, the stone lands on the target square, still Activated.'
                     }
                   >
                     {boltMode ? 'Pick a target…' : 'Bolt'}

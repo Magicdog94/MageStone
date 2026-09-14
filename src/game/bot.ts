@@ -362,10 +362,12 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
         if (canBolt(state, u.id)) {
           for (const t of boltTargets(state, u.id)) {
             const value = targetValue(state, t);
-            // Bolt is INDEFENSIBLE: whatever it hits dies, a Mage included. So
-            // it is always a guaranteed kill for one stone — the only question
-            // is whether the stone is better spent or kept.
-            let score = 22 + value * 0.9;
+            // Only a Mage can block a Bolt, so against anything else it is a
+            // guaranteed kill for one stone. A Mage duels it (power die against
+            // power die), and a blocked Bolt wastes the stone at the very feet
+            // of the Mage that blocked it.
+            const hit = t.kind === 'mage' ? combatOdds(state, [u.id], t.id).win : 1;
+            let score = hit * (22 + value * 0.9) - (1 - hit) * 14;
             // The stone is not destroyed: it lands on the target's square, still
             // Activated, where an enemy Mage may simply pick it up and count it
             // at once. Discount by how easily the nearest enemy Mage reaches it.
@@ -658,13 +660,14 @@ function expectedDamage(state: GameState, atk: PlayerColor, vic: PlayerColor): n
     if (mage) {
       const pm = reachProb('mage', manhattan(mage.cell, v.cell) - 1);
       if (pm > 0.05) items.push(pm * faceOdds(magePowerDie(mage.activated), defFaces) * val);
-      // bolt: range = the mage die's roll, and it is INDEFENSIBLE — nothing
-      // repels it, so reaching the target is the only uncertainty
+      // bolt: range = the mage die's roll. Only a Mage can block it, so for
+      // anything else reaching the target is the only uncertainty
       if (mage.activated >= 1) {
         const d = manhattan(mage.cell, v.cell);
         if (d <= 6) {
           const pDie = ((7 - Math.max(1, d)) / 6) * 0.92;
-          items.push(pDie * Math.max(0, val - 8)); // −8: the spent stone lands back on the board
+          const hit = v.kind === 'mage' ? faceOdds(magePowerDie(mage.activated), defFaces) : 1;
+          items.push(pDie * hit * Math.max(0, val - 8)); // −8: the spent stone lands back on the board
         }
       }
     }
@@ -778,7 +781,7 @@ function handOf(state: GameState, p: PlayerColor): Hand | null {
  * actually holds. The options are a Warrior gang (each Warrior matched to its
  * own die that covers its walk; Warriors that already moved this round and
  * stand beside the victim join free), a Mage melee, a Bolt (move, then strike
- * within the same die's range, with no defence), or a Nova. Each is priced the
+ * within the same die's range; only a Mage may block it), or a Nova. Each is priced the
  * way the attacker would weigh it: the expected kill minus the expected loss of
  * whichever attacker falls in a failed fight. The best option counts in full;
  * with dice to spare the runner-up counts a little, since they strike again
@@ -858,7 +861,13 @@ function knownThreat(state: GameState, atk: PlayerColor, vic: PlayerColor, hand:
         options.push(odds * val - (1 - odds) * worth(mage, scarcity));
       }
       if (mage.activated >= 1 && mageSpots.some((c) => manhattan(c, v.cell) <= mageDie)) {
-        options.push(val - 8); // −8: the spent stone lands back on the board
+        if (v.kind === 'mage') {
+          // a Mage may block it — and a blocked stone lands at its own feet
+          const hit = faceOdds(magePowerDie(mage.activated), defFaces);
+          options.push(hit * val - 8 - (1 - hit) * 15);
+        } else {
+          options.push(val - 8); // −8: the spent stone lands back on the board
+        }
       }
     }
   }
@@ -926,7 +935,7 @@ function blindRoundFail(state: GameState, p: PlayerColor, priest: Unit, open: Ce
       fail *= 1 - reach * odds;
     }
     if (u.kind === 'mage' && u.activated >= 1) {
-      // bolt the Priest — indefensible, so reaching it is the whole story
+      // bolt the Priest — only a Mage can block, so reaching it is the whole story
       const d = manhattan(u.cell, priest.cell);
       if (d <= 6) fail *= 1 - ((7 - Math.max(1, d)) / 6) * 0.92;
     }
@@ -1236,9 +1245,17 @@ function outcomes(state: GameState, a: BotAction): { p: number; s: GameState }[]
         { p: 1 - pWin, s: lose },
       ];
     }
-    case 'bolt':
-      // indefensible: no defence roll, so there is a single certain outcome
-      return [{ p: 1, s: resolveBolt(state, a.unitId, a.targetId) }];
+    case 'bolt': {
+      // Only a Mage can block a Bolt: anything else is a single certain outcome,
+      // a Mage splits the play into hit / blocked at the duel's true odds.
+      const target = unitById(state, a.targetId);
+      if (target?.kind !== 'mage') return [{ p: 1, s: resolveBolt(state, a.unitId, a.targetId) }];
+      const pHit = combatOdds(state, [a.unitId], a.targetId).win;
+      return [
+        { p: pHit, s: resolveBolt(state, a.unitId, a.targetId, seqRng([HI, LO])) },
+        { p: 1 - pHit, s: resolveBolt(state, a.unitId, a.targetId, seqRng([LO, HI])) },
+      ];
+    }
   }
 }
 

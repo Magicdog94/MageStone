@@ -638,7 +638,7 @@ describe('TEST 4 — Mage death', () => {
 // ---- TEST 5 — Bolt ---------------------------------------------------------
 
 describe('TEST 5 — Bolt', () => {
-  it('is indefensible, costs one Activated stone, and leaves it Activated on the target square', () => {
+  it('kills a non-Mage outright, costs one Activated stone, and leaves it Activated on the target square', () => {
     let g = withDice(acting(), ['mage'], [4]);
     g = give(place(g, 'red-m', { r: 8, c: 8 }), 'red-m', 0, 3);
     g = place(g, 'blue-w1', { r: 8, c: 10 }); // 2 squares away, within range 4
@@ -654,15 +654,49 @@ describe('TEST 5 — Bolt', () => {
     expect(onTarget[0].activated).toBe(true);
   });
 
-  it('kills an enemy Mage outright — a Mage cannot repel it', () => {
+  it('can be BLOCKED by a targeted Mage — nothing bounces back, and the stone lands at its feet', () => {
+    let g = withDice(acting(), ['mage'], [4]);
+    g = give(place(g, 'red-m', { r: 8, c: 8 }), 'red-m', 0, 1); // casts on a d6
+    g = give(place(g, 'blue-m', { r: 8, c: 10 }), 'blue-m', 0, 2); // blocks on a d12
+    g = resolveBolt(g, 'red-m', 'blue-m', seq([LO, HI])); // caster rolls 1, target 12
+    expect(g.lastCombat).toMatchObject({ outcome: 'lose', defeatedId: null, attackFaces: 6, defenseFaces: 12 });
+    expect(at(g, 'blue-m').cell).toEqual({ r: 8, c: 10 }); // survives where it stood
+    expect(at(g, 'red-m').cell).toEqual({ r: 8, c: 8 }); // the caster is unharmed
+    expect(at(g, 'red-m').activated).toBe(0); // …but its stone is spent all the same
+    expect(g.kills.red).toBe(0);
+    const dropped = looseAt(g, { r: 8, c: 10 });
+    expect(dropped).toHaveLength(1);
+    expect(dropped[0].activated).toBe(true);
+    // Blue's activation: its Mage picks the stone up without moving, and it counts at once.
+    g = endActivation(g);
+    expect(g.current).toBe('blue');
+    g = collect(g, 'blue-m');
+    expect(at(g, 'blue-m').activated).toBe(3);
+  });
+
+  it('kills a Mage that fails to block, by the normal Mage defeat rules', () => {
     let g = withDice(acting(), ['mage'], [4]);
     g = give(place(g, 'red-m', { r: 8, c: 8 }), 'red-m', 0, 1);
-    g = give(place(g, 'blue-m', { r: 8, c: 9 }), 'blue-m', 0, 5); // a d20 Mage
-    // A rigged RNG that would lose every duel must make no difference.
-    g = resolveBolt(g, 'red-m', 'blue-m', seq([LO, LO, LO]));
-    expect(g.stones.filter((s) => s.carrier === 'blue-m' || s.carrier === null).length).toBeGreaterThan(0);
+    g = give(place(g, 'blue-m', { r: 8, c: 10 }), 'blue-m', 0, 2);
+    g = resolveBolt(g, 'red-m', 'blue-m', seq([HI, LO])); // caster rolls 6, target 1
+    expect(g.lastCombat).toMatchObject({ outcome: 'win', defeatedId: 'blue-m' });
     expect(at(g, 'blue-m').cell).toEqual({ r: 15, c: 7 }); // killed and respawned at base
-    expect(at(g, 'red-m').activated).toBe(0);
+    expect(g.kills.red).toBe(1);
+    // the Bolt's stone and the one the Mage dropped share the square, both Activated
+    const here = looseAt(g, { r: 8, c: 10 });
+    expect(here).toHaveLength(2);
+    expect(here.every((s) => s.activated)).toBe(true);
+  });
+
+  it('gives nothing but a Mage a defence roll — a bolted Priest simply falls', () => {
+    let g = withDice(acting(), ['mage'], [4]);
+    g = give(place(g, 'red-m', { r: 8, c: 8 }), 'red-m', 0, 1);
+    g = place(g, 'blue-p', { r: 8, c: 10 });
+    // a rigged RNG that would win any duel for the defender changes nothing
+    g = resolveBolt(g, 'red-m', 'blue-p', seq([LO, HI]));
+    expect(g.lastCombat).toBeNull();
+    expect(at(g, 'blue-p').cell).not.toEqual({ r: 8, c: 10 }); // defeated, back at base
+    expect(g.kills.red).toBe(1);
   });
 
   it('cannot be cast without an Activated stone', () => {
@@ -676,6 +710,15 @@ describe('TEST 5 — Bolt', () => {
 // ---- TEST 6 — Nova ---------------------------------------------------------
 
 describe('TEST 6 — Nova', () => {
+  it('cannot be blocked by anyone — not even a Mage', () => {
+    let g = withDice(acting(), ['mage'], [3]);
+    g = give(place(g, 'red-m', { r: 8, c: 8 }), 'red-m', 0, NOVA_COST);
+    g = give(place(g, 'blue-m', { r: 9, c: 9 }), 'blue-m', 0, 3); // a d12 Mage on the diagonal
+    g = resolveNova(g, 'red-m', seq([LO, HI]));
+    expect(g.lastCombat).toBeNull(); // no block roll at all
+    expect(at(g, 'blue-m').cell).toEqual({ r: 15, c: 7 }); // defeated, back at base
+  });
+
   it('costs four stones, kills only enemies, and lays the four stones on the diagonals', () => {
     let g = withDice(acting(), ['mage'], [3]);
     g = give(place(g, 'red-m', { r: 8, c: 8 }), 'red-m', 0, NOVA_COST);

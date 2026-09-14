@@ -684,13 +684,16 @@ function UnitPiece({ unit }: { unit: Unit }) {
   );
   const isTarget = boltMode ? isBoltTarget : isMeleeTarget;
   // Pre-attack chance of victory for the attack the selected unit would launch.
-  // (Bolts show no % — they kill outright unless an enemy Mage repels.)
+  // A Bolt shows a % only against a Mage — nothing else can block one.
   const winPct = useMemo(() => {
-    if (!isTarget || boltMode || !selectedUnitId) return null;
+    if (!isTarget || !selectedUnitId) return null;
+    if (boltMode) {
+      return unit.kind === 'mage' ? Math.round(combatOdds(game, [selectedUnitId], unit.id).win * 100) : null;
+    }
     const ids = plannedAttackers(game, selectedUnitId, unit.id);
     if (ids.length === 0) return null;
     return Math.round(combatOdds(game, ids, unit.id).win * 100);
-  }, [isTarget, boltMode, selectedUnitId, game, unit.id]);
+  }, [isTarget, boltMode, selectedUnitId, game, unit.id, unit.kind]);
 
   const ref = useRef<THREE.Group>(null);
   const outer = useRef<THREE.Group>(null);

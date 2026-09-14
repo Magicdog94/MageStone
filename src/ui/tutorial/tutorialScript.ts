@@ -511,7 +511,7 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-bolt',
         title: 'Cast BOLT — 1 stone',
-        body: 'A ranged kill: range = the mage die (4 here). Bolt is INDEFENSIBLE — no defence roll, whatever it hits. CLICK your Mage, press BOLT — enemies in range glow — then click the Blue Warrior.',
+        body: 'A ranged kill: range = the mage die (4 here). Only a Mage can block a Bolt — anything else gets no defence roll. CLICK your Mage, press BOLT — enemies in range glow — then click the Blue Warrior.',
         placement: 'bottom',
       },
       () => !unitById(g().game, 'blue-w1'),

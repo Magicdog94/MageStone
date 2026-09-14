@@ -34,12 +34,12 @@ const place = (g: GameState, id: string, cell: Cell): GameState => ({
   units: g.units.map((u) => (u.id === id ? { ...u, cell: { ...cell } } : u)),
 });
 
-/** Hand `count` loose stone tokens to a unit, already Activated. */
-function activatedStones(g: GameState, unitId: string, count: number): GameState {
+/** Hand `count` loose stone tokens to a unit, Activated or not. */
+function giveStones(g: GameState, unitId: string, count: number, activated: boolean): GameState {
   const free = g.stones.filter((s) => !s.carrier).slice(0, count).map((s) => s.id);
   return syncStones({
     ...g,
-    stones: g.stones.map((s) => (free.includes(s.id) ? { ...s, carrier: unitId, activated: true } : s)),
+    stones: g.stones.map((s) => (free.includes(s.id) ? { ...s, carrier: unitId, activated } : s)),
   });
 }
 
@@ -50,15 +50,17 @@ describe('AI brain — reading the dice on the table', () => {
   });
 
   it('Bolts an enemy Mage that can walk home and win on a die already rolled', () => {
-    // Blue's Mage holds six Activated stones three squares from home, and the
-    // shared Mage die (a 5) is still unspent by Blue — it wins on its next
-    // activation. Red's Mage has one Activated stone and the same 5 in range.
+    // Blue's Mage carries six stones three squares from home, and the shared
+    // Mage die (a 5) is still unspent by Blue — it walks home and activates
+    // them on its next activation. Red's Mage has two Activated stones (a d12
+    // against the carrier's d6, since a Mage may block a Bolt) and the same 5
+    // puts Blue in range.
     const g = position(
       (s) => {
         let t = place(s, 'blue-m', { r: 12, c: 8 });
         t = place(t, 'red-m', { r: 9, c: 8 });
-        t = activatedStones(t, 'blue-m', 6);
-        return activatedStones(t, 'red-m', 1);
+        t = giveStones(t, 'blue-m', 6, false);
+        return giveStones(t, 'red-m', 2, true);
       },
       { mage: 5, priest: 2, warrior: [1, 1, 1] },
     );

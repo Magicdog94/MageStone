@@ -951,17 +951,23 @@ export function boltTargets(state: GameState, unitId: string): Unit[] {
 /**
  * BOLT — spend 1 Activated stone to strike any enemy in range.
  *
- * It is **indefensible**: no defence roll is made by anything, a Mage included.
- * The target is defeated immediately by its normal defeat rules. The spent
- * stone is NOT destroyed — the same token leaves the Mage and lands on the
- * square that was hit, STILL ACTIVATED, so any Mage (including the enemy's) can
- * pick it up and count it immediately.
+ * Only a MAGE can block it. Against any other unit there is no defence roll at
+ * all: the target is defeated immediately by its normal defeat rules. A
+ * targeted Mage defends with its power die against the caster's power die
+ * (both read before the stone is spent; ties re-rolled, like any fight). If the
+ * defender wins, the Bolt is BLOCKED: the target survives and nothing bounces
+ * back — unlike a failed melee, the caster is unharmed.
+ *
+ * Either way the spent stone is NOT destroyed — the same token leaves the
+ * caster and lands on the target's square, STILL ACTIVATED. A Mage that blocks
+ * is standing on it, so it can collect it (and count it at once) with its own
+ * next action. Nova is the one power nothing can block.
  */
 export function resolveBolt(
   state: GameState,
   mageId: string,
   targetId: string,
-  _rng: RNG = defaultRng,
+  rng: RNG = defaultRng,
 ): GameState {
   if (state.turnPhase !== 'act' || gameOver(state)) return state;
   const mage = unitById(state, mageId);
@@ -980,6 +986,44 @@ export function resolveBolt(
   if (spent.length < BOLT_COST) return state;
   const spentIds = new Set(spent.map((s) => s.id));
 
+  // Only a Mage may try to block: its power die against the caster's.
+  let combat: CombatResult | null = null;
+  let blocked = false;
+  let logLine = `${mage.owner}'s Mage bolts ${target.owner}'s ${target.kind} — only a Mage can block it! `;
+  if (target.kind === 'mage') {
+    const attackFaces = magePowerDie(mage.activated);
+    const defenseFaces = magePowerDie(target.activated);
+    let attackRoll: number;
+    let defenseRoll: number;
+    // Ties re-roll, BOUNDED exactly as in resolveAttack (a rigged rng could tie
+    // for ever); a tie that survives the guard counts as a block.
+    let guard = 0;
+    do {
+      attackRoll = dN(attackFaces, rng);
+      defenseRoll = dN(defenseFaces, rng);
+    } while (attackRoll === defenseRoll && ++guard < 64);
+    blocked = attackRoll <= defenseRoll;
+    combat = {
+      attackerIds: [mageId],
+      defenderId: targetId,
+      attackerOwner: mage.owner,
+      defenderOwner: target.owner,
+      attackerKind: 'mage',
+      defenderKind: 'mage',
+      attackRoll,
+      attackDice: [attackRoll],
+      attackFaces,
+      defenseRoll,
+      defenseFaces,
+      outcome: blocked ? 'lose' : 'win',
+      defeatedId: blocked ? null : targetId,
+      defenderCell: { ...target.cell },
+    };
+    logLine = blocked
+      ? `${target.owner}'s Mage BLOCKS ${mage.owner}'s Bolt (${defenseRoll} beats ${attackRoll})! `
+      : `${mage.owner}'s Mage bolts ${target.owner}'s Mage (${attackRoll} beats ${defenseRoll})! `;
+  }
+
   let next: GameState = syncStones(
     dropStones(
       {
@@ -987,20 +1031,19 @@ export function resolveBolt(
         dice,
         activationDice,
         unitsActedThisTurn: markActed(state, mageId),
-        // A Bolt has no defence roll at all, so there are no combat dice to
-        // throw — the physical dice layer keys off `lastCombat`.
-        lastCombat: null,
+        // Only a Mage-on-Mage Bolt throws dice; the physical dice layer keys
+        // off `lastCombat`, so an unopposed Bolt leaves it null.
+        lastCombat: combat,
         log: [
           ...state.log,
-          `${mage.owner}'s Mage bolts ${target.owner}'s ${target.kind} — indefensible! ` +
-            `The spent MageStone drops (still Activated) where it struck.`,
+          `${logLine}The spent MageStone drops (still Activated) where it struck.`,
         ],
       },
       spentIds,
       target.cell,
     ),
   );
-  next = bumpKill(defeatUnit(next, targetId), mage.owner);
+  if (!blocked) next = bumpKill(defeatUnit(next, targetId), mage.owner);
   return checkVictory(resolveRespawns(next));
 }
 
@@ -1042,7 +1085,8 @@ function diagonalsOf(cell: Cell): Cell[] {
  * NOVA — spend 4 Activated stones for an indefensible area attack.
  *
  * Every ENEMY unit in the 8 squares surrounding the Mage is defeated
- * immediately, with no defence rolls. Friendly units are untouched. The four
+ * immediately, with no defence rolls — nothing can block a Nova, not even a
+ * Mage (the one difference from Bolt). Friendly units are untouched. The four
  * spent tokens are then placed on the four DIAGONAL squares around the Mage,
  * all still ACTIVATED and free for any Mage to collect.
  */

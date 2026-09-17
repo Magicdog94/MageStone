@@ -31,6 +31,7 @@ import {
 import { sameCell } from './game/board';
 import type { Cell, GameState, PlayerColor, UnitKind } from './game/types';
 import type { BotLevel } from './game/bot';
+import { TUT_LOCK, tutAllows, type TutRestrict } from './ui/tutorial/restrict';
 
 export type HealthBarMode = 'off' | 'always' | 'hover';
 export type LayoutMode = 'desktop' | 'mobile';
@@ -43,38 +44,10 @@ export type ModalId = 'newGame' | 'settings' | null;
 // from the gravestone, single-attack instead of triple, end the turn…).
 // Null — the usual case — means no restriction.
 
-export type TutActionName =
-  | 'roll'
-  | 'attack'
-  | 'bolt'
-  | 'nova'
-  | 'collect'
-  | 'activate'
-  | 'resurrect'
-  | 'ritual'
-  | 'undo'
-  | 'endTurn';
-
-export interface TutRestrict {
-  /** Unit ids the player may select (deselecting is always allowed). */
-  units?: string[];
-  /** Allowed move destinations; [] = this step involves no movement. */
-  dests?: Cell[];
-  /** Action verbs allowed this step ([] = none). */
-  actions?: TutActionName[];
-  /** Attack / bolt target unit ids allowed. */
-  targets?: string[];
-  /** A coordinated attack must bring at least this many attackers. */
-  minAttackers?: number;
-  /** Scripted dice for the task's combat (attacker rolls first, defender
-   *  last) — staged demo fights must land the taught outcome even when the
-   *  PLAYER throws the punch. Omitted = real dice. */
-  rig?: number[];
-}
-
-/** Does the restriction (if any) allow this action? */
-export const tutAllows = (r: TutRestrict | null | undefined, a: TutActionName): boolean =>
-  !r || !r.actions || r.actions.includes(a);
+// (The types, `tutAllows` and the between-task lock live in ui/tutorial/restrict.ts
+// so the tutorial's pure task table and its sweep test share them.)
+export { TUT_LOCK, tutAllows };
+export type { TutActionName, TutRestrict } from './ui/tutorial/restrict';
 
 // Compact phone layout: restored from the player's saved choice, else
 // auto-detected once from the device (coarse pointer or a small viewport —
@@ -288,6 +261,29 @@ let lastSceneRebuild = 0;
 const outOfTurn = (s: UIState) =>
   s.online && s.game.current !== s.myColor && !(s.botController && s.bots[s.game.current]);
 
+/**
+ * The guardrails a PLAYER gesture meets right now: the live task's, the
+ * between-task LOCK while the tutorial runs (see TUT_LOCK), or none at all.
+ * The 3D view and HUD select this too, so whatever is refused also stops
+ * glowing and its buttons disappear.
+ */
+export const activeRestrict = (s: { tutRestrict: TutRestrict | null; tutorial: boolean }): TutRestrict | null =>
+  s.tutRestrict ?? (s.tutorial ? TUT_LOCK : null);
+
+// The guided tutorial moves pieces itself (between-task beats, and fallbacks
+// for a task left undone) through these same store actions. While it does —
+// and only then — the guardrails stand aside.
+let scriptDepth = 0;
+export function asTutorialScript<T>(fn: () => T): T {
+  scriptDepth++;
+  try {
+    return fn();
+  } finally {
+    scriptDepth--;
+  }
+}
+const rx = (s: UIState): TutRestrict | null => (scriptDepth > 0 ? null : activeRestrict(s));
+
 export const useGame = create<UIState>((set, get) => ({
   game: createGame(2),
   selectedUnitId: null,
@@ -498,7 +494,7 @@ export const useGame = create<UIState>((set, get) => ({
 
   roll: () => {
     set((s) => {
-      if (outOfTurn(s) || !tutAllows(s.tutRestrict, 'roll')) return {};
+      if (outOfTurn(s) || !tutAllows(rx(s), 'roll')) return {};
       return {
         game: rollDice(s.game),
         selectedUnitId: null,
@@ -540,7 +536,8 @@ export const useGame = create<UIState>((set, get) => ({
       const unit = unitById(s.game, unitId);
       if (!unit || unit.owner !== s.game.current) return {};
       // Tutorial guardrail: only the unit(s) the live task teaches with.
-      if (s.tutRestrict?.units && !s.tutRestrict.units.includes(unitId)) return {};
+      const lim = rx(s);
+      if (lim?.units && !lim.units.includes(unitId)) return {};
       const die = s.game.dice.find((d) => d.id === s.selectedDieId);
       let dieId = die && canDieMoveUnit(die, unit, s.game) ? s.selectedDieId : null;
       // Unit-first flow: clicking a unit with no (matching) die selected
@@ -573,7 +570,8 @@ export const useGame = create<UIState>((set, get) => ({
       const { selectedUnitId, selectedDieId } = s;
       if (!selectedUnitId || !selectedDieId || outOfTurn(s)) return {};
       // Tutorial guardrail: only the square(s) the live task points at.
-      if (s.tutRestrict?.dests && !s.tutRestrict.dests.some((c) => sameCell(c, dest))) return {};
+      const lim = rx(s);
+      if (lim?.dests && !lim.dests.some((c) => sameCell(c, dest))) return {};
       const game = moveUnit(s.game, selectedUnitId, selectedDieId, dest);
       if (game === s.game) return {};
       // Keep the unit selected (it may still act); drop the spent die.
@@ -582,7 +580,7 @@ export const useGame = create<UIState>((set, get) => ({
 
   endActivation: () =>
     set((s) =>
-      outOfTurn(s) || !tutAllows(s.tutRestrict, 'endTurn')
+      outOfTurn(s) || !tutAllows(rx(s), 'endTurn')
         ? {}
         : {
             game: endActivation(s.game),
@@ -595,7 +593,7 @@ export const useGame = create<UIState>((set, get) => ({
 
   undoActivation: () =>
     set((s) => {
-      if (!s.undoPoint || outOfTurn(s) || !tutAllows(s.tutRestrict, 'undo')) return {};
+      if (!s.undoPoint || outOfTurn(s) || !tutAllows(rx(s), 'undo')) return {};
       return {
         game: s.undoPoint,
         undoPoint: null,
@@ -615,7 +613,7 @@ export const useGame = create<UIState>((set, get) => ({
           : plannedAttackers(game, selectedUnitId, targetId);
       if (ids.length === 0) return {};
       // Tutorial guardrail: only the taught attack (target + coordination size).
-      const r = s.tutRestrict;
+      const r = rx(s);
       if (
         r &&
         (!tutAllows(r, 'attack') ||
@@ -670,15 +668,16 @@ export const useGame = create<UIState>((set, get) => ({
       return out;
     }),
 
-  setBoltMode: (on) => set((s) => (on && !tutAllows(s.tutRestrict, 'bolt') ? {} : { boltMode: on })),
+  setBoltMode: (on) => set((s) => (on && !tutAllows(rx(s), 'bolt') ? {} : { boltMode: on })),
 
   castBolt: (targetId, rng) => {
     const s = get();
     const mageId = s.selectedUnitId;
     if (!mageId || outOfTurn(s)) return;
     // Tutorial guardrail: only the taught bolt at the taught target.
-    if (!tutAllows(s.tutRestrict, 'bolt')) return;
-    if (s.tutRestrict?.targets && !s.tutRestrict.targets.includes(targetId)) return;
+    if (!tutAllows(rx(s), 'bolt')) return;
+    const lim = rx(s);
+    if (lim?.targets && !lim.targets.includes(targetId)) return;
     const game = s.game;
     const mage = unitById(game, mageId);
     const target = unitById(game, targetId);
@@ -724,7 +723,7 @@ export const useGame = create<UIState>((set, get) => ({
   castNova: (rng) => {
     const s = get();
     const mageId = s.selectedUnitId;
-    if (!mageId || outOfTurn(s) || !tutAllows(s.tutRestrict, 'nova')) return;
+    if (!mageId || outOfTurn(s) || !tutAllows(rx(s), 'nova')) return;
     const game = s.game;
     const mage = unitById(game, mageId);
     if (!mage) return;
@@ -764,28 +763,28 @@ export const useGame = create<UIState>((set, get) => ({
 
   collectStones: () =>
     set((s) => {
-      if (!s.selectedUnitId || outOfTurn(s) || !tutAllows(s.tutRestrict, 'collect')) return {};
+      if (!s.selectedUnitId || outOfTurn(s) || !tutAllows(rx(s), 'collect')) return {};
       const game = collect(s.game, s.selectedUnitId);
       return game === s.game ? {} : { game };
     }),
 
   activateStones: () =>
     set((s) => {
-      if (!s.selectedUnitId || outOfTurn(s) || !tutAllows(s.tutRestrict, 'activate')) return {};
+      if (!s.selectedUnitId || outOfTurn(s) || !tutAllows(rx(s), 'activate')) return {};
       const game = activate(s.game, s.selectedUnitId);
       return game === s.game ? {} : { game };
     }),
 
   doResurrect: () =>
     set((s) => {
-      if (!s.selectedUnitId || outOfTurn(s) || !tutAllows(s.tutRestrict, 'resurrect')) return {};
+      if (!s.selectedUnitId || outOfTurn(s) || !tutAllows(rx(s), 'resurrect')) return {};
       const game = resurrect(s.game, s.selectedUnitId);
       return game === s.game ? {} : { game, selectedUnitId: null };
     }),
 
   doRitual: () =>
     set((s) => {
-      if (!s.selectedUnitId || outOfTurn(s) || !tutAllows(s.tutRestrict, 'ritual')) return {};
+      if (!s.selectedUnitId || outOfTurn(s) || !tutAllows(rx(s), 'ritual')) return {};
       const game = beginRitual(s.game, s.selectedUnitId);
       return game === s.game ? {} : { game };
     }),

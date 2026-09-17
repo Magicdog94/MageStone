@@ -7,7 +7,7 @@ import type { Cell } from '../game/types';
 import { besiegersOf, siegedPlayers } from '../game/rules';
 import { BOARD, CELL, COLORS, FLOOR_Y, TABLE_HALF, TILE_SURFACE, cellToWorld } from './coords';
 import { emeraldBoardTexture, groundBumpTexture, planksBumpTexture, woodBumpTexture } from './textures';
-import { attackTargetIds, moveDestinations, useGame } from '../store';
+import { activeRestrict, attackTargetIds, moveDestinations, useGame } from '../store';
 
 // Elevation stack (low → high): recessed map tiles, then the raised gold
 // trim lattice standing proud around each debossed tile pocket.
@@ -435,7 +435,7 @@ export function Board() {
   const game = useGame((s) => s.game);
   const selUnit = useGame((s) => s.selectedUnitId);
   const selDie = useGame((s) => s.selectedDieId);
-  const tutRestrict = useGame((s) => s.tutRestrict);
+  const tutRestrict = useGame(activeRestrict);
 
   const legalKeys = useMemo(
     () => new Set(moveDestinations(game, selUnit, selDie, tutRestrict).map(cellKey)),

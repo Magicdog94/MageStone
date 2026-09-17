@@ -1,10 +1,21 @@
-import { useGame, type TutRestrict } from '../../store';
-import { legalMoves, siegedPlayers, syncStones, unitById, warriorCount } from '../../game/rules';
-import { NEXUS_CELLS } from '../../game/board';
-import { createGame } from '../../game/setup';
+import { asTutorialScript, useGame, type TutRestrict } from '../../store';
+import { legalMoves, unitById } from '../../game/rules';
 import type { Callout } from './useTutorial';
-import type { Cell, Die, DieKind, GameState } from '../../game/types';
+import type { Cell, GameState } from '../../game/types';
 import { useTutorial } from './useTutorial';
+import {
+  MOVE_RESTRICT,
+  ROLL_RESTRICT,
+  SIEGE_DOOR,
+  TASKS,
+  afterSiegeLaid,
+  ritualBeat,
+  stagedGame,
+} from './tutorialTasks';
+
+/** Run store actions AS the script: the guardrails that stop the player (the
+ *  live task's, or the lock between tasks) stand aside for these calls only. */
+const S = asTutorialScript;
 
 const g = () => useGame.getState();
 
@@ -60,6 +71,9 @@ const dist = (a: Cell, b: Cell) => Math.abs(a.r - b.r) + Math.abs(a.c - b.c);
 // live, only the interaction the step teaches is accepted — wrong units,
 // wrong squares, wrong actions and End Activation simply don't respond, so the
 // player can explore clicks freely without ever wrecking the staged lesson.
+// Between tasks (restrict null) the board is LOCKED outright (TUT_LOCK), and
+// tutorialTasks.test.ts plays every allowed interaction to prove no task can be
+// left unfinishable. The script's own moves go through `S(...)`.
 
 async function playerTask(
   setup: (() => void) | null,
@@ -111,51 +125,32 @@ async function playerTask(
 }
 
 // ---- staging ---------------------------------------------------------------
-
-let diceNonce = 0;
-function mkDice(kinds: DieKind[], values: number[]): Die[] {
-  // The round pool is SHARED, so a staged die belongs to nobody in
-  // particular — usedBy fills in per player as each spends it.
-  return kinds.map((kind, i) => ({
-    id: `tut-die-${diceNonce++}`,
-    kind,
-    value: values[i],
-    usedBy: {},
-  }));
-}
-
-/** Hand `unitId` real MageStone tokens for a staged lesson. Activation lives on
- *  the token, so the demo boards are built by REASSIGNING stones, never by
- *  writing the derived `carried`/`activated` counters. */
-function giveStones(st: GameState, unitId: string, carried: number, activated: number): void {
-  const free = st.stones.filter((s) => !s.carrier);
-  let i = 0;
-  for (let n = 0; n < carried && i < free.length; n++, i++) {
-    free[i].carrier = unitId;
-    free[i].activated = false;
-  }
-  for (let n = 0; n < activated && i < free.length; n++, i++) {
-    free[i].carrier = unitId;
-    free[i].activated = true;
-  }
-}
+// Lesson boards, guardrails and "done" tests are data in tutorialTasks.ts.
 
 function stage(build: (st: GameState) => void): void {
-  const st = createGame(['red', 'blue'], 'diamond');
-  st.turnPhase = 'act';
-  build(st);
-  // Refresh the derived stone mirrors after any staging mutation.
-  Object.assign(st, syncStones(st));
   // Also clear transient combat/sorcery UI from the previous lesson — an armed
   // bolt or a lingering roll announcement must not leak onto the fresh board.
   useGame.setState({
-    game: st,
+    game: stagedGame(build),
     selectedUnitId: null,
     selectedDieId: null,
     rolling: false,
     boltMode: false,
     combatIntro: null,
     combatRoll: null,
+  });
+}
+
+/** Play a scripted engine beat between tasks (tutorialTasks.ts — the sweep test
+ *  checks the next task from exactly these boards). */
+function beat(next: (st: GameState) => GameState): void {
+  useGame.setState({
+    game: next(g().game),
+    selectedUnitId: null,
+    selectedDieId: null,
+    undoPoint: null,
+    rolling: false,
+    boltMode: false,
   });
 }
 
@@ -171,9 +166,11 @@ function stepToward(unitId: string, target: Cell): boolean {
   const moves = legalMoves(st, u, die.value);
   if (moves.length === 0) return false;
   const best = moves.reduce((a, b) => (dist(b, target) < dist(a, target) ? b : a));
-  g().selectUnit(unitId);
-  g().selectDie(die.id);
-  g().moveTo(best);
+  S(() => {
+    g().selectUnit(unitId);
+    g().selectDie(die.id);
+    g().moveTo(best);
+  });
   return true;
 }
 
@@ -186,9 +183,11 @@ function scriptMove(unitId: string, dest: Cell): void {
     (d) => !d.usedBy[st.current] && d.kind === u.kind,
   );
   if (!die) return;
-  g().selectUnit(unitId);
-  g().selectDie(die.id);
-  g().moveTo(dest);
+  S(() => {
+    g().selectUnit(unitId);
+    g().selectDie(die.id);
+    g().moveTo(dest);
+  });
 }
 
 /**
@@ -243,8 +242,8 @@ export async function runTutorial(onDone: () => void) {
         placement: 'top',
       },
       () => g().game.turnPhase !== 'roll' && !g().rolling,
-      () => g().roll(),
-      { timeoutMs: 120000, restrict: { units: [], dests: [], actions: ['roll'] } },
+      () => S(() => g().roll()),
+      { timeoutMs: 120000, restrict: ROLL_RESTRICT },
     );
     await until(() => !g().rolling, 15000);
     await wait(400);
@@ -293,7 +292,7 @@ export async function runTutorial(onDone: () => void) {
         if (w) stepToward(w.id, { r: 8, c: 8 });
       },
       // Any unit, any legal square — but not ending the activation yet.
-      { restrict: { actions: [] } },
+      { restrict: MOVE_RESTRICT },
     );
     await wait(500);
     await note({
@@ -304,14 +303,7 @@ export async function runTutorial(onDone: () => void) {
     });
 
     // ---- YOU attack (staged) ----------------------------------------------
-    const stageFight = () =>
-      stage((st) => {
-        st.units.find((u) => u.id === 'blue-w1')!.cell = { r: 6, c: 7 };
-        st.units.find((u) => u.id === 'red-w1')!.cell = { r: 5, c: 7 };
-        st.units.find((u) => u.id === 'red-w2')!.cell = { r: 7, c: 7 };
-        st.units.find((u) => u.id === 'red-w3')!.cell = { r: 6, c: 6 };
-        st.dice = mkDice(['warrior', 'warrior', 'warrior'], [4, 3, 3]);
-      });
+    const stageFight = () => stage(TASKS.attack.build);
     stageFight();
     await wait(700);
     await note({
@@ -335,25 +327,16 @@ export async function runTutorial(onDone: () => void) {
         body: 'CLICK one of your three Warriors around the enemy, then press TRIPLE ATTACK — 99% — and watch the real dice decide it.',
         placement: 'bottom',
       },
-      () => !unitById(g().game, 'blue-w1') || g().game.lastCombat !== null,
+      () => TASKS.attack.done(g().game),
       () => {
         const rig = [0.7, 0.55, 0.99, 0.2];
         let i = 0;
-        g().selectUnit('red-w1');
-        g().attack('blue-w1', ['red-w1', 'red-w2', 'red-w3'], () => rig[Math.min(i++, rig.length - 1)]);
+        S(() => {
+          g().selectUnit('red-w1');
+          g().attack('blue-w1', ['red-w1', 'red-w2', 'red-w3'], () => rig[Math.min(i++, rig.length - 1)]);
+        });
       },
-      {
-        timeoutMs: 120000,
-        // The three surrounding Warriors, the one enemy, TRIPLE only — no
-        // wandering off and breaking the ring.
-        restrict: {
-          units: ['red-w1', 'red-w2', 'red-w3'],
-          dests: [],
-          actions: ['attack'],
-          targets: ['blue-w1'],
-          minAttackers: 3,
-        },
-      },
+      { timeoutMs: 120000, restrict: TASKS.attack.restrict },
     );
     await until(() => g().combatRoll !== null, 6000);
     await wait(400);
@@ -384,14 +367,7 @@ export async function runTutorial(onDone: () => void) {
     });
 
     // ---- YOU resurrect (staged) -------------------------------------------
-    const stageRes = () =>
-      stage((st) => {
-        st.units = st.units.filter((u) => u.id !== 'red-w1'); // a warrior has fallen
-        const priest = st.units.find((u) => u.id === 'red-p')!;
-        priest.cell = { r: 5, c: 9 };
-        st.gravestones.push({ id: 'tut-grave-1', cell: { r: 5, c: 11 } });
-        st.dice = mkDice(['priest'], [2]);
-      });
+    const stageRes = () => stage(TASKS.resurrect.build);
     stageRes();
     await wait(700);
     await note({
@@ -408,15 +384,16 @@ export async function runTutorial(onDone: () => void) {
         body: 'CLICK your Priest, walk it ONTO the gravestone, then press RESURRECT.',
         placement: 'bottom',
       },
-      () => warriorCount(g().game, 'red') >= 6,
+      () => TASKS.resurrect.done(g().game),
       async () => {
         scriptMove('red-p', { r: 5, c: 11 });
         await wait(700);
-        g().selectUnit('red-p');
-        g().doResurrect();
+        S(() => {
+          g().selectUnit('red-p');
+          g().doResurrect();
+        });
       },
-      // Only the Priest, only the gravestone square, only Resurrect.
-      { restrict: { units: ['red-p'], dests: [{ r: 5, c: 11 }], actions: ['resurrect'] } },
+      { restrict: TASKS.resurrect.restrict },
     );
     await wait(600);
     await note({
@@ -427,14 +404,7 @@ export async function runTutorial(onDone: () => void) {
     });
 
     // ---- YOU collect + activate -------------------------------------------
-    const stageCollect = () =>
-      stage((st) => {
-        const mage = st.units.find((u) => u.id === 'red-m')!;
-        mage.cell = { r: 4, c: 8 };
-        const stone = st.stones.find((x) => !x.carrier)!;
-        stone.cell = { r: 5, c: 8 };
-        st.dice = mkDice(['mage'], [2]);
-      });
+    const stageCollect = () => stage(TASKS.collect.build);
     stageCollect();
     await wait(700);
     await playerTask(
@@ -445,15 +415,16 @@ export async function runTutorial(onDone: () => void) {
         body: 'Your Mage gathers the stones that win games. CLICK your Mage, step ONTO the stone’s square, then press COLLECT.',
         placement: 'bottom',
       },
-      () => (unitById(g().game, 'red-m')?.carried ?? 0) > 0,
+      () => TASKS.collect.done(g().game),
       async () => {
         scriptMove('red-m', { r: 5, c: 8 });
         await wait(700);
-        g().selectUnit('red-m');
-        g().collectStones();
+        S(() => {
+          g().selectUnit('red-m');
+          g().collectStones();
+        });
       },
-      // Only the Mage, only the stone's square, only Collect.
-      { restrict: { units: ['red-m'], dests: [{ r: 5, c: 8 }], actions: ['collect'] } },
+      { restrict: TASKS.collect.restrict },
     );
     await note({
       id: 'carried',
@@ -462,13 +433,7 @@ export async function runTutorial(onDone: () => void) {
       anchor: '[data-tut="carried"]',
       placement: 'bottom',
     });
-    const stageActivate = () =>
-      stage((st) => {
-        const mage = st.units.find((u) => u.id === 'red-m')!;
-        mage.cell = { r: 0, c: 8 }; // standing on its own base
-        giveStones(st, 'red-m', 1, 0);
-        st.dice = mkDice(['mage'], [2]);
-      });
+    const stageActivate = () => stage(TASKS.activate.build);
     stageActivate();
     await wait(700);
     await playerTask(
@@ -479,13 +444,13 @@ export async function runTutorial(onDone: () => void) {
         body: 'Stones only COUNT once activated ON your own base. Your Mage stands home — CLICK it, then press ACTIVATE. Silver becomes gold.',
         placement: 'bottom',
       },
-      () => (unitById(g().game, 'red-m')?.activated ?? 0) > 0,
-      () => {
-        g().selectUnit('red-m');
-        g().activateStones();
-      },
-      // The Mage stays home: no movement, just Activate.
-      { restrict: { units: ['red-m'], dests: [], actions: ['activate'] } },
+      () => TASKS.activate.done(g().game),
+      () =>
+        S(() => {
+          g().selectUnit('red-m');
+          g().activateStones();
+        }),
+      { restrict: TASKS.activate.restrict },
     );
     await note({
       id: 'gold',
@@ -496,14 +461,7 @@ export async function runTutorial(onDone: () => void) {
     });
 
     // ---- YOU cast Bolt -----------------------------------------------------
-    const stageBolt = () =>
-      stage((st) => {
-        const mage = st.units.find((u) => u.id === 'red-m')!;
-        mage.cell = { r: 8, c: 5 };
-        giveStones(st, 'red-m', 0, 4);
-        st.units.find((u) => u.id === 'blue-w1')!.cell = { r: 8, c: 8 };
-        st.dice = mkDice(['mage'], [4]);
-      });
+    const stageBolt = () => stage(TASKS.bolt.build);
     stageBolt();
     await wait(700);
     await playerTask(
@@ -514,16 +472,13 @@ export async function runTutorial(onDone: () => void) {
         body: 'A ranged kill: range = the mage die (4 here). Only a Mage can block a Bolt — anything else gets no defence roll. CLICK your Mage, press BOLT — enemies in range glow — then click the Blue Warrior.',
         placement: 'bottom',
       },
-      () => !unitById(g().game, 'blue-w1'),
-      () => {
-        g().selectUnit('red-m');
-        g().castBolt('blue-w1');
-      },
-      {
-        timeoutMs: 120000,
-        // Only the Mage, no walking, only Bolt at the staged target.
-        restrict: { units: ['red-m'], dests: [], actions: ['bolt'], targets: ['blue-w1'] },
-      },
+      () => TASKS.bolt.done(g().game),
+      () =>
+        S(() => {
+          g().selectUnit('red-m');
+          g().castBolt('blue-w1');
+        }),
+      { timeoutMs: 120000, restrict: TASKS.bolt.restrict },
     );
     await wait(1200);
     await note({
@@ -534,17 +489,7 @@ export async function runTutorial(onDone: () => void) {
     });
 
     // ---- YOU cast Nova -----------------------------------------------------
-    const stageNova = () =>
-      stage((st) => {
-        const mage = st.units.find((u) => u.id === 'red-m')!;
-        mage.cell = { r: 5, c: 5 };
-        giveStones(st, 'red-m', 0, 4);
-        st.units.find((u) => u.id === 'blue-w1')!.cell = { r: 4, c: 5 };
-        st.units.find((u) => u.id === 'blue-w2')!.cell = { r: 6, c: 6 }; // diagonal!
-        st.units.find((u) => u.id === 'blue-w3')!.cell = { r: 5, c: 6 };
-        st.units.find((u) => u.id === 'red-w1')!.cell = { r: 5, c: 4 }; // friendly — caught too!
-        st.dice = mkDice(['mage'], [2]);
-      });
+    const stageNova = () => stage(TASKS.nova.build);
     stageNova();
     await wait(700);
     await note({
@@ -561,15 +506,16 @@ export async function runTutorial(onDone: () => void) {
         body: 'CLICK your Mage, then press NOVA.',
         placement: 'bottom',
       },
-      () => !unitById(g().game, 'blue-w2'),
+      () => TASKS.nova.done(g().game),
       () => {
         const novaRig = [0.15, 0.5, 0.85];
         let ni = 0;
-        g().selectUnit('red-m');
-        g().castNova(() => novaRig[Math.min(ni++, novaRig.length - 1)]);
+        S(() => {
+          g().selectUnit('red-m');
+          g().castNova(() => novaRig[Math.min(ni++, novaRig.length - 1)]);
+        });
       },
-      // Only the Mage, standing its ground, only Nova.
-      { restrict: { units: ['red-m'], dests: [], actions: ['nova'] } },
+      { restrict: TASKS.nova.restrict },
     );
     await wait(1800);
     await note({
@@ -580,13 +526,7 @@ export async function runTutorial(onDone: () => void) {
     });
 
     // ---- YOU win: MageStone ------------------------------------------------
-    const stageWin1 = () =>
-      stage((st) => {
-        const mage = st.units.find((u) => u.id === 'red-m')!;
-        mage.cell = { r: 1, c: 8 };
-        giveStones(st, 'red-m', 6, 0);
-        st.dice = mkDice(['mage'], [2]);
-      });
+    const stageWin1 = () => stage(TASKS.win1.build);
     stageWin1();
     await wait(700);
     await playerTask(
@@ -597,23 +537,16 @@ export async function runTutorial(onDone: () => void) {
         body: 'Your Mage carries SIX stones, one step from home. CLICK it, step onto your base, then press ACTIVATE — six gold on your base wins on the spot.',
         placement: 'bottom',
       },
-      () => g().game.winner === 'red',
+      () => TASKS.win1.done(g().game),
       async () => {
         scriptMove('red-m', { r: 0, c: 8 });
         await wait(700);
-        g().selectUnit('red-m');
-        g().activateStones();
+        S(() => {
+          g().selectUnit('red-m');
+          g().activateStones();
+        });
       },
-      {
-        timeoutMs: 120000,
-        // Only the Mage, only home-base squares, only Activate. (Occupied base
-        // squares never glow — legalMoves filters them before this list does.)
-        restrict: {
-          units: ['red-m'],
-          dests: Array.from({ length: 8 }, (_, i) => ({ r: 0, c: 4 + i })),
-          actions: ['activate'],
-        },
-      },
+      { timeoutMs: 120000, restrict: TASKS.win1.restrict },
     );
     await wait(600);
     await note({
@@ -625,12 +558,7 @@ export async function runTutorial(onDone: () => void) {
     });
 
     // ---- YOU win: Ritual ---------------------------------------------------
-    const stageWin2 = () =>
-      stage((st) => {
-        const priest = st.units.find((u) => u.id === 'red-p')!;
-        priest.cell = { r: 7, c: 5 };
-        st.dice = mkDice(['priest'], [2]);
-      });
+    const stageWin2 = () => stage(TASKS.win2.build);
     stageWin2();
     await wait(700);
     await playerTask(
@@ -641,56 +569,50 @@ export async function runTutorial(onDone: () => void) {
         body: 'Walk your Priest into the NEXUS — the glowing 2×2 heart of the board — and press BEGIN RITUAL.',
         placement: 'bottom',
       },
-      () => g().game.ritual !== null,
+      () => TASKS.win2.done(g().game),
       async () => {
         scriptMove('red-p', { r: 7, c: 7 });
         await wait(700);
-        g().selectUnit('red-p');
-        g().doRitual();
+        S(() => {
+          g().selectUnit('red-p');
+          g().doRitual();
+        });
       },
-      // Only the Priest, only into the Nexus, only Begin Ritual.
-      { restrict: { units: ['red-p'], dests: [...NEXUS_CELLS], actions: ['ritual'] } },
+      { restrict: TASKS.win2.restrict },
     );
     await wait(400);
     await note({
       id: 'ritual-lit',
       title: 'The ritual is lit',
-      body: 'Now hold it one FULL ROUND: if your Priest dies, leaves, or any enemy steps into the Nexus, it breaks. Blue’s units are far away — watch its turn pass.',
+      body: 'Now HOLD it: the rest of this round, then one FULL round more. If your Priest dies or leaves, or any enemy steps into the Nexus, it breaks. Blue’s units are far away — watch the rounds pass.',
       anchor: '.ritual-flag',
       placement: 'top',
     });
-    g().endActivation();
+    beat(ritualBeat); // your activation ends — Blue's turn
     await wait(600);
     await note({
       id: 'ritual-blue',
       title: 'Blue can’t reach',
-      body: 'Blue would need to touch the Nexus or kill the Priest before the round ends — its army is home. The round passes…',
+      body: 'Blue would need to touch the Nexus or kill the Priest, and its army is home. The rest of this round passes, then a whole round more…',
       anchor: '.player-strip',
       placement: 'bottom',
     });
-    g().endActivation();
-    await wait(700);
+    // Play the hold out: passes, a new round's dice, passes — until the Rite
+    // pays out as the round after its full round opens.
+    for (let i = 0; i < 12 && !g().game.winner; i++) {
+      beat(ritualBeat);
+      await wait(650);
+    }
     await note({
       id: 'win2-done',
       title: 'Ritual Victory!',
-      body: 'Play returned to you with the Priest still holding a clear Nexus — the ritual completes. That’s the second road.',
+      body: 'A full round went by with your Priest still holding a clear Nexus — and as the next round opened, the ritual completed. That’s the second road.',
       anchor: '.winner',
       placement: 'left',
     });
 
     // ---- Sieges (HANDS-ON: you lay one, then swap sides and break it) ------
-    const BLUE_BASE: Cell[] = Array.from({ length: 8 }, (_, i) => ({ r: 15, c: 4 + i }));
-    const stageSiege = () =>
-      stage((st) => {
-        st.units = st.units.filter((u) => u.owner !== 'blue' || u.id === 'blue-w1');
-        st.pendingRespawns = [
-          { id: 'tut-sg-m', owner: 'blue', kind: 'mage', activated: 0 },
-          { id: 'tut-sg-p', owner: 'blue', kind: 'priest' },
-        ];
-        st.units.find((u) => u.id === 'red-w1')!.cell = { r: 14, c: 8 };
-        st.units.find((u) => u.id === 'blue-w1')!.cell = { r: 15, c: 9 }; // guards its base
-        st.dice = mkDice(['warrior'], [2]);
-      });
+    const stageSiege = () => stage(TASKS.siegeHold.build);
     stageSiege();
     await wait(700);
     await note({
@@ -704,15 +626,14 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-siege-hold',
         title: 'Lay a siege',
-        body: 'CLICK your Warrior by Blue’s base and march it ONTO a base square — plant your boots in their front door.',
+        body: 'CLICK your Warrior by Blue’s base and march it ONTO the glowing base square right in front of it — beside Blue’s guard. Plant your boots in their front door.',
         placement: 'top', // the action is on the NEAR board rows — box sits high
       },
-      () => siegedPlayers(g().game).includes('blue'),
-      () => {
-        scriptMove('red-w1', { r: 15, c: 8 });
-      },
-      // Only that Warrior, only onto Blue's base squares.
-      { restrict: { units: ['red-w1'], dests: BLUE_BASE, actions: [] } },
+      () => TASKS.siegeHold.done(g().game),
+      () => scriptMove('red-w1', SIEGE_DOOR),
+      // Only that Warrior, only onto the one base square beside Blue's guard —
+      // any other square leaves the intruder out of reach of the next task.
+      { restrict: TASKS.siegeHold.restrict },
     );
     await wait(600);
     await note({
@@ -722,10 +643,8 @@ export async function runTutorial(onDone: () => void) {
       anchor: '.siege-alert',
       placement: 'bottom',
     });
-    g().endActivation();
-    await wait(600);
-    g().tutorialRoll([3, 3, 6, 3, 2]);
-    await wait(500);
+    beat(afterSiegeLaid); // your activation ends; Blue's dice are dealt
+    await wait(1100);
     await note({
       id: 'siege-still',
       title: 'A turn later — still locked out',
@@ -734,31 +653,24 @@ export async function runTutorial(onDone: () => void) {
       placement: 'bottom',
     });
     await playerTask(
-      null,
+      // Carries on from the siege just laid; a retry re-stages it, siege held.
+      () => stage(TASKS.siegeBreak.build),
       {
         id: 'task-siege-break',
         title: 'Break the siege — as Blue',
         body: 'Blue’s last Warrior guards the base. CLICK it, then press SINGLE ATTACK and throw the intruder out.',
         placement: 'top', // the fight is on the near base row — keep it visible
       },
-      () => !unitById(g().game, 'red-w1'),
+      () => TASKS.siegeBreak.done(g().game),
       () => {
         const siegeRig = [0.99, 0];
         let si = 0;
-        g().selectUnit('blue-w1');
-        g().attack('red-w1', ['blue-w1'], () => siegeRig[Math.min(si++, siegeRig.length - 1)]);
+        S(() => {
+          g().selectUnit('blue-w1');
+          g().attack('red-w1', ['blue-w1'], () => siegeRig[Math.min(si++, siegeRig.length - 1)]);
+        });
       },
-      // Only Blue's Warrior, only the intruder — with scripted dice so the
-      // lesson's fight always lands.
-      {
-        restrict: {
-          units: ['blue-w1'],
-          dests: [],
-          actions: ['attack'],
-          targets: ['red-w1'],
-          rig: [0.99, 0],
-        },
-      },
+      { restrict: TASKS.siegeBreak.restrict },
     );
     await until(() => g().combatRoll !== null, 6000);
     await wait(400);
@@ -786,20 +698,7 @@ export async function runTutorial(onDone: () => void) {
     // ---- Conquest (HANDS-ON: you seal the door and finish it) --------------
     // `sealed` restores the post-siege arrangement — the kill task's re-stage
     // must come back with the base already held, or the kill wouldn't eliminate.
-    const stageWin3 = (sealed = false) =>
-      stage((st) => {
-        st.units = st.units.filter((u) => u.owner !== 'blue' || u.id === 'blue-w1');
-        const bw = st.units.find((u) => u.id === 'blue-w1')!;
-        bw.cell = { r: 12, c: 8 };
-        st.units.find((u) => u.id === 'red-w1')!.cell = { r: 11, c: 8 };
-        st.units.find((u) => u.id === 'red-w2')!.cell = { r: 12, c: 7 };
-        st.units.find((u) => u.id === 'red-w4')!.cell = sealed ? { r: 15, c: 5 } : { r: 14, c: 5 };
-        st.pendingRespawns = [
-          { id: 'tut-pr-m', owner: 'blue', kind: 'mage', activated: 0 },
-          { id: 'tut-pr-p', owner: 'blue', kind: 'priest' },
-        ];
-        st.dice = mkDice(['warrior', 'warrior', 'warrior'], [3, 4, 2]);
-      });
+    const stageWin3 = (sealed = false) => stage(sealed ? TASKS.win3Kill.build : TASKS.win3Siege.build);
     stageWin3();
     await wait(700);
     await note({
@@ -816,14 +715,13 @@ export async function runTutorial(onDone: () => void) {
         body: 'CLICK your Warrior standing beside Blue’s base and march it ONTO a base square — with the queue locked out, nobody is coming back.',
         placement: 'top',
       },
-      () => siegedPlayers(g().game).includes('blue'),
-      async () => {
-        g().selectUnit('red-w4');
-        await wait(250);
-        g().moveTo({ r: 15, c: 5 });
-      },
-      // Only the sealing Warrior, only onto Blue's base squares.
-      { restrict: { units: ['red-w4'], dests: BLUE_BASE, actions: [] } },
+      () => TASKS.win3Siege.done(g().game),
+      () =>
+        S(() => {
+          g().selectUnit('red-w4');
+          g().moveTo({ r: 15, c: 5 });
+        }),
+      { restrict: TASKS.win3Siege.restrict },
     );
     await wait(800);
     await note({
@@ -841,24 +739,16 @@ export async function runTutorial(onDone: () => void) {
         body: 'Two of your Warriors flank Blue’s survivor. CLICK one, then press DOUBLE ATTACK — no units left and no way to respawn is ELIMINATION.',
         placement: 'top',
       },
-      () => !unitById(g().game, 'blue-w1'),
-      async () => {
+      () => TASKS.win3Kill.done(g().game),
+      () => {
         const rig3 = [0.99, 0.99, 0];
         let i3 = 0;
-        g().selectUnit('red-w1');
-        g().attack('blue-w1', ['red-w1', 'red-w2'], () => rig3[Math.min(i3++, rig3.length - 1)]);
+        S(() => {
+          g().selectUnit('red-w1');
+          g().attack('blue-w1', ['red-w1', 'red-w2'], () => rig3[Math.min(i3++, rig3.length - 1)]);
+        });
       },
-      // The two flankers, the one survivor, DOUBLE only — scripted dice land it.
-      {
-        restrict: {
-          units: ['red-w1', 'red-w2'],
-          dests: [],
-          actions: ['attack'],
-          targets: ['blue-w1'],
-          minAttackers: 2,
-          rig: [0.99, 0.99, 0],
-        },
-      },
+      { restrict: TASKS.win3Kill.restrict },
     );
     await until(() => g().combatRoll !== null, 6000);
     await wait(400);

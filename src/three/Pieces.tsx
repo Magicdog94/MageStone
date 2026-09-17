@@ -6,7 +6,7 @@ import { Billboard, useAnimations, useGLTF } from '@react-three/drei';
 import type { CombatResult, Unit, UnitKind } from '../game/types';
 import { cellKey, sameCell } from '../game/board';
 import { COLORS, TILE_SURFACE, cellToWorld } from './coords';
-import { attackTargetIds, boltTargetIds, useGame, type DeathEvent } from '../store';
+import { activeRestrict, attackTargetIds, boltTargetIds, useGame, type DeathEvent } from '../store';
 import { combatOdds, plannedAttackers } from '../game/rules';
 import { useTokens, type TokenKind } from './tokens';
 
@@ -672,7 +672,7 @@ function UnitPiece({ unit }: { unit: Unit }) {
     game.current === unit.owner && !bots[unit.owner] && (!online || unit.owner === myColor);
   const boltMode = useGame((s) => s.boltMode);
   const castBolt = useGame((s) => s.castBolt);
-  const tutRestrict = useGame((s) => s.tutRestrict);
+  const tutRestrict = useGame(activeRestrict);
   // In bolt-targeting mode the Mage's RANGED targets glow instead of melee ones.
   const isBoltTarget = useMemo(
     () => boltMode && boltTargetIds(game, selectedUnitId, tutRestrict).has(unit.id),

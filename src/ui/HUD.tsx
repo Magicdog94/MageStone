@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { attackOptions, tutAllows, unitActions, useGame } from '../store';
+import { activeRestrict, attackOptions, tutAllows, unitActions, useGame } from '../store';
 import { useNet } from '../net/useNet';
 import { usePlayerLabel } from './playerNames';
 import { COLORS } from '../three/coords';
@@ -266,7 +266,7 @@ export function HUD() {
 
   const selectedUnit = selectedUnitId ? unitById(game, selectedUnitId) : undefined;
   // Tutorial guardrails: during a hands-on task only the taught buttons render.
-  const tutRestrict = useGame((s) => s.tutRestrict);
+  const tutRestrict = useGame(activeRestrict);
   const actions = unitActions(game, selectedUnitId, tutRestrict);
   const attackOpts = myTurn ? attackOptions(game, selectedUnitId, tutRestrict) : [];
   const phase = game.turnPhase;

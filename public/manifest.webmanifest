@@ -1,7 +1,7 @@
 {
   "name": "MageStone",
   "short_name": "MageStone",
-  "description": "Magical chess with dice — a 3D fantasy strategy board game.",
+  "description": "A 3D fantasy strategy board game for 2 or 4 players.",
   "start_url": "/",
   "display": "fullscreen",
   "orientation": "landscape",

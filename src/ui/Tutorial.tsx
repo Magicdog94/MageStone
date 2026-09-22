@@ -302,43 +302,22 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p className="htp-p">
-          There is <span className="htp-em">one shared set of five dice</span>. Whoever starts the
-          round rolls them, and they serve everybody for that whole round — you then take turns{' '}
-          <span className="htp-em">activating</span>, one die at a time, back and forth.
+          There are <span className="htp-em">no turn dice</span>. Every round you have{' '}
+          <span className="htp-em">six squares of movement</span> to spend across{' '}
+          <span className="htp-em">at most three units</span>, and you take turns{' '}
+          <span className="htp-em">activating</span>, one unit at a time, back and forth.
         </p>
         <ol className="htp-ol">
           <li>
-            The player going first rolls <span className="htp-em">5 dice for the table</span>:
-            <ul className="htp-list htp-list--sub htp-list--dice">
-              <li>
-                <span className="htp-die htp-die--w" />3 Warrior dice (Red)
-              </li>
-              <li>
-                <span className="htp-die htp-die--m" />1 Mage die (Blue)
-              </li>
-              <li>
-                <span className="htp-die htp-die--p" />1 Priest die (Green)
-              </li>
-            </ul>
-          </li>
-          <li>
-            <span className="htp-em">Nothing is discarded.</span> All five stay on the table and
-            visible to everyone — but each player may only ever spend{' '}
-            <span className="htp-em">3 of the 5</span> in a round. Whatever you don’t use is simply
-            ignored when the round ends.
-          </li>
-          <li>
-            The dice are <span className="htp-em">shared, not divided</span>. You and your opponent
-            may take the <span className="htp-em">same</span> die, or completely different ones —
-            a die another player has already used is still yours to take. The only limits are your
-            own three, and that you can’t take the same die twice yourself.
+            Divide your six squares however you like: one unit marching all{' '}
+            <span className="htp-em">6</span>, two units on 3 and 3, three units on 2 each — or a
+            Warrior 1, another 2 and a third 3.
           </li>
           <li>
             Take one <span className="htp-em">activation</span>, then pass to your opponent:
             <ul className="htp-list htp-list--sub">
-              <li>Choose 1 unused die.</li>
-              <li>Move its matching unit up to the die’s value — orthogonal (never diagonal), through empty squares; the path may turn.</li>
-              <li>A short move never wastes a big die: the LOWEST die of that colour that covers the move is the one used up (walk 3 squares with Warrior dice 2, 3 and 6 and the 3 is spent).</li>
+              <li>Choose one of your units — any kind, no die needed.</li>
+              <li>Move it as far as your remaining squares allow — orthogonal (never diagonal), through empty squares; the path may turn. Whatever it walks comes off your six.</li>
               <li>
                 Immediately resolve that unit’s action: attack (Warrior: Single, Double, Triple;
                 Mage), collect or activate a MageStone, resurrect a Warrior, or start a Nexus
@@ -348,24 +327,25 @@ const SECTIONS: Section[] = [
             </ul>
           </li>
           <li>
-            You alternate like that until both players have spent their 3 dice. Then the round ends
-            and everyone rolls again — with the{' '}
+            <span className="htp-em">A unit goes once per round.</span> Acting without moving is
+            still one of your three units — it just costs no squares.
+          </li>
+          <li>
+            You alternate until both players are out of units or squares (or choose to pass, which
+            gives up the rest of your round). Then everything refills, with the{' '}
             <span className="htp-em">starting player alternating</span> each round.
           </li>
         </ol>
-        <h4 className="htp-sub">Spending the same colour together</h4>
+        <h4 className="htp-sub">Ganging up</h4>
         <p className="htp-p">
-          The one exception to strict alternation: you may spend{' '}
-          <span className="htp-em">2 or 3 unused dice of the same colour</span> in a single
-          activation. All of their units move and resolve together — so two or three Warriors can
-          march in and make a coordinated attack as one activation — and play only passes once the
-          whole bundle is done.
+          Two or three Warriors standing beside the same enemy can attack together for 2d6 or 3d6.
+          Each Warrior joining in uses one of your three units for the round, but the attack itself
+          costs no squares — only walking them into place does.
         </p>
         <div className="htp-note">
-          <strong>Important:</strong> the Mage die moves only your Mage and the Priest die only your
-          Priest, so there is exactly one of each. The three Warrior dice are shared by all your
-          Warriors — one die per Warrior. Spend three dice on Warriors and your Mage and Priest sit
-          out the round entirely.
+          <strong>Important:</strong> dice are rolled for <span className="htp-em">fights only</span>{' '}
+          — coordinated attacks, and the Mage’s power die. Movement never involves a roll, so the
+          only luck in MageStone is in combat.
         </div>
         <MoveDiagram />
       </>
@@ -599,10 +579,10 @@ const SECTIONS: Section[] = [
     icon: 'scroll',
     body: (
       <ol className="htp-ol">
-        <li>The player going first rolls 5 shared dice — 3 Warrior (red), 1 Mage (blue), 1 Priest (green).</li>
-        <li>Nothing is discarded; you may spend 3 of your 5 this round.</li>
-        <li>Take turns activating: 1 die → move that unit → resolve its action → pass.</li>
-        <li>Or spend 2–3 same-colour dice together as one activation.</li>
+        <li>Each round you have 6 squares of movement, across at most 3 units.</li>
+        <li>Take turns activating: pick a unit → move it → resolve its action → pass.</li>
+        <li>A unit goes once a round; acting without moving still uses one of your three.</li>
+        <li>Two or three Warriors beside the same enemy can attack together (2d6 / 3d6).</li>
         <li>Fight, collect stones, activate stones, resurrect Warriors, or attempt the Nexus Ritual.</li>
         <li>When both players are done, the round ends and the starting player alternates.</li>
         <li>Win by MageStone Victory, Priest Ritual Victory, or Conquest Victory.</li>

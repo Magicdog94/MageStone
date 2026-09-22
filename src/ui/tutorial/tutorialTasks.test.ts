@@ -13,24 +13,23 @@ import {
   beginRitual,
   boltTargets,
   canBolt,
-  canDieMoveUnit,
   collect,
   endActivation,
   gameOver,
   legalMoves,
   moveUnit,
+  movesLeft,
   plannedAttackers,
   resolveAttack,
   resolveBolt,
   resolveNova,
   resurrect,
-  rollDice,
+  slotsLeft,
 } from '../../game/rules';
 import type { GameState } from '../../game/types';
 import { TUT_LOCK, tutAllows, type TutRestrict } from './restrict';
 import {
   MOVE_RESTRICT,
-  ROLL_RESTRICT,
   SIEGE_DOOR,
   TASKS,
   afterSiegeLaid,
@@ -58,20 +57,16 @@ function gestures(st: GameState, r: TutRestrict): GameState[] {
   const add = (next: GameState) => {
     if (next !== st) out.push(next);
   };
-  if (st.turnPhase === 'roll') {
-    if (tutAllows(r, 'roll')) for (const v of [LO, 0.5, HI]) add(rollDice(st, () => v));
-    return out;
-  }
   if (gameOver(st)) return out;
+  const squares = movesLeft(st, st.current);
   const units = st.units.filter((u) => u.owner === st.current && (!r.units || r.units.includes(u.id)));
   for (const u of units) {
-    // Moves: any die the player could put on this unit (auto-picked, or
-    // clicked in the tray first), to any square that is allowed to glow.
-    for (const d of st.dice) {
-      if (d.kind !== u.kind || !canDieMoveUnit(d, u, st)) continue;
-      for (const c of legalMoves(st, u, d.value)) {
+    // Moves: every square this unit's share of the round's allowance reaches,
+    // that the task allows to glow.
+    if (slotsLeft(st, st.current) > 0 && squares > 0) {
+      for (const c of legalMoves(st, u, squares)) {
         if (r.dests && !r.dests.some((x) => sameCell(x, c))) continue;
-        add(moveUnit(st, u.id, d.id, c));
+        add(moveUnit(st, u.id, '', c));
       }
     }
     if (tutAllows(r, 'attack') && u.kind !== 'priest') {
@@ -147,25 +142,15 @@ describe('Tutorial sweep — no allowed move can strand the player', () => {
     for (const spec of Object.values(TASKS) as TaskSpec[]) {
       expect(gestures(stagedGame(spec.build), TUT_LOCK)).toHaveLength(0);
     }
-    const roll = stagedGame((st) => {
-      st.turnPhase = 'roll';
-      st.dice = [];
-    });
-    expect(gestures(roll, TUT_LOCK)).toHaveLength(0);
   });
 
-  it('opening: the roll always leads to a first move, whatever the dice', () => {
-    const start = stagedGame((st) => {
-      st.turnPhase = 'roll';
-      st.dice = [];
-    });
-    for (const v of [LO, 0.1, 0.25, 0.4, 0.5, 0.6, 0.75, 0.9, HI]) {
-      const rolled = rollDice(start, () => v);
-      expect(gestures(start, ROLL_RESTRICT).length).toBeGreaterThan(0);
-      const moves = gestures(rolled, MOVE_RESTRICT);
-      expect(moves.length).toBeGreaterThan(0);
-      expect(moves.every((m) => m.unitsMovedThisTurn.length >= 1)).toBe(true);
-    }
+  it('opening: the first free move is always available', () => {
+    const start = stagedGame(() => {});
+    const moves = gestures(start, MOVE_RESTRICT);
+    expect(moves.length).toBeGreaterThan(0);
+    expect(moves.every((m) => m.unitsMovedThisTurn.length >= 1)).toBe(true);
+    // and every one of them costs squares out of the round's allowance
+    expect(moves.every((m) => movesLeft(m, 'red') < movesLeft(start, 'red'))).toBe(true);
   });
 
   it('siege: the siege can only be laid beside Blue’s guard, and Blue can always break it', () => {

@@ -42,10 +42,16 @@ import {
   diceLeft,
   dieSpentBy,
   endActivation,
+  budgetOf,
   graveAt,
   gravestoneBank,
   gravestoneCapacity,
+  isBudget,
   legalMoves,
+  moveDistance,
+  movesLeft,
+  slotsLeft,
+  UNITS_PER_ROUND,
   magePowerDie,
   moveUnit,
   novaVictims,
@@ -396,12 +402,19 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
 
     // ---- moves (a die of the unit's kind must be free, unit not yet used) ----
     if (state.unitsMovedThisTurn.includes(u.id) || state.unitsActedThisTurn.includes(u.id)) continue;
+    // BUDGET variant: no dice — one "virtual die" carries how far this unit may
+    // still walk out of the round's shared allowance.
+    const onBudget = isBudget(state);
+    const reach = onBudget ? movesLeft(state, me) : 0;
+    if (onBudget && (reach <= 0 || slotsLeft(state, me) <= 0)) continue;
     const seen = new Set<number>();
-    const dice = availableDice(state)
-      .filter((d) => canDieMoveUnit(d, u, state) && !seen.has(d.value) && !!seen.add(d.value))
-      // Cheapest first: the engine spends the lowest die that covers a move,
-      // so a square a small die reaches is the SAME play on a bigger one.
-      .sort((a, b) => a.value - b.value);
+    const dice = onBudget
+      ? [{ id: '', kind: u.kind, value: reach, usedBy: {} } as Die]
+      : availableDice(state)
+          .filter((d) => canDieMoveUnit(d, u, state) && !seen.has(d.value) && !!seen.add(d.value))
+          // Cheapest first: the engine spends the lowest die that covers a move,
+          // so a square a small die reaches is the SAME play on a bigger one.
+          .sort((a, b) => a.value - b.value);
     const covered = new Set<number>();
     for (const die of dice) {
       const dests = legalMoves(state, u, die.value);
@@ -512,7 +525,10 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
         if (score > 0)
           cands.push({
             a: { type: 'move', unitId: u.id, dieId: die.id, dest },
-            score: score - dieWorth(die) * 0.5,
+            // Dice: what the die burnt was worth. Budget: the squares it costs.
+            score: onBudget
+              ? score - (moveDistance(state, u, dest, reach) ?? 0) * 1.2
+              : score - dieWorth(die) * 0.5,
           });
       }
     }
@@ -757,6 +773,9 @@ interface Hand {
 /** `p`'s hand for the rest of the round, or null when `p` gets no further
  *  activation in it (passed, out of budget, eliminated, or between rounds). */
 function handOf(state: GameState, p: PlayerColor): Hand | null {
+  // The budget variant has no dice to read; the threat model falls back to the
+  // dice-unknown one (both sides alike).
+  if (isBudget(state)) return null;
   if (state.turnPhase !== 'act' || state.eliminated.includes(p) || state.passed.includes(p)) return null;
   const budget = diceLeft(state, p);
   if (budget <= 0) return null;
@@ -886,6 +905,112 @@ function knownThreat(state: GameState, atk: PlayerColor, vic: PlayerColor, hand:
   options.sort((a, b) => b - a);
   const second = hand.acts >= 2 ? Math.max(0, options[1] ?? 0) : 0;
   return Math.max(0, options[0]) + 0.3 * second;
+}
+
+/** Activations `p` will really get this round. A PASS forfeits the rest of the
+ *  round, so a passed player has none — without this, passing looks free and
+ *  the brain simply stops playing. */
+function actsLeft(state: GameState, p: PlayerColor): number {
+  if (state.passed.includes(p) || state.eliminated.includes(p)) return 0;
+  return slotsLeft(state, p);
+}
+
+/**
+ * What `atk` can destroy of `vic`'s with the squares and activations it has
+ * left — the movement-allowance twin of `knownThreat`. Warriors ganging up
+ * share ONE pool of squares between them (and one activation each), a Mage's
+ * melee costs its walk, and a Bolt simply costs the distance it flies, so
+ * anything within reach can be struck from where the Mage stands.
+ */
+function budgetThreat(
+  state: GameState,
+  atk: PlayerColor,
+  vic: PlayerColor,
+  occ: Uint8Array,
+  reach: number,
+  slots: number,
+): number {
+  const victims = state.units.filter((u) => u.owner === vic);
+  if (!victims.length || slots <= 0) return 0;
+  const scarcity = graveScarcity(state);
+  const acted = state.unitsActedThisTurn;
+  const moved = state.unitsMovedThisTurn;
+  const gang = state.units
+    .filter((u) => u.owner === atk && u.kind === 'warrior' && !acted.includes(u.id))
+    .map((w) => ({ w, fresh: !moved.includes(w.id), dist: routeDist(occ, w.cell, reach) }));
+  const warriorLoss = gang.length ? worth(gang[0].w, scarcity) : 0;
+  const mage = state.units.find((u) => u.owner === atk && u.kind === 'mage' && !acted.includes(u.id));
+  const mageDist = mage && !moved.includes(mage.id) ? routeDist(occ, mage.cell, reach) : null;
+
+  const options: number[] = [];
+  for (const v of victims) {
+    const defFaces = v.kind === 'mage' ? magePowerDie(v.activated) : 6;
+    const val = worth(v, scarcity);
+
+    // Warrior gang: cheapest walks first until the squares (or units) run out.
+    const walks = gang
+      .map((g) => (g.fresh ? stepsBeside(g.dist, occ, g.w.cell, v.cell) : manhattan(g.w.cell, v.cell) === 1 ? 0 : 255))
+      .filter((s) => s <= reach)
+      .sort((a, b) => a - b);
+    let spent = 0;
+    let n = 0;
+    for (const s of walks) {
+      if (n >= Math.min(3, slots) || spent + s > reach) break;
+      spent += s;
+      n++;
+    }
+    if (n > 0) {
+      const odds = quickOdds(n, defFaces);
+      options.push(odds * val - (1 - odds) * warriorLoss);
+    }
+
+    if (mage) {
+      const beside = mageDist
+        ? stepsBeside(mageDist, occ, mage.cell, v.cell) <= reach
+        : manhattan(mage.cell, v.cell) === 1;
+      if (beside) {
+        const odds = faceOdds(magePowerDie(mage.activated), defFaces);
+        options.push(odds * val - (1 - odds) * worth(mage, scarcity));
+      }
+      // A Bolt costs the distance it flies, so its reach IS the allowance.
+      if (mage.activated >= 1 && manhattan(mage.cell, v.cell) <= reach) {
+        if (v.kind === 'mage') {
+          const hit = faceOdds(magePowerDie(mage.activated), defFaces);
+          options.push(hit * val - 8 - (1 - hit) * 15);
+        } else {
+          options.push(val - 8);
+        }
+      }
+    }
+  }
+  // Nova costs no squares at all — only stones and an activation.
+  if (mage && mage.activated >= NOVA_COST) {
+    let nova = 0;
+    for (const v of victims) {
+      if (Math.max(Math.abs(v.cell.r - mage.cell.r), Math.abs(v.cell.c - mage.cell.c)) === 1) {
+        nova += worth(v, scarcity);
+      }
+    }
+    if (nova > 30) options.push(nova - 30);
+  }
+  if (!options.length) return 0;
+  options.sort((a, b) => b - a);
+  const second = slots >= 2 ? Math.max(0, options[1] ?? 0) : 0;
+  return Math.max(0, options[0]) + 0.3 * second;
+}
+
+/** Can this Mage walk home and win on the squares its owner has left? */
+function budgetMageGetsHome(state: GameState, mage: Unit, occ: Uint8Array): boolean {
+  if (state.unitsActedThisTurn.includes(mage.id)) return false;
+  const home = baseCells(state, mage.owner);
+  if (state.unitsMovedThisTurn.includes(mage.id)) {
+    return mage.activated < STONES_TO_WIN && home.some((c) => sameCell(c, mage.cell));
+  }
+  if (slotsLeft(state, mage.owner) <= 0) return false;
+  const reach = movesLeft(state, mage.owner);
+  if (reach <= 0) return home.some((c) => sameCell(c, mage.cell));
+  const dist = routeDist(occ, mage.cell, reach);
+  return home.some((c) => dist[c.r * N + c.c] <= reach);
 }
 
 /** Can `mage` reach its own base — and so win — with the owner's next
@@ -1120,15 +1245,27 @@ function evaluate(state: GameState, me: PlayerColor): number {
   // is worth something in itself — which is also what makes a pass (giving the
   // rest of the round to the opponent) cost what it really costs.
   const occ = BRAIN.known ? occupancyOf(state) : null;
+  const budget = isBudget(state);
   const myHand = occ ? handOf(state, me) : null;
   let v = sideScore(state, me);
   if (myHand) v += BRAIN.tempo * myHand.acts;
+  // Budget rules: what is left of my round is the same kind of asset.
+  if (budget && occ) v += BRAIN.tempo * actsLeft(state, me);
   for (const e of state.players) {
     if (e === me || state.eliminated.includes(e)) continue;
     const w = state.players.length === 2 || e === nextP ? 1 : 0.7;
     v -= sideScore(state, e);
     const eHand = occ ? handOf(state, e) : null;
-    if (eHand && occ) {
+    if (budget && occ) {
+      // Their reach is exactly the squares and units they have left; once those
+      // are gone the danger is next round's full allowance, one step further off.
+      const soon = actsLeft(state, e) > 0;
+      const reach = soon ? movesLeft(state, e) : budgetOf(state);
+      const slots = soon ? actsLeft(state, e) : UNITS_PER_ROUND;
+      v -= w * (soon ? 1 : 0.8) * budgetThreat(state, e, me, occ, reach, slots);
+      v -= BRAIN.tempo * (soon ? slots : 0);
+      v += 0.4 * budgetThreat(state, me, e, occ, movesLeft(state, me), actsLeft(state, me));
+    } else if (eHand && occ) {
       // They act again this round, on dice everyone can see: read them exactly.
       v -= w * knownThreat(state, e, me, eHand, occ);
       v -= BRAIN.tempo * eHand.acts;
@@ -1145,10 +1282,11 @@ function evaluate(state: GameState, me: PlayerColor): number {
     if (eMage) {
       const dHome = minDist(eMage.cell, baseCells(state, e));
       if (
-        eHand &&
         occ &&
         eMage.activated + eMage.carried >= STONES_TO_WIN &&
-        mageGetsHome(state, eMage, eHand, occ)
+        (budget
+          ? budgetMageGetsHome(state, eMage, occ)
+          : !!eHand && mageGetsHome(state, eMage, eHand, occ))
       ) {
         // Their next activation walks it home and wins, on a die already on the
         // table. Nothing else on the board matters unless this activation stops it.
@@ -1283,6 +1421,7 @@ function fingerprint(state: GameState): string {
   for (const st of state.stones) if (!st.carrier) s += `.${st.cell.r},${st.cell.c}`;
   for (const g of state.gravestones) s += `+${g.cell.r},${g.cell.c}`;
   s += `!${state.unitsMovedThisTurn.join(',')};${state.unitsActedThisTurn.join(',')}`;
+  for (const [p, n] of Object.entries(state.moveSpent ?? {}).sort()) s += `$${p[0]}${n}`;
   s += state.ritual ? `R${state.ritual.player}` : '';
   for (const pr of state.pendingRespawns) s += `p${pr.owner[0]}${pr.kind[0]}`;
   s += `e${state.eliminated.length}`;

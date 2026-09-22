@@ -1,7 +1,7 @@
 // Initial game-state construction: base formations, MageStone scatter, pools.
 
 import { PLAYER_ROTATION, rotateCell } from './board';
-import { GRAVES_PER_PLAYER } from './rules';
+import { GRAVES_PER_PLAYER, MOVE_BUDGET, UNITS_PER_ROUND } from './rules';
 import type {
   Cell,
   GameState,
@@ -156,24 +156,32 @@ export function orderPlayers(colors: PlayerColor[]): PlayerColor[] {
  * colour set for that count) or an explicit list of team *colours* — each colour
  * occupies its fixed home edge, so the selection is also a seat selection.
  */
-export function createGame(players: number | PlayerColor[] = 2, layoutId = DEFAULT_LAYOUT.id): GameState {
+export function createGame(
+  players: number | PlayerColor[] = 2,
+  layoutId = DEFAULT_LAYOUT.id,
+  variant: 'dice' | 'budget' = 'budget',
+): GameState {
   let colors = Array.isArray(players) ? orderPlayers(players) : playerSet(players);
   // Guard the engine's own entry point: an explicit colour list of any length
   // other than 2 or 4 (e.g. a legacy 3-player room, or a saved state from an
   // older build) is corrected here rather than building an unsupported board.
   if (colors.length !== 2 && colors.length !== 4) colors = playerSet(colors.length);
-  return buildGame(colors, layoutById(layoutId));
+  return buildGame(colors, layoutById(layoutId), variant);
 }
 
-function buildGame(players: PlayerColor[], layout: StoneLayout): GameState {
+function buildGame(players: PlayerColor[], layout: StoneLayout, variant: 'dice' | 'budget'): GameState {
   const seats = assignSeats(players);
+  const budget = variant === 'budget';
   return {
     players,
     seats,
     current: players[0],
     roundStarter: players[0],
     turn: 1,
-    turnPhase: 'roll',
+    // The movement allowance needs no roll, so play starts straight away.
+    turnPhase: budget ? 'act' : 'roll',
+    variant,
+    moveSpent: {},
     dice: [],
     units: makeUnits(players, seats),
     stones: makeStones(layout, players.length),
@@ -192,6 +200,10 @@ function buildGame(players: PlayerColor[], layout: StoneLayout): GameState {
     kills: { red: 0, blue: 0, green: 0, yellow: 0 },
     winner: null,
     winMethod: null,
-    log: [`Round 1: ${players[0]} starts. Roll the dice.`],
+    log: [
+      budget
+        ? `Round 1: ${players[0]} starts — ${MOVE_BUDGET} squares across up to ${UNITS_PER_ROUND} units.`
+        : `Round 1: ${players[0]} starts. Roll the dice.`,
+    ],
   };
 }

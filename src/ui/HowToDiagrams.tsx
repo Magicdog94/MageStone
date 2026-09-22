@@ -159,7 +159,7 @@ export function SetupDiagram() {
   );
 }
 
-/** A bending orthogonal move up to the die's value. */
+/** A bending orthogonal move, paid for out of the round's squares. */
 export function MoveDiagram() {
   const n = 6;
   const cell = 30;
@@ -170,7 +170,7 @@ export function MoveDiagram() {
   return (
     <Figure
       label="Orthogonal movement path"
-      caption="Spend a die to move its unit up to that many squares — orthogonally, turning corners if you like, but never diagonally."
+      caption="Spend squares from your round's six to move a unit — orthogonally, turning corners if you like, but never diagonally."
       height={oy + n * cell + 8}
     >
       {checker(n, n, ox, oy, cell)}

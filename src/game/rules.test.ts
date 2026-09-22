@@ -3,7 +3,7 @@
 // mocks, no UI. Numbered to match the acceptance criteria in the ruleset brief.
 
 import { describe, expect, it } from 'vitest';
-import { createGame, playerCountFor, playerSet, stoneCells, STONE_LAYOUTS } from './setup';
+import { createGame as buildGame, playerCountFor, playerSet, stoneCells, STONE_LAYOUTS } from './setup';
 import { NEXUS_CELLS, inNexus } from './board';
 import { isCurrentStateShape } from './migrate';
 import {
@@ -55,6 +55,12 @@ import {
 import type { Cell, Die, GameState, MageStone, PlayerColor, Unit } from './types';
 
 // ---- helpers ---------------------------------------------------------------
+
+// This file covers the DICE turn system, which the engine keeps behind
+// `GameState.variant`. The movement-allowance rules the game now ships (6
+// squares across 3 units) have their own file: variant.test.ts.
+const createGame = (players?: number | PlayerColor[], layoutId?: string): GameState =>
+  buildGame(players, layoutId, 'dice');
 
 /** A game in its action phase with a hand-picked set of dice. */
 function acting(players: PlayerColor[] = ['red', 'blue']): GameState {
@@ -1394,24 +1400,29 @@ describe('Stalemate — mutual siege', () => {
 // ---- Save/load compatibility ----------------------------------------------
 
 describe('save/load compatibility', () => {
+  // (the shipped game builds movement-allowance states — buildGame's default)
   it('accepts a state built by this engine', () => {
-    expect(isCurrentStateShape(createGame(['red', 'blue']))).toBe(true);
-    expect(isCurrentStateShape(createGame(4))).toBe(true);
+    expect(isCurrentStateShape(buildGame(['red', 'blue']))).toBe(true);
+    expect(isCurrentStateShape(buildGame(4))).toBe(true);
+  });
+
+  it('refuses a save from the dice era rather than misreading it', () => {
+    expect(isCurrentStateShape(createGame(['red', 'blue']))).toBe(false);
   });
 
   it('rejects a pre-token save rather than corrupting it', () => {
     const legacy = {
-      ...createGame(['red', 'blue']),
+      ...buildGame(['red', 'blue']),
       stones: [{ id: 'stone-0', cell: { r: 4, c: 7 }, collected: true }],
     };
     expect(isCurrentStateShape(legacy)).toBe(false);
   });
 
   it('rejects a save with no Gravestone bank, and any 3-player save', () => {
-    const { graveBank: _drop, ...noBank } = createGame(['red', 'blue']);
+    const { graveBank: _drop, ...noBank } = buildGame(['red', 'blue']);
     expect(isCurrentStateShape(noBank)).toBe(false);
 
-    const threeSeats = { ...createGame(4), players: ['red', 'blue', 'green'] as PlayerColor[] };
+    const threeSeats = { ...buildGame(4), players: ['red', 'blue', 'green'] as PlayerColor[] };
     expect(isCurrentStateShape(threeSeats)).toBe(false);
   });
 });

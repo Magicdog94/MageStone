@@ -93,9 +93,10 @@ export function BotDriver() {
           return;
         }
         // act — one activation at a time; the bot ends it and passes play.
-        // (dice claims, not dice: the pool is shared and `usedBy` is per player)
-        const claims = g.dice.reduce((n, d) => n + Object.keys(d.usedBy).length, 0);
-        const sig = `${g.current}:${g.turnPhase}:${claims}:${g.units.length}`;
+        // What the board owes this round: squares spent and units activated.
+        const spent = Object.values(g.moveSpent ?? {}).reduce((n, v) => n + (v ?? 0), 0);
+        const used = g.unitsMovedThisTurn.length + g.unitsActedThisTurn.length;
+        const sig = `${g.current}:${g.turnPhase}:${spent}:${used}:${g.units.length}`;
         if (pending.current) {
           if (pending.current.sig !== sig) {
             pending.current = null; // the board moved on — re-decide

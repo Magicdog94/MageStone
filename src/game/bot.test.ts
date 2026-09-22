@@ -14,7 +14,7 @@ function position(
   mutate: (g: GameState) => GameState,
   values: { mage: number; priest: number; warrior: [number, number, number] },
 ): GameState {
-  const g = createGame(['red', 'blue'], 'diamond');
+  const g = createGame(['red', 'blue'], 'diamond', 'dice');
   const kinds: Die['kind'][] = ['mage', 'priest', 'warrior', 'warrior', 'warrior'];
   const faces = [values.mage, values.priest, ...values.warrior];
   const dice: Die[] = kinds.map((kind, i) => ({ id: `t${i}`, kind, value: faces[i], usedBy: {} }));

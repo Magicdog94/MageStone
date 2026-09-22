@@ -8,29 +8,9 @@
 // allowed move can ever strand a player.
 import { createGame } from '../../game/setup';
 import { NEXUS_CELLS } from '../../game/board';
-import {
-  endActivation,
-  rollDice,
-  setRolledValues,
-  siegedPlayers,
-  syncStones,
-  unitById,
-  warriorCount,
-} from '../../game/rules';
-import type { Cell, Die, DieKind, GameState, Unit } from '../../game/types';
+import { endActivation, siegedPlayers, syncStones, unitById, warriorCount } from '../../game/rules';
+import type { Cell, GameState, Unit } from '../../game/types';
 import type { TutRestrict } from './restrict';
-
-let diceNonce = 0;
-export function mkDice(kinds: DieKind[], values: number[]): Die[] {
-  // The round pool is SHARED, so a staged die belongs to nobody in
-  // particular — usedBy fills in per player as each spends it.
-  return kinds.map((kind, i) => ({
-    id: `tut-die-${diceNonce++}`,
-    kind,
-    value: values[i],
-    usedBy: {},
-  }));
-}
 
 /** Hand `unitId` real MageStone tokens for a staged lesson. Activation lives on
  *  the token, so the demo boards are built by REASSIGNING stones, never by
@@ -68,16 +48,15 @@ export interface TaskSpec {
   done: (st: GameState) => boolean;
 }
 
-/** The opening roll: only Roll Dice. */
-export const ROLL_RESTRICT: TutRestrict = { units: [], dests: [], actions: ['roll'] };
-/** The first move: any unit, any legal square — just no actions or passing. */
+/** The first move: any unit, any square its allowance reaches — just no
+ *  actions and no passing. */
 export const MOVE_RESTRICT: TutRestrict = { actions: [] };
 
 export const BLUE_BASE: Cell[] = Array.from({ length: 8 }, (_, i) => ({ r: 15, c: 4 + i }));
 /** The one base square the siege may be laid on: right in front of Red's
- *  Warrior AND beside Blue's guard. Any other base square the Warrior's 2 can
- *  reach (15,7) leaves it out of Blue's reach — and the "break the siege" task
- *  that follows could never be done. */
+ *  Warrior AND beside Blue's guard. Any other base square within the round's
+ *  squares leaves the intruder out of Blue's reach — and the "break the siege"
+ *  task that follows could never be done. */
 export const SIEGE_DOOR: Cell = { r: 15, c: 8 };
 
 /** Blue down to its guard Warrior, Mage and Priest waiting to respawn. */
@@ -102,7 +81,6 @@ function win3Board(st: GameState, sealed: boolean): void {
     { id: 'tut-pr-m', owner: 'blue', kind: 'mage', activated: 0 },
     { id: 'tut-pr-p', owner: 'blue', kind: 'priest' },
   ];
-  st.dice = mkDice(['warrior', 'warrior', 'warrior'], [3, 4, 2]);
 }
 
 export const TASKS = {
@@ -112,7 +90,6 @@ export const TASKS = {
       at(st, 'red-w1').cell = { r: 5, c: 7 };
       at(st, 'red-w2').cell = { r: 7, c: 7 };
       at(st, 'red-w3').cell = { r: 6, c: 6 };
-      st.dice = mkDice(['warrior', 'warrior', 'warrior'], [4, 3, 3]);
     },
     // The three surrounding Warriors, the one enemy, TRIPLE only — no wandering
     // off and breaking the ring.
@@ -131,7 +108,6 @@ export const TASKS = {
       st.units = st.units.filter((u) => u.id !== 'red-w1'); // a warrior has fallen
       at(st, 'red-p').cell = { r: 5, c: 9 };
       st.gravestones.push({ id: 'tut-grave-1', cell: { r: 5, c: 11 } });
-      st.dice = mkDice(['priest'], [2]);
     },
     // Only the Priest, only the gravestone square, only Resurrect.
     restrict: { units: ['red-p'], dests: [{ r: 5, c: 11 }], actions: ['resurrect'] },
@@ -142,7 +118,6 @@ export const TASKS = {
     build: (st) => {
       at(st, 'red-m').cell = { r: 4, c: 8 };
       st.stones.find((x) => !x.carrier)!.cell = { r: 5, c: 8 };
-      st.dice = mkDice(['mage'], [2]);
     },
     // Only the Mage, only the stone's square, only Collect.
     restrict: { units: ['red-m'], dests: [{ r: 5, c: 8 }], actions: ['collect'] },
@@ -153,7 +128,6 @@ export const TASKS = {
     build: (st) => {
       at(st, 'red-m').cell = { r: 0, c: 8 }; // standing on its own base
       giveStones(st, 'red-m', 1, 0);
-      st.dice = mkDice(['mage'], [2]);
     },
     // The Mage stays home: no movement, just Activate.
     restrict: { units: ['red-m'], dests: [], actions: ['activate'] },
@@ -165,7 +139,6 @@ export const TASKS = {
       at(st, 'red-m').cell = { r: 8, c: 5 };
       giveStones(st, 'red-m', 0, 4);
       at(st, 'blue-w1').cell = { r: 8, c: 8 };
-      st.dice = mkDice(['mage'], [4]);
     },
     // Only the Mage, no walking, only Bolt at the staged target.
     restrict: { units: ['red-m'], dests: [], actions: ['bolt'], targets: ['blue-w1'] },
@@ -180,7 +153,6 @@ export const TASKS = {
       at(st, 'blue-w2').cell = { r: 6, c: 6 }; // diagonal!
       at(st, 'blue-w3').cell = { r: 5, c: 6 };
       at(st, 'red-w1').cell = { r: 5, c: 4 }; // friendly — caught too!
-      st.dice = mkDice(['mage'], [2]);
     },
     // Only the Mage, standing its ground, only Nova.
     restrict: { units: ['red-m'], dests: [], actions: ['nova'] },
@@ -191,7 +163,6 @@ export const TASKS = {
     build: (st) => {
       at(st, 'red-m').cell = { r: 1, c: 8 };
       giveStones(st, 'red-m', 6, 0);
-      st.dice = mkDice(['mage'], [2]);
     },
     // Only the Mage, only home-base squares, only Activate. (Occupied base
     // squares never glow — legalMoves filters them before this list does.)
@@ -206,7 +177,6 @@ export const TASKS = {
   win2: {
     build: (st) => {
       at(st, 'red-p').cell = { r: 7, c: 5 };
-      st.dice = mkDice(['priest'], [2]);
     },
     // Only the Priest, only into the Nexus, only Begin Ritual.
     restrict: { units: ['red-p'], dests: [...NEXUS_CELLS], actions: ['ritual'] },
@@ -217,7 +187,6 @@ export const TASKS = {
     build: (st) => {
       siegeBoard(st);
       at(st, 'red-w1').cell = { r: 14, c: 8 };
-      st.dice = mkDice(['warrior'], [2]);
     },
     // Only that Warrior, only onto the base square in front of it.
     restrict: { units: ['red-w1'], dests: [SIEGE_DOOR], actions: [] },
@@ -231,7 +200,6 @@ export const TASKS = {
       siegeBoard(st);
       at(st, 'red-w1').cell = { ...SIEGE_DOOR };
       st.current = 'blue';
-      st.dice = mkDice(['warrior'], [3]);
     },
     // Only Blue's Warrior, only the intruder — with scripted dice so the
     // lesson's fight always lands.
@@ -269,24 +237,19 @@ export const TASKS = {
 
 // ---- Scripted beats between tasks -------------------------------------------
 
-/** Blue's dice after the siege is laid — every face a Warrior can attack with. */
-export const SIEGE_BLUE_ROLL = [3, 3, 6, 3, 2];
-
-/** Between laying the siege and breaking it: Red's activation ends and Blue's
- *  dice are dealt. The break task carries on from exactly this board. */
+/** Between laying the siege and breaking it: Red's activation ends and play
+ *  passes to Blue, whose own six squares are untouched. The break task carries
+ *  on from exactly this board. */
 export function afterSiegeLaid(st: GameState): GameState {
-  return setRolledValues(rollDice(endActivation(st)), SIEGE_BLUE_ROLL);
+  return endActivation(st);
 }
 
-/** The next round's dice while the Rite is held (Blue is nowhere near). */
-export const RITUAL_ROLL = [2, 2, 2, 2, 2];
-
 /**
- * One beat of the Ritual lesson's hold: deal a new round's dice, or end the
- * activation in progress (with nothing committed, that is a pass). Repeated, it
- * carries the Rite through the rest of its round AND the full round after —
- * the hold the rules demand — until it pays out as the round after that opens.
+ * One beat of the Ritual lesson's hold: end the activation in progress (with
+ * nothing committed, that is a pass). Repeated, it carries the Rite through the
+ * rest of its round AND the full round after — the hold the rules demand —
+ * until it pays out as the round after that opens.
  */
 export function ritualBeat(st: GameState): GameState {
-  return st.turnPhase === 'roll' ? setRolledValues(rollDice(st), RITUAL_ROLL) : endActivation(st);
+  return endActivation(st);
 }

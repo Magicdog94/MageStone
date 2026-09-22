@@ -18,6 +18,7 @@ import {
 } from './textures';
 import { TABLE_HALF } from './coords';
 import { useGame } from '../store';
+import { isBudget } from '../game/rules';
 import type { PlayerColor } from '../game/types';
 
 const DIE = 0.7; // edge length
@@ -367,6 +368,7 @@ function PolyDieMesh({ faces, kind }: { faces: 12 | 20; kind: DiceKind }) {
 const DIE_KINDS: DiceKind[] = ['mage', 'priest', 'warrior', 'warrior', 'warrior'];
 
 function DiceBodies() {
+  const budgetRules = useGame((s) => isBudget(s.game));
   const rolling = useGame((s) => s.rolling);
   const rollNonce = useGame((s) => s.rollNonce);
   const phase = useGame((s) => s.game.turnPhase);
@@ -407,7 +409,9 @@ function DiceBodies() {
   // the tray is handed to the combat dice, and the 2D HUD tray keeps showing
   // what is left.
   const untouched = dice.every((d) => d.usedBy === null);
-  const show = rolling || (phase === 'act' && untouched);
+  // Under the movement allowance there are no TURN dice at all — only the
+  // combat dice below ever hit the table.
+  const show = !budgetRules && (rolling || (phase === 'act' && untouched));
 
   // Throw fresh on each roll — onto the roller's strip of the table. Guarded:
   // a crashed (poisoned) Rapier world throws on EVERY call — report the

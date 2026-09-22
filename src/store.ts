@@ -15,9 +15,12 @@ import {
   collect,
   combatOdds,
   endActivation,
+  isBudget,
   legalMoves,
   magePowerDie,
   moveUnit,
+  movesLeft,
+  slotsLeft,
   novaVictims,
   plannedAttackers,
   resolveAttack,
@@ -493,6 +496,8 @@ export const useGame = create<UIState>((set, get) => ({
     })),
 
   roll: () => {
+    // The movement allowance needs no roll — rounds open ready to play.
+    if (isBudget(get().game)) return;
     set((s) => {
       if (outOfTurn(s) || !tutAllows(rx(s), 'roll')) return {};
       return {
@@ -544,7 +549,7 @@ export const useGame = create<UIState>((set, get) => ({
       // auto-assigns the HIGHEST free die of its kind — so the first warrior
       // gets the best warrior roll, the next the second best, and so on. A
       // manually clicked die still wins (kept above); this only fills the gap.
-      if (!dieId && s.game.turnPhase === 'act') {
+      if (!dieId && s.game.turnPhase === 'act' && !isBudget(s.game)) {
         const best = s.game.dice
           .filter((d) => canDieMoveUnit(d, unit, s.game))
           .sort((a, b) => b.value - a.value)[0];
@@ -568,11 +573,14 @@ export const useGame = create<UIState>((set, get) => ({
   moveTo: (dest) =>
     set((s) => {
       const { selectedUnitId, selectedDieId } = s;
-      if (!selectedUnitId || !selectedDieId || outOfTurn(s)) return {};
+      if (!selectedUnitId || outOfTurn(s)) return {};
+      // Under the movement allowance there is no die to pick: the walk itself
+      // is what gets spent.
+      if (!selectedDieId && !isBudget(s.game)) return {};
       // Tutorial guardrail: only the square(s) the live task points at.
       const lim = rx(s);
       if (lim?.dests && !lim.dests.some((c) => sameCell(c, dest))) return {};
-      const game = moveUnit(s.game, selectedUnitId, selectedDieId, dest);
+      const game = moveUnit(s.game, selectedUnitId, selectedDieId ?? '', dest);
       if (game === s.game) return {};
       // Keep the unit selected (it may still act); drop the spent die.
       return { game, selectedDieId: null };
@@ -842,11 +850,22 @@ export function moveDestinations(
   dieId: string | null,
   restrict?: TutRestrict | null,
 ): Cell[] {
-  if (game.turnPhase !== 'act' || !unitId || !dieId) return [];
+  if (game.turnPhase !== 'act' || !unitId) return [];
   const unit = unitById(game, unitId);
-  const die = game.dice.find((d) => d.id === dieId);
-  if (!unit || !die || !canDieMoveUnit(die, unit, game)) return [];
-  const all = legalMoves(game, unit, die.value);
+  if (!unit) return [];
+  let all: Cell[];
+  if (isBudget(game)) {
+    // Movement allowance: this unit may walk as far as the round has squares
+    // left, provided it hasn't gone yet and an activation is spare.
+    if (unit.owner !== game.current) return [];
+    if (game.unitsMovedThisTurn.includes(unit.id) || game.unitsActedThisTurn.includes(unit.id)) return [];
+    if (slotsLeft(game, game.current) <= 0) return [];
+    all = legalMoves(game, unit, movesLeft(game, game.current));
+  } else {
+    const die = game.dice.find((d) => d.id === dieId);
+    if (!die || !canDieMoveUnit(die, unit, game)) return [];
+    all = legalMoves(game, unit, die.value);
+  }
   // Tutorial guardrail: only the taught square(s) glow.
   return restrict?.dests ? all.filter((m) => restrict.dests!.some((c) => sameCell(c, m))) : all;
 }

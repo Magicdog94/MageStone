@@ -166,6 +166,16 @@ export interface GameState {
   graveBank: number;
   /** Players who have already used their one resurrection this round. */
   resurrectedThisTurn: PlayerColor[];
+  /** Rules VARIANT. Absent or 'dice' is the shipped game: five shared dice,
+   *  three spent each per round. 'budget' is the movement-allowance test —
+   *  each round a player activates at most three units and moves six squares
+   *  in total between them, and dice are rolled for combat only. */
+  variant?: 'dice' | 'budget';
+  /** Squares each player has already moved this round (budget variant only). */
+  moveSpent?: Partial<Record<PlayerColor, number>>;
+  /** Squares a player may move per round in the budget variant (default
+   *  MOVE_BUDGET) — the dial that sets the game's pace. */
+  moveBudget?: number;
   /** Players knocked out of the game: reduced to zero units on the board while
    *  their base was besieged. They take no turns and never respawn. */
   eliminated: PlayerColor[];

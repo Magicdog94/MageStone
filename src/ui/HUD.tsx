@@ -3,26 +3,25 @@ import { activeRestrict, attackOptions, tutAllows, unitActions, useGame } from '
 import { useNet } from '../net/useNet';
 import { usePlayerLabel } from './playerNames';
 import { COLORS } from '../three/coords';
-import type { PlayerColor } from '../game/types';
 import {
   boltTargets,
+  budgetOf,
   canBolt,
   canNova,
-  canCommitDie,
-  diceLeft,
-  DICE_PER_ROUND,
   gameOver,
   gravestoneBank,
   gravestoneCapacity,
   hasPlayLeft,
   mageActionDieValue,
   magePowerDie,
+  movesLeft,
   novaVictims,
   ritualWinsOnRound,
+  slotsLeft,
   unitById,
+  UNITS_PER_ROUND,
 } from '../game/rules';
 import { useTokenUrl } from '../three/tokens';
-import { PipDie } from './Die';
 import { EliminationToast } from './EliminationToast';
 import { PadControls } from './PadControls';
 import { PlayerStrip } from './PlayerStrip';
@@ -34,9 +33,6 @@ import { FeedbackModal } from './FeedbackModal';
 import { BookIcon, CameraLockIcon, CogIcon, GraveIcon } from './Icons';
 
 const KIND_LABEL = { warrior: 'Warrior', mage: 'Mage', priest: 'Priest' } as const;
-/** The die colours, lifted for text on the dark tray — the kind labels under
- *  the dice wear their die's colour (mirrors ui/Die.tsx STYLE). */
-const DIE_LABEL_COLOR = { mage: '#7ba4e4', priest: '#55bd80', warrior: '#e07a75' } as const;
 const KIND_ABILITY = {
   warrior: 'Attacks adjacent enemies · coordinates 1–3d6',
   mage: 'Collects & activates stones · power die d6→d12→d20',
@@ -61,27 +57,25 @@ function CamFixToggle() {
   );
 }
 
-/** Always-visible round structure — roll once, then alternate activations. */
+/** Always-visible round structure — move one unit, then play passes. */
 function PhaseTrack() {
   const game = useGame((s) => s.game);
   if (gameOver(game)) return null;
   const phase = game.turnPhase;
-  const left = diceLeft(game, game.current);
+  const squares = movesLeft(game, game.current);
+  const units = slotsLeft(game, game.current);
   const steps = [
     {
-      key: 'roll',
-      label: '1 · Roll 5 shared dice',
-      done: phase !== 'roll',
-      active: phase === 'roll',
-    },
-    {
       key: 'act',
-      label:
-        phase === 'act'
-          ? `2 · Activate — ${left} of ${DICE_PER_ROUND} dice left`
-          : `2 · Activate (${DICE_PER_ROUND} of the 5 each)`,
+      label: `1 · Move one unit — ${squares} square${squares === 1 ? '' : 's'} left`,
       done: false,
       active: phase === 'act',
+    },
+    {
+      key: 'units',
+      label: `2 · ${units} of ${UNITS_PER_ROUND} units left this round`,
+      done: false,
+      active: false,
     },
     { key: 'pass', label: '3 · Pass to your opponent', done: false, active: false },
   ];
@@ -181,10 +175,6 @@ function CombatAnnounce() {
 export function HUD() {
   const game = useGame((s) => s.game);
   const selectedUnitId = useGame((s) => s.selectedUnitId);
-  const selectedDieId = useGame((s) => s.selectedDieId);
-  const roll = useGame((s) => s.roll);
-
-  const selectDie = useGame((s) => s.selectDie);
   const endActivation = useGame((s) => s.endActivation);
   const undoActivation = useGame((s) => s.undoActivation);
   const canUndo = useGame((s) => s.undoPoint !== null);
@@ -194,7 +184,6 @@ export function HUD() {
   const doRitual = useGame((s) => s.doRitual);
   const openModal = useGame((s) => s.openModal);
   const turnSeconds = useGame((s) => s.settings.turnSeconds);
-  const mobile = useGame((s) => s.settings.layout === 'mobile');
   const online = useGame((s) => s.online);
   const myColor = useGame((s) => s.myColor);
   const bots = useGame((s) => s.bots);
@@ -271,6 +260,9 @@ export function HUD() {
   const attackOpts = myTurn ? attackOptions(game, selectedUnitId, tutRestrict) : [];
   const phase = game.turnPhase;
 
+  // The round's allowance for whoever is acting: squares and units left.
+  const squaresLeft = movesLeft(game, game.current);
+  const unitsLeft = slotsLeft(game, game.current);
   const graveBank = gravestoneBank(game);
   const graveCap = gravestoneCapacity(game);
   const graveUrl = useTokenUrl('gravestone');
@@ -376,55 +368,22 @@ export function HUD() {
       {/* Bottom control frame — fixed width; right column: ritual · button */}
       <div className="hud-bottom">
         <div className="tray">
-          <div className="dice">
-            {(() => {
-              // Kind tags under the dice, in each die's colour: M · P · W1 W2
-              // W3 — so players always know which die drives which unit.
-              let warriorNo = 0;
-              // The five SHARED dice — the same pool for everybody. A die is
-              // "used" only once the ACTIVE player has spent it; an opponent
-              // having taken it does not put it out of reach.
-              return game.dice.map((d) => {
-                const state = d.usedBy[game.current]
-                  ? 'used'
-                  : d.id === selectedDieId
-                    ? 'selected'
-                    : canCommitDie(game, d)
-                      ? 'idle'
-                      : 'locked'; // dimmed but readable: out of budget, or wrong colour now
-                const click =
-                  myTurn && phase === 'act' && canCommitDie(game, d)
-                    ? () => selectDie(d.id)
-                    : undefined;
-                // kind tag (M / P / W1…) — named apart from the player-label
-                // helper of the same name in the enclosing scope
-                const kindTag =
-                  d.kind === 'mage' ? 'M' : d.kind === 'priest' ? 'P' : `W${++warriorNo}`;
-                return (
-                  <div className="die-col" key={d.id}>
-                    <PipDie
-                      value={d.value}
-                      kind={d.kind}
-                      state={state}
-                      onClick={click}
-                      size={mobile ? 34 : 48}
-                      title={
-                        `${d.kind[0].toUpperCase()}${d.kind.slice(1)} die — shared` +
-                        (() => {
-                          const others = (Object.keys(d.usedBy) as PlayerColor[]).filter(
-                            (p) => p !== game.current,
-                          );
-                          return others.length ? `. Also taken by ${others.map((p) => label(p)).join(', ')}` : '';
-                        })()
-                      }
-                    />
-                    <span className="die-label" style={{ color: DIE_LABEL_COLOR[d.kind] }}>
-                      {kindTag}
-                    </span>
-                  </div>
-                );
-              });
-            })()}
+          {/* The round's allowance: squares to spend between at most three
+              units. Pips go out as they are walked (a Bolt spends them too). */}
+          <div className="budget-tray" aria-label="Movement left this round">
+            <div className="sq-row">
+              {Array.from({ length: budgetOf(game) }, (_, i) => (
+                <span
+                  key={i}
+                  className={`sq-pip${i < squaresLeft ? '' : ' spent'}`}
+                  style={{ '--accent': COLORS[game.current] } as CSSProperties}
+                />
+              ))}
+            </div>
+            <div className="budget-read">
+              <strong>{squaresLeft}</strong> square{squaresLeft === 1 ? '' : 's'} ·{' '}
+              <strong>{unitsLeft}</strong> unit{unitsLeft === 1 ? '' : 's'} left
+            </div>
           </div>
         </div>
 
@@ -441,15 +400,15 @@ export function HUD() {
                   · attack d{magePowerDie(selectedUnit.activated)}
                 </div>
               )}
-              {/* the assigned die + how far this unit can still march */}
+              {/* how far this unit can still march out of the round's squares */}
               {(() => {
-                const die = game.dice.find((d) => d.id === selectedDieId);
                 const moved = game.unitsMovedThisTurn.includes(selectedUnit.id);
                 // A task with no movement in it hides the "move up to N" hint.
                 if (tutRestrict?.dests && tutRestrict.dests.length === 0) return null;
-                return die && !moved ? (
+                return !moved && squaresLeft > 0 && unitsLeft > 0 ? (
                   <div className="muted">
-                    die {die.value} — move up to {die.value} squares
+                    move up to {squaresLeft} square{squaresLeft === 1 ? '' : 's'} — whatever you
+                    walk comes off the round
                   </div>
                 ) : null;
               })()}
@@ -501,14 +460,8 @@ export function HUD() {
                 {actions.ritual && <button onClick={doRitual}>Begin Ritual</button>}
               </div>
             </>
-          ) : phase === 'act' && diceLeft(game, game.current) === 0 ? (
-            <strong>No dice left — pass</strong>
-          ) : phase === 'roll' ? (
-            /* pre-roll: name whose turn it is right here, where the eyes are */
-            <>
-              <strong style={{ color: COLORS[game.current] }}>{label(game.current)} to roll</strong>
-              <div className="muted">Roll to begin</div>
-            </>
+          ) : phase === 'act' && unitsLeft === 0 ? (
+            <strong>No units left this round — pass</strong>
           ) : (
             <span className="muted">No unit selected</span>
           )}
@@ -536,11 +489,6 @@ export function HUD() {
             </span>
           ) : (
             <>
-              {phase === 'roll' && (
-                <button className="primary" onClick={roll}>
-                  Roll Dice
-                </button>
-              )}
               {phase === 'act' && tutAllows(tutRestrict, 'endTurn') && (
                 <>
                   {tutAllows(tutRestrict, 'undo') && (
@@ -552,7 +500,7 @@ export function HUD() {
                         canUndo
                           ? 'Take this activation back and start it again'
                           : game.activationDice.length === 0
-                            ? 'Nothing to undo yet — you have not committed a die'
+                            ? 'Nothing to undo yet — you have not moved or acted'
                             : 'The dice have been rolled — a resolved fight cannot be taken back'
                       }
                     >
@@ -565,7 +513,7 @@ export function HUD() {
                     title={
                       game.activationDice.length > 0
                         ? 'Commit this activation and pass play on'
-                        : 'Nothing committed — this passes, leaving your remaining dice unused'
+                        : 'Nothing committed — this passes, leaving the rest of your round unused'
                     }
                   >
                     Submit Move

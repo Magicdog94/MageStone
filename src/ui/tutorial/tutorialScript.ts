@@ -1,11 +1,10 @@
 import { asTutorialScript, useGame, type TutRestrict } from '../../store';
-import { legalMoves, unitById } from '../../game/rules';
+import { legalMoves, movesLeft, slotsLeft, unitById } from '../../game/rules';
 import type { Callout } from './useTutorial';
 import type { Cell, GameState } from '../../game/types';
 import { useTutorial } from './useTutorial';
 import {
   MOVE_RESTRICT,
-  ROLL_RESTRICT,
   SIEGE_DOOR,
   TASKS,
   afterSiegeLaid,
@@ -35,7 +34,7 @@ function guard() {
 }
 
 /** Total coached steps — keep in sync with tut-verify.mjs EXPECT. */
-const TOTAL_STEPS = 46;
+const TOTAL_STEPS = 44;
 let stepNo = 0;
 /** Stamp "step n of m" onto a callout (shown as the box's progress counter). */
 function stamp(c: Callout): Callout {
@@ -154,21 +153,18 @@ function beat(next: (st: GameState) => GameState): void {
   });
 }
 
-/** Move `unitId` as far toward `target` as this round's matching die allows. */
+/** Move `unitId` as far toward `target` as the round's squares allow. */
 function stepToward(unitId: string, target: Cell): boolean {
   const st = g().game;
   const u = unitById(st, unitId);
   if (!u) return false;
-  const die = st.dice.find(
-    (d) => !d.usedBy[st.current] && d.kind === u.kind,
-  );
-  if (!die) return false;
-  const moves = legalMoves(st, u, die.value);
+  const reach = movesLeft(st, st.current);
+  if (reach <= 0 || slotsLeft(st, st.current) <= 0) return false;
+  const moves = legalMoves(st, u, reach);
   if (moves.length === 0) return false;
   const best = moves.reduce((a, b) => (dist(b, target) < dist(a, target) ? b : a));
   S(() => {
     g().selectUnit(unitId);
-    g().selectDie(die.id);
     g().moveTo(best);
   });
   return true;
@@ -176,22 +172,14 @@ function stepToward(unitId: string, target: Cell): boolean {
 
 /** Script-move a unit onto an exact cell (fallbacks for unfinished tasks). */
 function scriptMove(unitId: string, dest: Cell): void {
-  const st = g().game;
-  const u = unitById(st, unitId);
-  if (!u) return;
-  const die = st.dice.find(
-    (d) => !d.usedBy[st.current] && d.kind === u.kind,
-  );
-  if (!die) return;
   S(() => {
     g().selectUnit(unitId);
-    g().selectDie(die.id);
     g().moveTo(dest);
   });
 }
 
 /**
- * The guided game — HANDS-ON. The player rolls, discards, moves, fights,
+ * The guided game — HANDS-ON. The player moves, fights,
  * resurrects, collects, casts, lays and breaks a siege (briefly playing Blue)
  * and WINS all three ways, coached step by step; only Blue's routine beats
  * (its roll/discard) play themselves.
@@ -210,7 +198,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'welcome',
       title: 'Welcome to MageStone',
-      body: 'This tutorial is HANDS-ON: you roll, you move, you fight — the coach just points the way. Whenever the note says "Your move…", the game is yours. Let’s go.',
+      body: 'This tutorial is HANDS-ON: you move, you fight, you win — the coach just points the way. Whenever the note says "Your move…", the game is yours. Let’s go.',
       placement: 'center',
     });
     await note({
@@ -228,47 +216,18 @@ export async function runTutorial(onDone: () => void) {
       placement: 'bottom',
     });
 
-    // ---- YOU roll ----------------------------------------------------------
-    await playerTask(
-      () => stage((st) => {
-        st.turnPhase = 'roll';
-        st.dice = [];
-      }),
-      {
-        id: 'task-roll',
-        title: 'Roll your dice',
-        body: 'Every round begins with 5 SHARED dice, thrown once by whoever goes first. Press ROLL DICE and watch them tumble — however they land is what the whole table gets.',
-        anchor: '.actions .primary',
-        placement: 'top',
-      },
-      () => g().game.turnPhase !== 'roll' && !g().rolling,
-      () => S(() => g().roll()),
-      { timeoutMs: 120000, restrict: ROLL_RESTRICT },
-    );
-    await until(() => !g().rolling, 15000);
-    await wait(400);
-
     await note({
-      id: 'dice',
-      title: 'Read the dice',
-      body: 'The tags name each die: M drives a Mage, P a Priest, W1–W3 the Warriors. A die only moves its MATCHING unit, and its number is how far that unit can go.',
-      anchor: '.tray',
-      placement: 'top',
-    });
-
-    // ---- YOU discard -------------------------------------------------------
-    await note({
-      id: 'roll-read',
-      title: 'Five shared dice — you spend three',
-      body: 'Nothing is discarded. All five stay on the table for BOTH of you, and each side never gets to use more than THREE of them this round. Your opponent may even take the same die you did — it is not used up. Choosing which three, and when, is the whole game.',
-      anchor: '.tray',
+      id: 'allowance',
+      title: 'Six squares, three units',
+      body: 'No dice for your turn: every round you have SIX squares of movement to spend, across at most THREE units. One unit can march all six, or three units can take two each — your choice, every round.',
+      anchor: '.budget-tray',
       placement: 'top',
     });
     await wait(300);
     await note({
-      id: 'kept',
-      title: 'You alternate — one activation each',
-      body: 'An activation is ONE die: pick a die, move its matching unit, resolve its action — then play passes to your opponent. Back and forth until you have each spent three dice. (The exception: 2 or 3 dice of the SAME colour can be spent together, so Warriors can gang up in one go.)',
+      id: 'alternate',
+      title: 'You alternate — one unit each',
+      body: 'Move ONE unit, resolve what it does there, and play passes to your opponent. Back and forth until you have both used your three units (or spent your squares). A unit only ever goes once per round.',
       placement: 'bottom',
     });
 
@@ -278,17 +237,13 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-move',
         title: 'Move a unit',
-        body: 'CLICK one of your units (its die is picked automatically), then click any glowing square. Paths are orthogonal — never diagonal — and may bend.',
+        body: 'CLICK one of your units, then click any glowing square. Paths are orthogonal — never diagonal — and may bend. However far you walk comes out of your six.',
         placement: 'bottom',
       },
       () => g().game.unitsMovedThisTurn.length >= 1,
       () => {
         const st = g().game;
-        const w = st.units.find(
-          (u) =>
-            u.owner === st.current &&
-            st.dice.some((d) => !d.usedBy[st.current] && d.kind === u.kind),
-        );
+        const w = st.units.find((u) => u.owner === st.current);
         if (w) stepToward(w.id, { r: 8, c: 8 });
       },
       // Any unit, any legal square — but not ending the activation yet.
@@ -298,7 +253,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'moved',
       title: 'Nicely done',
-      body: 'That’s movement: up to the die’s number, through empty squares — units block the way, MageStones and gravestones don’t.',
+      body: 'That’s movement: as far as your squares allow, through empty squares — units block the way, MageStones and gravestones don’t. Watch the pips: the squares you walked are gone for this round.',
       placement: 'bottom',
     });
 
@@ -469,7 +424,7 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-bolt',
         title: 'Cast BOLT — 1 stone',
-        body: 'A ranged kill: range = the mage die (4 here). Only a Mage can block a Bolt — anything else gets no defence roll. CLICK your Mage, press BOLT — enemies in range glow — then click the Blue Warrior.',
+        body: 'A ranged kill: a Bolt flies as far as the squares you have left, and the flight SPENDS them — three squares away costs three. Only a Mage can block one; anything else gets no defence roll. CLICK your Mage, press BOLT — enemies in range glow — then click the Blue Warrior.',
         placement: 'bottom',
       },
       () => TASKS.bolt.done(g().game),
@@ -597,7 +552,7 @@ export async function runTutorial(onDone: () => void) {
       anchor: '.player-strip',
       placement: 'bottom',
     });
-    // Play the hold out: passes, a new round's dice, passes — until the Rite
+    // Play the hold out: pass, a fresh round, pass — until the Rite
     // pays out as the round after its full round opens.
     for (let i = 0; i < 12 && !g().game.winner; i++) {
       beat(ritualBeat);
@@ -643,7 +598,7 @@ export async function runTutorial(onDone: () => void) {
       anchor: '.siege-alert',
       placement: 'bottom',
     });
-    beat(afterSiegeLaid); // your activation ends; Blue's dice are dealt
+    beat(afterSiegeLaid); // your activation ends; play passes to Blue
     await wait(1100);
     await note({
       id: 'siege-still',
@@ -781,7 +736,7 @@ export async function runTutorial(onDone: () => void) {
       // Anchored beside the winner panel (its position names vary by layout —
       // the golden book button lives top right on desktop, bottom left on
       // phones, so the text names the BUTTON, not a corner).
-      body: 'You rolled, moved, fought, resurrected, collected, cast Bolt and Nova, laid a siege and broke one, and won by MageStone, Ritual AND Conquest yourself. The golden Rule Book button has every detail. Go play!',
+      body: 'You moved, fought, resurrected, collected, cast Bolt and Nova, laid a siege and broke one, and won by MageStone, Ritual AND Conquest yourself. The golden Rule Book button has every detail. Go play!',
       anchor: '.winner',
       placement: 'left',
       gotItLabel: 'Finish',

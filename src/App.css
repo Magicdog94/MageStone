@@ -1220,6 +1220,53 @@ body:not(.ui-mobile) .hud:has(.leave-btn) .phase-track {
   min-height: 48px;
   align-items: flex-start;
 }
+
+/* The round's movement allowance: one pip per square, dimming as they are
+   walked (a Bolt's flight spends them too), plus a plain readout. */
+.budget-tray {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 48px;
+  justify-content: center;
+}
+.sq-row {
+  display: flex;
+  gap: 5px;
+}
+.sq-pip {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid var(--gold-line);
+  background: var(--accent, var(--gold));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.sq-pip.spent {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: none;
+}
+.budget-read {
+  font-size: var(--text-sm);
+  color: var(--ink-dim, #cfc6b4);
+  white-space: nowrap;
+}
+.budget-read strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+body.ui-mobile .budget-tray {
+  min-height: 38px;
+  gap: 3px;
+}
+body.ui-mobile .sq-pip {
+  width: 12px;
+  height: 12px;
+}
+body.ui-mobile .budget-read {
+  font-size: 10px;
+}
 /* each die + its kind tag (M · P · W1 W2 W3), written in the die's colour */
 .die-col {
   display: flex;

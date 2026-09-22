@@ -14,6 +14,7 @@ import {
   canNova,
   endActivation,
   isBudget,
+  legalMoves,
   mageActionDieValue,
   moveUnit,
   movesLeft,
@@ -151,6 +152,40 @@ describe('Movement-budget variant', () => {
     g = rollDice(g);
     expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET);
     expect(slotsLeft(g, 'red')).toBe(UNITS_PER_ROUND);
+  });
+
+  it('alternates strictly — nobody ever takes two goes in a row', () => {
+    let g = budgetGame();
+    const goes: string[] = [g.current];
+    // Each side nudges one unit a square at a time, right through a round
+    // boundary and into the next round.
+    for (let i = 0; i < 10 && !g.winner; i++) {
+      const mover = g.units.find(
+        (u) =>
+          u.owner === g.current &&
+          !g.unitsMovedThisTurn.includes(u.id) &&
+          legalMoves(g, u, 1).length > 0,
+      );
+      if (mover) g = moveUnit(g, mover.id, '', legalMoves(g, mover, 1)[0]);
+      g = endActivation(g);
+      goes.push(g.current);
+    }
+    for (let i = 1; i < goes.length; i++) expect(goes[i]).not.toBe(goes[i - 1]);
+    expect(g.turn).toBeGreaterThan(1); // the run crossed a round boundary
+  });
+
+  it('ends the round rather than giving the other player a free extra go', () => {
+    let g = budgetGame();
+    // Blue passes immediately; Red then gets ONE more go and the round closes.
+    g = endActivation(g); // red passes (nothing committed)
+    expect(g.current).toBe('blue');
+    const mover = g.units.find((u) => u.owner === 'blue' && legalMoves(g, u, 1).length > 0)!;
+    g = moveUnit(g, mover.id, '', legalMoves(g, mover, 1)[0]);
+    g = endActivation(g);
+    // Red passed, so it is owed nothing — the round turns over instead of
+    // letting Blue run on with its remaining two units.
+    expect(g.turn).toBe(2);
+    expect(movesLeft(g, 'blue')).toBe(MOVE_BUDGET); // a fresh allowance, not a continuation
   });
 
   it('leaves the shipped dice game alone', () => {

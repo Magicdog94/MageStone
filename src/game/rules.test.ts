@@ -13,6 +13,7 @@ import {
   NOVA_COST,
   STONES_TO_WIN,
   activate,
+  beginRitual,
   canBolt,
   canNova,
   canResurrect,
@@ -34,8 +35,6 @@ import {
   resolveNova,
   ritualIntact,
   RITUAL_AREA,
-  RITUAL_HOLD_ROUNDS,
-  ritualWinsOnRound,
   resurrect,
   rollDice,
   DICE_PER_ROUND,
@@ -240,7 +239,9 @@ describe('TEST 1 — turn dice', () => {
     // Both spent their three, so the round turned over and the dice cleared.
     expect(g.turn).toBe(2);
     expect(g.dice).toEqual([]);
-    expect(g.roundStarter).toBe('blue');
+    // Blue acted last, so the new round opens on RED — the strict alternation
+    // carries across the boundary instead of handing anyone two goes.
+    expect(g.roundStarter).toBe('red');
   });
 
   it('leaves two of the five unused even though both players played', () => {
@@ -368,7 +369,7 @@ describe('A move uses up the LOWEST die that covers it', () => {
 // ---- Round & activation system ---------------------------------------------
 
 describe('Rounds and alternating activations', () => {
-  it('alternates one activation each, and rotates the starting player per round', () => {
+  it('alternates one activation each, and carries that across the round boundary', () => {
     let g = rolled(acting(['red', 'blue']), 1);
     expect(g.roundStarter).toBe('red');
     expect(g.current).toBe('red');
@@ -383,35 +384,36 @@ describe('Rounds and alternating activations', () => {
     // Strict alternation while both sides still have dice.
     expect(order).toEqual(['red', 'blue', 'red', 'blue', 'red', 'blue']);
 
-    // The round turned over and BLUE now leads.
+    // Blue acted last, so the new round opens on RED — never two goes in a row.
     expect(g.turn).toBe(2);
-    expect(g.roundStarter).toBe('blue');
-    expect(g.current).toBe('blue');
-    // …and back to red the round after (both sides simply pass).
-    let h = rolled({ ...g, turnPhase: 'act' as const }, 1);
-    for (let i = 0; i < 20 && h.turn === 2; i++) h = endActivation(h);
-    expect(h.roundStarter).toBe('red');
+    expect(g.roundStarter).toBe('red');
+    expect(g.current).toBe('red');
   });
 
-  it('a player who passes forfeits their remaining dice for the round', () => {
+  it('a player who passes forfeits the rest of their round — and gets no free go back', () => {
     let g = rolled(acting(['red', 'blue']), 1);
     g = endActivation(g); // red commits nothing → passes
     expect(g.passed).toContain('red');
     expect(g.current).toBe('blue');
-    // Blue keeps activating alone; red is skipped for the rest of the round.
+    // Blue takes its go; red is owed nothing, so the ROUND ends rather than
+    // letting blue run on alone.
     g = endActivation(activateOne(g, 'blue-w1'));
-    expect(g.current).toBe('blue');
-    expect(diceSpent(g, 'red')).toBe(0); // its dice went unused, as the rules allow
-    // The pass lifts when the round turns over.
-    for (let i = 0; i < 20 && g.turn === 1; i++) g = endActivation(g);
-    expect(g.passed).toEqual([]);
+    expect(g.turn).toBe(2);
+    expect(g.current).toBe('red'); // blue went last, so red opens the new round
+    expect(g.passed).toEqual([]); // the pass lifts with the new round
   });
 
-  it('rotates the starting player clockwise in a 4-player game', () => {
+  it('keeps the rotation going in a 4-player game', () => {
     let g = rolled(acting(['red', 'blue', 'green', 'yellow']), 1);
     expect(g.roundStarter).toBe('red');
+    const order: PlayerColor[] = [];
+    for (let i = 0; i < 4; i++) {
+      order.push(g.current);
+      g = endActivation(activateOne(g, `${g.current}-w1`));
+    }
+    expect(order).toEqual(['red', 'blue', 'green', 'yellow']);
     for (let i = 0; i < 40 && g.turn === 1; i++) g = endActivation(g);
-    expect(g.roundStarter).toBe('blue');
+    expect(g.roundStarter).toBe('red');
   });
 
   it('clears unspent dice and the per-round records at the round boundary', () => {
@@ -985,82 +987,51 @@ describe('TEST 11 — Ritual', () => {
     return g;
   };
 
-  /** Round number at which a Rite declared in `round` pays out. */
-  const winsOn = (round: number) => round + RITUAL_HOLD_ROUNDS;
-
-  it('needs a FULL round after the one it was declared in', () => {
-    // Declared in round 1 → round 2 is the round it must hold through → it pays
-    // out as round 3 opens. RITUAL_HOLD_ROUNDS is that "+2".
-    expect(RITUAL_HOLD_ROUNDS).toBe(2);
-    let g = startRitual(['red', 'blue']);
-    expect(g.ritual!.round).toBe(1);
-    expect(winsOn(g.ritual!.round)).toBe(3);
-
-    // Round 1 closes: NOT a win — the full round has not happened yet.
-    for (let i = 0; i < 6 && g.turn === 1; i++) g = endActivation(g);
-    expect(g.turn).toBe(2);
+  it('pays out the moment play RETURNS to the player who began it', () => {
+    let g = rolled(acting(['red', 'blue']), 2);
+    g = place(g, 'red-p', { r: 7, c: 7 });
+    g = beginRitual(g, 'red-p'); // a real declaration, so Red has not passed
+    expect(g.ritual).not.toBeNull();
+    // Red's activation ends → Blue gets its ONE go → play returns to Red.
+    g = endActivation(g);
+    expect(g.current).toBe('blue');
     expect(g.winner).toBeNull();
-
-    // All of round 2 passes: still not won until round 3 actually opens.
-    g = rollDice(g, () => 0.34);
-    for (let i = 0; i < 12 && g.turn === 2; i++) g = endActivation(g);
-    expect(g.turn).toBe(3);
+    g = endActivation(g);
+    expect(g.current).toBe('red');
     expect(g.winner).toBe('red');
     expect(g.winMethod).toBe('Ritual');
   });
 
-  it('pays out at the START of that round, before anyone acts in it', () => {
-    let g = startRitual(['red', 'blue']);
-    g = playOn(g);
+  it('can win inside the round it was declared in', () => {
+    const g = playOn(startRitual(['red', 'blue']), 4);
     expect(g.winner).toBe('red');
-    expect(g.turn).toBe(winsOn(1)); // exactly round 3, not later
-    // Nobody had a chance to move in the winning round.
-    expect(g.dice).toEqual([]);
-    expect(g.turnPhase).toBe('roll');
+    expect(g.turn).toBeLessThanOrEqual(2); // no full round of waiting any more
   });
 
-  it('holds the same arithmetic from a late round (12 → 14)', () => {
-    let g = rolled({ ...acting(['red', 'blue']), turn: 12 }, 2);
-    g = place(g, 'red-p', { r: 7, c: 7 });
-    g = { ...g, ritual: { player: 'red', priestId: 'red-p', round: 12 } };
-    expect(winsOn(12)).toBe(14);
-
-    for (let i = 0; i < 12 && g.turn === 12; i++) g = endActivation(g);
-    expect(g.turn).toBe(13);
-    expect(g.winner).toBeNull(); // round 13 is the full ritual round
-
-    g = rollDice(g, () => 0.34);
-    for (let i = 0; i < 12 && g.turn === 13; i++) g = endActivation(g);
-    expect(g.turn).toBe(14);
-    expect(g.winner).toBe('red'); // won as round 14 opens
-  });
-
-  it('does not win in the round it was declared, however many activations pass', () => {
-    let g = rolled(acting(['red', 'blue']), 2);
-    g = place(g, 'red-p', { r: 7, c: 7 });
-    g = { ...g, ritual: { player: 'red', priestId: 'red-p', round: g.turn } };
-    // Both sides burn all their activations; the Rite stands, but one round
-    // turning over is NOT enough — a whole round still has to pass.
-    for (let i = 0; i < 8 && g.turn === 1; i++) g = endActivation(g);
-    expect(g.turn).toBe(2);
-    expect(g.winner).toBeNull();
-    expect(playOn(g).winner).toBe('red'); // …it lands as round 3 opens
-  });
-
-  it('gives every other player a complete turn first (4 players)', () => {
+  it('gives every rival exactly ONE activation first (4 players)', () => {
     let g = rolled(acting(['red', 'blue', 'green', 'yellow']), 2);
     g = place(g, 'red-p', { r: 7, c: 7 });
-    g = { ...g, ritual: { player: 'red', priestId: 'red-p', round: g.turn } };
-    const seen = new Set<PlayerColor>();
-    for (let i = 0; i < 40 && !g.winner; i++) {
-      seen.add(g.current);
+    g = beginRitual(g, 'red-p');
+    const goes: PlayerColor[] = [];
+    for (let i = 0; i < 12 && !g.winner; i++) {
       g = endActivation(g);
+      if (!g.winner) goes.push(g.current);
     }
-    // Blue, green and yellow all got activations before the win landed.
-    expect(seen.has('blue')).toBe(true);
-    expect(seen.has('green')).toBe(true);
-    expect(seen.has('yellow')).toBe(true);
+    expect(goes).toEqual(['blue', 'green', 'yellow']); // one each, in order
     expect(g.winner).toBe('red');
+  });
+
+  it('is broken by a rival who reaches the Nexus on that one activation', () => {
+    let g = rolled(acting(['red', 'blue']), 3);
+    g = place(g, 'red-p', { r: 7, c: 7 });
+    g = place(g, 'blue-w1', { r: 5, c: 8 }); // three squares from (8,8)
+    g = beginRitual(g, 'red-p');
+    g = endActivation(g);
+    expect(g.current).toBe('blue');
+    const die = g.dice.find((d) => d.kind === 'warrior')!;
+    g = moveUnit(g, 'blue-w1', die.id, { r: 8, c: 8 });
+    expect(g.ritual).toBeNull(); // broken before it could pay out
+    expect(playOn(g).winner).toBeNull();
   });
 
   it('is the central 2x2 and nothing more', () => {
@@ -1091,44 +1062,21 @@ describe('TEST 11 — Ritual', () => {
     expect(playOn(g).winner).toBe('red');
   });
 
-  it('gives the opponent a WHOLE round to break it, not one activation', () => {
-    // Red declares in round 1. Round 2 belongs to everyone — blue has its full
-    // three dice to get into the Nexus before the Rite can pay out in round 3.
-    let g = rolled(acting(['red', 'blue']), 2);
+  it('one activation is ALL the opponent gets — a Rite out of reach simply lands', () => {
+    // Blue's nearest Warrior is four squares from the Nexus and the dice are
+    // all 3s: it cannot arrive in the single go it has before Red's next turn.
+    let g = rolled(acting(['red', 'blue']), 3);
     g = place(g, 'red-p', { r: 7, c: 7 });
-    g = place(g, 'blue-w1', { r: 8, c: 12 }); // too far to reach on one die
-    g = place(g, 'blue-w2', { r: 4, c: 8 }); // exactly three from the Nexus
-    g = { ...g, ritual: { player: 'red', priestId: 'red-p', round: g.turn } };
-    for (let i = 0; i < 8 && g.turn === 1; i++) g = endActivation(g);
-
-    expect(g.turn).toBe(2);
-    expect(g.winner).toBeNull();
-    g = rollDice(g, () => 0.34); // every die a 3
-    expect(g.current).toBe('blue'); // blue starts round 2
-
-    // Blue needs TWO of its three activations — one alone would not do it.
-    const first = g.dice.find((d) => d.kind === 'warrior')!;
-    g = moveUnit(g, 'blue-w1', first.id, { r: 8, c: 9 });
-    expect(g.ritual).not.toBeNull(); // still standing after the first
-    g = endActivation(g); // red
-    g = endActivation(g); // back to blue
+    g = place(g, 'blue-w1', { r: 12, c: 8 });
+    g = place(g, 'blue-w2', { r: 8, c: 12 });
+    g = beginRitual(g, 'red-p');
+    g = endActivation(g);
     expect(g.current).toBe('blue');
-
-    // A different Warrior (each unit gets one die per ROUND) walks onto the Nexus.
-    const second = g.dice.find((d) => d.kind === 'warrior' && !spentBy(d, 'blue'))!;
-    g = moveUnit(g, 'blue-w2', second.id, { r: 7, c: 8 });
-    expect(at(g, 'blue-w2').cell).toEqual({ r: 7, c: 8 });
-    expect(g.ritual).toBeNull(); // broken, with the whole round to do it in
-    expect(playOn(g).winner).toBeNull();
-  });
-
-  it('is reported by ritualWinsOnRound so the HUD can count down', () => {
-    const none = acting(['red', 'blue']);
-    expect(ritualWinsOnRound(none)).toBeNull();
-    const g = startRitual(['red', 'blue']);
-    expect(ritualWinsOnRound(g)).toBe(3);
-    const late = { ...g, ritual: { player: 'red' as const, priestId: 'red-p', round: 12 } };
-    expect(ritualWinsOnRound(late)).toBe(14);
+    const die = g.dice.find((d) => d.kind === 'warrior')!;
+    g = moveUnit(g, 'blue-w1', die.id, { r: 9, c: 8 }); // as close as it gets
+    expect(g.ritual).not.toBeNull();
+    g = endActivation(g);
+    expect(g.winner).toBe('red');
   });
 
   it('breaks when an enemy occupies a Nexus square', () => {

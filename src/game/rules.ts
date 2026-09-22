@@ -1563,23 +1563,42 @@ function hasActivationLeft(state: GameState, p: PlayerColor): boolean {
   return hasPlayLeft({ ...state, current: p, activationDice: [] });
 }
 
-/** The next player owed an activation, clockwise from `from` (exclusive), or
- *  null when the round is over. */
-function nextActivator(state: GameState, from: PlayerColor): PlayerColor | null {
+/** The next player in clockwise order (eliminated players are out of the game
+ *  entirely, so they are stepped over), or null if nobody is left. */
+function nextInOrder(state: GameState, from: PlayerColor): PlayerColor | null {
   const idx = state.players.indexOf(from);
   for (let hop = 1; hop <= state.players.length; hop++) {
     const cand = state.players[(idx + hop) % state.players.length];
-    if (hasActivationLeft(state, cand)) return cand;
+    if (!state.eliminated.includes(cand)) return cand;
   }
   return null;
 }
 
 /**
+ * A Rite pays out the moment play RETURNS to the player who began it: they
+ * declare it on one activation, every rival gets exactly one activation to
+ * break it, and if it is still standing when their next go comes round, they
+ * win. Called wherever `current` changes hands.
+ */
+function claimRitual(state: GameState): GameState {
+  const rit = state.ritual;
+  if (!rit || state.current !== rit.player || !ritualIntact(state)) return state;
+  return {
+    ...state,
+    winner: rit.player,
+    winMethod: 'Ritual',
+    log: [...state.log, `${rit.player} completes the Rite of the Nexus and wins!`],
+  };
+}
+
+/**
  * End the current ACTIVATION and pass play on.
  *
- * Play alternates: the next player with dice left activates. When nobody has
- * dice left — every player has spent their three, or passed on what remained —
- * the round ends, the starting player rotates, and a fresh roll begins.
+ * Play STRICTLY alternates — red, blue, red, blue — so nobody ever takes two
+ * goes in a row. Play always passes to the next player in order, and if THEY
+ * have nothing left (spent their units, or passed), the round ends there and
+ * everyone's allowance refills; the previous player does not get a free extra
+ * go out of it.
  */
 export function endActivation(state: GameState): GameState {
   if (gameOver(state)) return state;
@@ -1604,56 +1623,35 @@ export function endActivation(state: GameState): GameState {
       }
     : base;
 
-  const next = nextActivator(after, after.current);
-  if (next) {
-    return resolveRespawns({
-      ...after,
-      current: next,
-      activationDice: [],
-      lastCombat: null,
-      log: [
-        ...after.log,
-        isBudget(after)
-          ? `— ${next} activates (${movesLeft(after, next)} squares, ${slotsLeft(after, next)} units left).`
-          : `— ${next} activates (${diceLeft(after, next)} dice left).`,
-      ],
-    });
+  const next = nextInOrder(after, after.current);
+  if (next && hasActivationLeft(after, next)) {
+    return claimRitual(
+      resolveRespawns({
+        ...after,
+        current: next,
+        activationDice: [],
+        lastCombat: null,
+        log: [
+          ...after.log,
+          isBudget(after)
+            ? `— ${next} activates (${movesLeft(after, next)} squares, ${slotsLeft(after, next)} units left).`
+            : `— ${next} activates (${diceLeft(after, next)} dice left).`,
+        ],
+      }),
+    );
   }
   return newRound(after);
 }
 
 /**
- * How many rounds must tick over before a Rite pays out.
- *
- * The round it is DECLARED in is already part-spent, so it does not count: the
- * Rite has to survive one whole round after that. Declared in round 12, it is
- * won at the START of round 14 — round 13 being the full round it had to hold
- * through, in which every player, the ritualist included, gets a complete turn
- * to break it or defend it.
- */
-export const RITUAL_HOLD_ROUNDS = 2;
-
-/** The round at whose start a declared Rite pays out, or null if none is running. */
-export function ritualWinsOnRound(state: GameState): number | null {
-  return state.ritual ? state.ritual.round + RITUAL_HOLD_ROUNDS : null;
-}
-
-/**
- * Close the round and open the next one. The starting player rotates clockwise
- * each round (in a 2-player game that is strict alternation), unspent dice are
- * simply discarded, and the per-round records reset.
+ * Close the round and open the next one. The new round opens on the player
+ * whose go it would have been — the one who could not act, which is what ended
+ * the round — so the strict alternation carries straight across the boundary
+ * instead of handing anyone two goes in a row. Per-round records reset.
  */
 function newRound(state: GameState): GameState {
   const budget = isBudget(state);
-  const idx = state.players.indexOf(state.roundStarter);
-  let starter = state.roundStarter;
-  for (let hop = 1; hop <= state.players.length; hop++) {
-    const cand = state.players[(idx + hop) % state.players.length];
-    if (!state.eliminated.includes(cand)) {
-      starter = cand;
-      break;
-    }
-  }
+  const starter = nextInOrder(state, state.current) ?? state.roundStarter;
   const turn = state.turn + 1;
 
   let s: GameState = resolveRespawns({
@@ -1679,23 +1677,12 @@ function newRound(state: GameState): GameState {
     ],
   });
 
-  // The Rite is judged HERE, at the round boundary, and only once a full round
-  // has passed since it was declared (see RITUAL_HOLD_ROUNDS). Declared in round
-  // 12: round 13 is the round it must hold through, and it pays out as round 14
-  // opens — before anyone acts in it.
-  if (s.ritual) {
-    if (!ritualIntact(s)) {
-      s = { ...s, ritual: null, log: [...s.log, `The Ritual was broken.`] };
-    } else if (turn >= s.ritual.round + RITUAL_HOLD_ROUNDS) {
-      return {
-        ...s,
-        winner: s.ritual.player,
-        winMethod: 'Ritual',
-        log: [...s.log, `${s.ritual.player} completes the Rite of the Nexus and wins!`],
-      };
-    }
+  // A Rite that was broken during the round is dropped here; one still standing
+  // pays out if the new round opens with play back on the player who began it.
+  if (s.ritual && !ritualIntact(s)) {
+    s = { ...s, ritual: null, log: [...s.log, `The Ritual was broken.`] };
   }
-  return s;
+  return claimRitual(s);
 }
 
 /** Whether the current player can still do anything in this activation — a unit

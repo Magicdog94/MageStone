@@ -16,7 +16,6 @@ import {
   magePowerDie,
   movesLeft,
   novaVictims,
-  ritualWinsOnRound,
   slotsLeft,
   unitById,
   UNITS_PER_ROUND,
@@ -473,11 +472,11 @@ export function HUD() {
           <span
             className="ritual-flag"
             title={
-              `${label(game.ritual.player)}'s Rite of the Nexus completes at the start of round ` +
-              `${ritualWinsOnRound(game)} — it must survive every round until then.`
+              `${label(game.ritual.player)}'s Rite of the Nexus completes the moment play returns ` +
+              `to them — every rival gets exactly one activation to break it.`
             }
           >
-            Ritual · {label(game.ritual.player)} · wins R{ritualWinsOnRound(game)}
+            Ritual · {label(game.ritual.player)} · wins on their next go
           </span>
         )}
 

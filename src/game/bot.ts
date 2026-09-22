@@ -57,7 +57,6 @@ import {
   novaVictims,
   NOVA_COST,
   RITUAL_AREA,
-  RITUAL_HOLD_ROUNDS,
   plannedAttackers,
   resolveAttack,
   resolveBolt,
@@ -1033,14 +1032,37 @@ function ritualStands(state: GameState): boolean {
   return ritualIntact(state);
 }
 
-/** Rounds of dice NOBODY has rolled yet that a standing Rite must still outlast
- *  before it pays out. Declared this round → the whole next round; declared
- *  last round → none (it wins as the next round opens). */
-function ritualBlindRounds(state: GameState): number {
-  const rit = state.ritual;
-  if (!rit) return 0;
-  const inRound = state.turnPhase === 'act' ? 1 : 0;
-  return Math.max(0, rit.round + RITUAL_HOLD_ROUNDS - state.turn - inRound);
+/**
+ * Chance `p` breaks a standing Rite with its ONE upcoming activation — all it
+ * gets, since the Rite pays out the moment play returns to the ritualist.
+ * Walking any unit onto an open Nexus square or Bolting the Priest is certain;
+ * a melee on the Priest is a fight. Movement-allowance rules: the reach is the
+ * squares they have left, or a full allowance once the round turns over.
+ */
+function budgetBreakChance(
+  state: GameState,
+  p: PlayerColor,
+  occ: Uint8Array,
+  priest: Unit,
+  open: Cell[],
+): number {
+  const soon = actsLeft(state, p) > 0;
+  const reach = soon ? movesLeft(state, p) : budgetOf(state);
+  let best = 0;
+  for (const u of state.units) {
+    if (u.owner !== p || state.unitsActedThisTurn.includes(u.id)) continue;
+    const fresh = !state.unitsMovedThisTurn.includes(u.id);
+    const dist = fresh && reach > 0 ? routeDist(occ, u.cell, reach) : null;
+    if (dist && open.some((c) => dist[c.r * N + c.c] <= reach)) return 1;
+    if (u.kind === 'priest') continue;
+    // a Bolt reaches as far as their squares, and needs no walk at all
+    if (u.kind === 'mage' && u.activated >= 1 && manhattan(u.cell, priest.cell) <= reach) return 1;
+    const beside = dist
+      ? stepsBeside(dist, occ, u.cell, priest.cell) <= reach
+      : manhattan(u.cell, priest.cell) === 1;
+    if (beside) best = Math.max(best, u.kind === 'mage' ? faceOdds(magePowerDie(u.activated), 6) : quickOdds(1, 6));
+  }
+  return best;
 }
 
 /** Chance `p` CANNOT break the Rite over one round of dice not yet rolled:
@@ -1100,26 +1122,48 @@ function breakChanceNow(state: GameState, p: PlayerColor, hand: Hand, occ: Uint8
 }
 
 /**
- * Chance a standing Rite survives to pay out. It is declared in one round, must
- * hold through the whole NEXT round, and wins as the round after opens. So it
- * faces two kinds of threat: the rest of the current round, on dice every
- * player can already see, and each full round still to come, on dice nobody has
- * rolled. (A sure break is discounted a touch: the ritualist may get to screen
- * the square or kill the breaker first.) Open squares matter — a Nexus packed
- * with the ritualist's own units can only be broken by killing the Priest.
+ * Who actually gets to act before a standing Rite pays out: everyone from the
+ * player due next, up to (but not including) the ritualist. A Rite wins the
+ * moment play RETURNS to the player who began it — so in a two-player game,
+ * judging a position where the ENEMY holds the Rite and I have just used my
+ * activation, this list is EMPTY and the Rite is already won.
+ */
+function breakersBefore(state: GameState, ritualist: PlayerColor): PlayerColor[] {
+  const order = state.players.filter((p) => !state.eliminated.includes(p));
+  if (!order.length) return [];
+  const start = (order.indexOf(state.current) + 1) % order.length;
+  const out: PlayerColor[] = [];
+  for (let i = 0; i < order.length; i++) {
+    const p = order[(start + i) % order.length];
+    if (p === ritualist) break;
+    out.push(p);
+  }
+  return out;
+}
+
+/**
+ * Chance a standing Rite survives to pay out — that is, that none of the
+ * players still to act before play returns to the ritualist can break it. Each
+ * of them gets exactly ONE activation. (A sure break is discounted a touch: the
+ * ritualist may still screen the square or kill the breaker first.) Open
+ * squares matter: a Nexus packed with the ritualist's own units can only be
+ * broken by killing the Priest.
  */
 function ritualSurvival(state: GameState, occ: Uint8Array = occupancyOf(state)): number {
   const rit = state.ritual;
   const priest = rit && unitById(state, rit.priestId);
   if (!rit || !priest) return 0;
   const open = RITUAL_AREA.filter((c) => !occ[c.r * N + c.c]);
-  const blind = BRAIN.known ? ritualBlindRounds(state) : 1;
   let survive = 1;
-  for (const p of state.players) {
-    if (p === rit.player || state.eliminated.includes(p)) continue;
+  for (const p of breakersBefore(state, rit.player)) {
+    if (isBudget(state)) {
+      survive *= 1 - 0.9 * budgetBreakChance(state, p, occ, priest, open);
+      continue;
+    }
     const hand = BRAIN.known ? handOf(state, p) : null;
-    if (hand) survive *= 1 - 0.9 * breakChanceNow(state, p, hand, occ, priest, open);
-    for (let k = 0; k < blind; k++) survive *= blindRoundFail(state, p, priest, open);
+    survive *= hand
+      ? 1 - 0.9 * breakChanceNow(state, p, hand, occ, priest, open)
+      : blindRoundFail(state, p, priest, open);
   }
   return survive;
 }
@@ -1321,8 +1365,8 @@ function evaluate(state: GameState, me: PlayerColor): number {
 
   if (state.ritual && ritualStands(state)) {
     const p = ritualSurvival(state, occ ?? undefined);
-    // Past its last chance to be broken, a Rite is simply the result.
-    const settled = !!occ && p >= 0.98 && ritualBlindRounds(state) === 0;
+    // Nobody can reach it before play returns — the Rite IS the result.
+    const settled = !!occ && p >= 0.9;
     if (state.ritual.player === me) {
       // Squared: a coin-flip ritual is a cheap lottery ticket that bleeds the
       // Priest — only near-unstoppable rituals should outshine the board game.

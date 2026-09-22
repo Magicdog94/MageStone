@@ -226,7 +226,7 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <span className="htp-win-title">Priest Ritual Victory</span>
-            Move your Priest onto the central Nexus and declare a ritual. If your Priest survives and still holds
+            Move your Priest onto the central Nexus and declare a ritual. If it still holds when play returns to you — and still holds
             the Nexus for a full round, you win.
           </li>
           <li>
@@ -561,13 +561,12 @@ const SECTIONS: Section[] = [
           player’s colour.
         </p>
         <p className="htp-p">
-          The round you declare it in is already part-spent, so it does not count. The Rite must
-          then survive one <span className="htp-em">full round</span> — and it is won at the{' '}
-          <span className="htp-em">start of the round after that</span>, before anyone acts in it.
-          Declare in round 12 and you win as round 14 opens, with round 13 being the whole round
-          every opponent has to break it in. A single enemy stepping onto any Nexus square is
-          enough, and it also breaks if the Priest is killed or leaves the Nexus. The HUD flag
-          shows the round it pays out on.
+          The Rite is won the moment <span className="htp-em">play returns to you</span>. Every
+          rival gets exactly <span className="htp-em">one activation</span> to break it in
+          between — in a two-player game, your opponent has a single go to reach the Nexus or kill
+          the Priest. A single enemy stepping onto any Nexus square is enough, and it also breaks
+          if the Priest is killed or leaves the Nexus. Declaring it where the enemy can reach you
+          simply loses the Priest.
         </p>
         <NexusDiagram />
       </>

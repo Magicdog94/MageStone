@@ -68,7 +68,7 @@ const dist = (a: Cell, b: Cell) => Math.abs(a.r - b.r) + Math.abs(a.c - b.c);
 //
 // Each task also carries GUARDRAILS (store.tutRestrict): while the task is
 // live, only the interaction the step teaches is accepted — wrong units,
-// wrong squares, wrong actions and End Activation simply don't respond, so the
+// wrong squares, wrong actions and End Turn simply don't respond, so the
 // player can explore clicks freely without ever wrecking the staged lesson.
 // Between tasks (restrict null) the board is LOCKED outright (TUT_LOCK), and
 // tutorialTasks.test.ts plays every allowed interaction to prove no task can be
@@ -153,7 +153,7 @@ function beat(next: (st: GameState) => GameState): void {
   });
 }
 
-/** Move `unitId` as far toward `target` as the round's squares allow. */
+/** Move `unitId` as far toward `target` as the go's squares allow. */
 function stepToward(unitId: string, target: Cell): boolean {
   const st = g().game;
   const u = unitById(st, unitId);
@@ -219,15 +219,15 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'allowance',
       title: 'Six squares, three units',
-      body: 'No dice for your turn: every round you have SIX squares of movement to spend, across at most THREE units. One unit can march all six, or three units can take two each — your choice, every round.',
+      body: 'No dice for your turn: on every go you have SIX squares of movement to spend, across at most THREE units. One unit can march all six, or three units can take two each — your choice, every go.',
       anchor: '.budget-tray',
       placement: 'top',
     });
     await wait(300);
     await note({
       id: 'alternate',
-      title: 'You alternate — one unit each',
-      body: 'Move ONE unit, resolve what it does there, and play passes to your opponent. Back and forth until you have both used your three units (or spent your squares). A unit only ever goes once per round.',
+      title: 'Your whole go, in one stretch',
+      body: 'Move a unit, resolve what it does there, then carry on with the next — up to THREE units and SIX squares in total. Play passes only when you press End Turn, and any squares you have not used are LOST. A unit goes once per turn.',
       placement: 'bottom',
     });
 
@@ -246,14 +246,14 @@ export async function runTutorial(onDone: () => void) {
         const w = st.units.find((u) => u.owner === st.current);
         if (w) stepToward(w.id, { r: 8, c: 8 });
       },
-      // Any unit, any legal square — but not ending the activation yet.
+      // Any unit, any legal square — but not ending the go yet.
       { restrict: MOVE_RESTRICT },
     );
     await wait(500);
     await note({
       id: 'moved',
       title: 'Nicely done',
-      body: 'That’s movement: as far as your squares allow, through empty squares — units block the way, MageStones and gravestones don’t. Watch the pips: the squares you walked are gone for this round.',
+      body: 'That’s movement: as far as your squares allow, through empty squares — units block the way, MageStones and gravestones don’t. Watch the pips: the squares you walked are gone for this go.',
       placement: 'bottom',
     });
 
@@ -543,7 +543,7 @@ export async function runTutorial(onDone: () => void) {
       anchor: '.ritual-flag',
       placement: 'top',
     });
-    beat(ritualBeat); // your activation ends — Blue's turn
+    beat(ritualBeat); // your go ends — Blue's turn
     await wait(600);
     await note({
       id: 'ritual-blue',
@@ -552,8 +552,8 @@ export async function runTutorial(onDone: () => void) {
       anchor: '.player-strip',
       placement: 'bottom',
     });
-    // Play the hold out: pass, a fresh round, pass — until the Rite
-    // pays out as the round after its full round opens.
+    // Play the hold out: Blue takes its single go, and the Rite pays out the
+    // moment play lands back on you.
     for (let i = 0; i < 12 && !g().game.winner; i++) {
       beat(ritualBeat);
       await wait(650);
@@ -598,7 +598,7 @@ export async function runTutorial(onDone: () => void) {
       anchor: '.siege-alert',
       placement: 'bottom',
     });
-    beat(afterSiegeLaid); // your activation ends; play passes to Blue
+    beat(afterSiegeLaid); // your go ends; play passes to Blue
     await wait(1100);
     await note({
       id: 'siege-still',

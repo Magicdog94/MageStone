@@ -309,7 +309,7 @@ export const useGame = create<UIState>((set, get) => ({
   stoneLayoutId: 'diamond',
   settings: {
     healthBars: 'off',
-    turnSeconds: 60,
+    turnSeconds: 90, // a whole go — up to three units — not one activation
     sfxMuted: false,
     layout: detectLayout(),
     fastDice: false,
@@ -802,8 +802,8 @@ export const useGame = create<UIState>((set, get) => ({
  * Keep `undoPoint` — the board as the current activation began — up to date.
  *
  * Done here rather than inside each action because every play routes through
- * `game`, and the state to return to is simply the one BEFORE the first die of
- * the activation was committed. A resolved fight closes the door: undoing it
+ * `game`, and the state to return to is simply the one BEFORE the first move
+ * of the go was committed — so Undo hands back the whole go, not one step. A resolved fight closes the door: undoing it
  * would let a player re-roll a bad result, so any dice roll or defeat clears the
  * snapshot for the rest of the activation.
  */

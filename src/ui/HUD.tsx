@@ -18,7 +18,7 @@ import {
   novaVictims,
   slotsLeft,
   unitById,
-  UNITS_PER_ROUND,
+  UNITS_PER_GO,
 } from '../game/rules';
 import { useTokenUrl } from '../three/tokens';
 import { EliminationToast } from './EliminationToast';
@@ -56,7 +56,7 @@ function CamFixToggle() {
   );
 }
 
-/** Always-visible round structure — move one unit, then play passes. */
+/** Always-visible turn structure — the whole go, then play passes. */
 function PhaseTrack() {
   const game = useGame((s) => s.game);
   if (gameOver(game)) return null;
@@ -66,17 +66,17 @@ function PhaseTrack() {
   const steps = [
     {
       key: 'act',
-      label: `1 · Move one unit — ${squares} square${squares === 1 ? '' : 's'} left`,
+      label: `1 · Move up to 3 units — ${squares} square${squares === 1 ? '' : 's'} left`,
       done: false,
       active: phase === 'act',
     },
     {
       key: 'units',
-      label: `2 · ${units} of ${UNITS_PER_ROUND} units left this round`,
+      label: `2 · ${units} of ${UNITS_PER_GO} units left this go`,
       done: false,
       active: false,
     },
-    { key: 'pass', label: '3 · Pass to your opponent', done: false, active: false },
+    { key: 'pass', label: '3 · End your go — spare squares are lost', done: false, active: false },
   ];
   return (
     <div className="phase-track" aria-label="Turn phases">
@@ -259,7 +259,7 @@ export function HUD() {
   const attackOpts = myTurn ? attackOptions(game, selectedUnitId, tutRestrict) : [];
   const phase = game.turnPhase;
 
-  // The round's allowance for whoever is acting: squares and units left.
+  // The go's allowance for whoever is acting: squares and units left.
   const squaresLeft = movesLeft(game, game.current);
   const unitsLeft = slotsLeft(game, game.current);
   const graveBank = gravestoneBank(game);
@@ -367,9 +367,10 @@ export function HUD() {
       {/* Bottom control frame — fixed width; right column: ritual · button */}
       <div className="hud-bottom">
         <div className="tray">
-          {/* The round's allowance: squares to spend between at most three
-              units. Pips go out as they are walked (a Bolt spends them too). */}
-          <div className="budget-tray" aria-label="Movement left this round">
+          {/* The go's allowance: squares to spend between at most three
+              units. Pips go out as they are walked (a Bolt spends them too),
+              and whatever is still lit when the go ends is simply lost. */}
+          <div className="budget-tray" aria-label="Movement left this go">
             <div className="sq-row">
               {Array.from({ length: budgetOf(game) }, (_, i) => (
                 <span
@@ -399,7 +400,7 @@ export function HUD() {
                   · attack d{magePowerDie(selectedUnit.activated)}
                 </div>
               )}
-              {/* how far this unit can still march out of the round's squares */}
+              {/* how far this unit can still march out of the go's squares */}
               {(() => {
                 const moved = game.unitsMovedThisTurn.includes(selectedUnit.id);
                 // A task with no movement in it hides the "move up to N" hint.
@@ -407,7 +408,7 @@ export function HUD() {
                 return !moved && squaresLeft > 0 && unitsLeft > 0 ? (
                   <div className="muted">
                     move up to {squaresLeft} square{squaresLeft === 1 ? '' : 's'} — whatever you
-                    walk comes off the round
+                    walk comes off this go
                   </div>
                 ) : null;
               })()}
@@ -460,7 +461,7 @@ export function HUD() {
               </div>
             </>
           ) : phase === 'act' && unitsLeft === 0 ? (
-            <strong>No units left this round — pass</strong>
+            <strong>No units left this go — end your turn</strong>
           ) : (
             <span className="muted">No unit selected</span>
           )}
@@ -497,7 +498,7 @@ export function HUD() {
                       disabled={!canUndo}
                       title={
                         canUndo
-                          ? 'Take this activation back and start it again'
+                          ? 'Take your whole go back and start it again'
                           : game.activationDice.length === 0
                             ? 'Nothing to undo yet — you have not moved or acted'
                             : 'The dice have been rolled — a resolved fight cannot be taken back'
@@ -511,16 +512,16 @@ export function HUD() {
                     onClick={endActivation}
                     title={
                       game.activationDice.length > 0
-                        ? 'Commit this activation and pass play on'
-                        : 'Nothing committed — this passes, leaving the rest of your round unused'
+                        ? 'End your go and pass play on — any squares left over are lost'
+                        : 'Nothing committed — this passes, and the whole go is forfeit'
                     }
                   >
-                    Submit Move
+                    End Turn
                   </button>
                 </>
               )}
               {phase === 'act' && !hasPlayLeft(game) && (
-                <span className="muted">No dice left this round</span>
+                <span className="muted">Nothing left to do this go</span>
               )}
             </>
           )}

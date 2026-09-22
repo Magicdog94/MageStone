@@ -289,16 +289,22 @@ const DIE_KINDS: DieKind[] = ['mage', 'priest', 'warrior', 'warrior', 'warrior']
 /** How many of the five shared dice each player may spend per round. */
 export const DICE_PER_ROUND = 3;
 
-// ---- The movement-BUDGET variant (off by default) --------------------------
+// ---- The movement allowance: the CONTINUOUS GO ------------------------------
 //
-// An alternative to the dice pool, kept behind `GameState.variant` so the
-// shipped game is untouched: each round a player may activate at most
-// UNITS_PER_ROUND units and move MOVE_BUDGET squares in TOTAL between them —
-// one unit six squares, or three units two or three squares each, and so on.
-// Dice are then rolled for combat only. A unit still activates once per round,
-// and acting without moving still uses one of the three activations.
+// The shipped ruleset (`GameState.variant === 'budget'`; the dice pool lives on
+// behind the flag for the tests). A go is one UNINTERRUPTED stretch: the player
+// activates at most UNITS_PER_GO units and moves MOVE_BUDGET squares in TOTAL
+// between them — one unit six squares, or three units two or three squares
+// each, and so on — and only then does play pass. Dice are rolled for combat
+// only. A unit activates once per go, and acting without moving still uses one
+// of the three activations.
+//
+// The allowance does NOT bank. Whatever is left when a player ends their go is
+// LOST, so everyone starts their go with a full six squares and three units
+// however the last one went. That is what makes `endGo` — not the round — the
+// point where the allowance refills.
 
-/** Default squares a player may move in total per round (budget variant). */
+/** Default squares a player may move in total per go. */
 export const MOVE_BUDGET = 6;
 
 /** This game's allowance — `moveBudget` overrides the default, so the pace can
@@ -306,17 +312,20 @@ export const MOVE_BUDGET = 6;
 export function budgetOf(state: GameState): number {
   return state.moveBudget ?? MOVE_BUDGET;
 }
-/** Units a player may activate per round (budget variant). */
-export const UNITS_PER_ROUND = 3;
+/** Units a player may activate per go. */
+export const UNITS_PER_GO = 3;
 // Bolt has no die to read: it flies as far as the caster has squares left, and
 // the distance it travels comes OUT of them — move three and bolt three and the
-// round's six are gone.
+// go's six are gone.
 
 export function isBudget(state: GameState): boolean {
   return state.variant === 'budget';
 }
 
-/** Squares `player` has left to move this round (budget variant). */
+/** Squares `player` has left to move in their go. A player who is NOT on turn
+ *  reads a full allowance: their records are wiped when they hand over, and a
+ *  fresh six is exactly what they get back — which is what the bot's threat
+ *  model needs to see. */
 export function movesLeft(state: GameState, player: PlayerColor): number {
   return Math.max(0, budgetOf(state) - (state.moveSpent?.[player] ?? 0));
 }
@@ -324,7 +333,7 @@ export function movesLeft(state: GameState, player: PlayerColor): number {
 /** Unit ids carry their colour ('red-w1', 'red-w-res3'). */
 const colourOfId = (id: string): string => id.slice(0, id.indexOf('-'));
 
-/** Distinct units `player` has already activated this round. */
+/** Distinct units `player` has already activated in this go. */
 export function unitsActivated(state: GameState, player: PlayerColor): number {
   const ids = new Set<string>();
   for (const id of [...state.unitsMovedThisTurn, ...state.unitsActedThisTurn]) {
@@ -333,12 +342,12 @@ export function unitsActivated(state: GameState, player: PlayerColor): number {
   return ids.size;
 }
 
-/** Activations `player` has left this round (budget variant). */
+/** Activations `player` has left in their go. */
 export function slotsLeft(state: GameState, player: PlayerColor): number {
-  return Math.max(0, UNITS_PER_ROUND - unitsActivated(state, player));
+  return Math.max(0, UNITS_PER_GO - unitsActivated(state, player));
 }
 
-/** Is this unit already one of this round's activated units? */
+/** Is this unit already one of this go's activated units? */
 function onSlot(state: GameState, unitId: string): boolean {
   return state.unitsMovedThisTurn.includes(unitId) || state.unitsActedThisTurn.includes(unitId);
 }
@@ -359,7 +368,9 @@ function canTakeSlot(state: GameState, unitId: string): boolean {
 export function rollDice(state: GameState, rng: RNG = defaultRng): GameState {
   if (state.turnPhase !== 'roll') return state;
   if (isBudget(state)) {
-    // No turn dice at all: the round simply opens with everyone's allowance.
+    // No turn dice at all: a go simply opens with the player's allowance.
+    // (Unreachable in practice — budget games are created in the 'act' phase
+    // and `endGo` never leaves it — but kept so the phase cannot dead-end.)
     return {
       ...state,
       dice: [],
@@ -367,7 +378,7 @@ export function rollDice(state: GameState, rng: RNG = defaultRng): GameState {
       turnPhase: 'act',
       log: [
         ...state.log,
-        `Round ${state.turn}: ${budgetOf(state)} squares across up to ${UNITS_PER_ROUND} units each.`,
+        `${state.current}'s go: ${budgetOf(state)} squares across up to ${UNITS_PER_GO} units.`,
       ],
     };
   }
@@ -557,11 +568,11 @@ export function moveUnit(state: GameState, unitId: string, dieId: string, dest: 
   const unit = unitById(state, unitId);
   if (!unit) return state;
 
-  // BUDGET variant: no die — the move costs exactly the squares it walks, out
-  // of the round's shared allowance, and opens one of the three activations.
+  // No die — the move costs exactly the squares it walks, out of the go's
+  // allowance, and opens one of the three activations.
   if (isBudget(state)) {
     if (unit.owner !== state.current) return state;
-    if (onSlot(state, unitId)) return state; // one activation per unit per round
+    if (onSlot(state, unitId)) return state; // one activation per unit per go
     if (!canTakeSlot(state, unitId)) return state;
     const walked = moveDistance(state, unit, dest, movesLeft(state, state.current));
     if (walked === null || walked === 0) return state;
@@ -1543,21 +1554,14 @@ export function checkVictory(state: GameState): GameState {
  * something with it. The last test matters: without it a player whose pieces
  * are all locked would be handed activation after activation and the round
  * could never end.
+ *
+ * DICE VARIANT ONLY. Under the movement allowance every go ends in a handover
+ * (`endGo`) and the player picking play up always has a full allowance
+ * waiting, so there is nothing to ask.
  */
 function hasActivationLeft(state: GameState, p: PlayerColor): boolean {
   if (state.eliminated.includes(p)) return false;
   if (state.passed.includes(p)) return false;
-  if (isBudget(state)) {
-    // A spare activation, or a unit that moved earlier and has yet to act.
-    const resuming = state.units.some(
-      (u) =>
-        u.owner === p &&
-        state.unitsMovedThisTurn.includes(u.id) &&
-        !state.unitsActedThisTurn.includes(u.id),
-    );
-    if (slotsLeft(state, p) <= 0 && !resuming) return false;
-    return hasPlayLeft({ ...state, current: p, activationDice: [] });
-  }
   if (diceLeft(state, p) <= 0) return false;
   if (!state.dice.some((d) => dieSpentBy(d, p) === null)) return false;
   return hasPlayLeft({ ...state, current: p, activationDice: [] });
@@ -1592,16 +1596,82 @@ function claimRitual(state: GameState): GameState {
 }
 
 /**
- * End the current ACTIVATION and pass play on.
+ * End the current player's GO and hand over.
+ *
+ * A go is CONTINUOUS — the player moves up to UNITS_PER_GO units for at most
+ * MOVE_BUDGET squares in total, all in one uninterrupted stretch — so ending
+ * it IS the handover. Play then passes to the next player in order, who picks
+ * it up with a FULL allowance: whatever the outgoing player had left over is
+ * lost, never banked.
+ *
+ * Because the allowance refills on every handover rather than on a round
+ * boundary, `newRound` has no part in this. The round number still ticks over
+ * when play comes full circle to whoever opened it, but it is now nothing more
+ * than a counter for the log.
+ */
+function endGo(state: GameState): GameState {
+  const me = state.current;
+  const next = nextInOrder(state, me);
+  if (!next) return state; // nobody left to hand to
+
+  const wasted = movesLeft(state, me);
+  const note =
+    state.activationDice.length === 0
+      ? `${me} passes — the whole go is forfeit.`
+      : wasted > 0
+        ? `${me} ends their go — ${wasted} unused square${wasted === 1 ? '' : 's'} lost.`
+        : `${me} ends their go.`;
+
+  // Play has come full circle when it reaches the player who opened the round.
+  // (If THEY were eliminated part-way round, the crown passes to whoever picks
+  // play up, so the count can never stall on a player who no longer exists.)
+  const starter = state.eliminated.includes(state.roundStarter) ? next : state.roundStarter;
+  const wrapped = next === starter;
+  const turn = wrapped ? state.turn + 1 : state.turn;
+
+  let s: GameState = resolveRespawns({
+    ...state,
+    current: next,
+    roundStarter: starter,
+    turn,
+    turnPhase: 'act',
+    // The incoming go starts clean. Only the OUTGOING player can be in these
+    // records — nobody else has moved since they were last wiped — so clearing
+    // them wholesale is exactly "give the next player a fresh six and three".
+    moveSpent: {},
+    activationDice: [],
+    passed: [],
+    unitsMovedThisTurn: [],
+    unitsActedThisTurn: [],
+    resurrectedThisTurn: [],
+    lastCombat: null,
+    log: [
+      ...state.log,
+      note,
+      ...(wrapped ? [`— Round ${turn}.`] : []),
+      `— ${next}'s go: ${budgetOf(state)} squares across up to ${UNITS_PER_GO} units.`,
+    ],
+  });
+
+  // A Rite the outgoing player broke is dropped here; one still standing pays
+  // out the moment play lands back on whoever declared it.
+  if (s.ritual && !ritualIntact(s)) {
+    s = { ...s, ritual: null, log: [...s.log, `The Ritual was broken.`] };
+  }
+  return claimRitual(s);
+}
+
+/**
+ * End the current player's turn and pass play on.
  *
  * Play STRICTLY alternates — red, blue, red, blue — so nobody ever takes two
- * goes in a row. Play always passes to the next player in order, and if THEY
- * have nothing left (spent their units, or passed), the round ends there and
- * everyone's allowance refills; the previous player does not get a free extra
- * go out of it.
+ * goes in a row. Under the movement allowance this ends the WHOLE go (see
+ * `endGo`); under the dice variant it ends ONE activation, and if the next
+ * player has nothing left the round ends there and everyone's dice refill.
  */
 export function endActivation(state: GameState): GameState {
   if (gameOver(state)) return state;
+  if (isBudget(state)) return endGo(state);
   const base = state;
 
   // Ending an activation without having committed anything is a PASS: that
@@ -1613,13 +1683,7 @@ export function endActivation(state: GameState): GameState {
     ? {
         ...base,
         passed: base.passed.includes(base.current) ? base.passed : [...base.passed, base.current],
-        log: [
-          ...base.log,
-          isBudget(base)
-            ? `${base.current} passes — ${movesLeft(base, base.current)} squares and ` +
-              `${slotsLeft(base, base.current)} units unused.`
-            : `${base.current} passes — ${diceLeft(base, base.current)} dice unused.`,
-        ],
+        log: [...base.log, `${base.current} passes — ${diceLeft(base, base.current)} dice unused.`],
       }
     : base;
 
@@ -1631,12 +1695,7 @@ export function endActivation(state: GameState): GameState {
         current: next,
         activationDice: [],
         lastCombat: null,
-        log: [
-          ...after.log,
-          isBudget(after)
-            ? `— ${next} activates (${movesLeft(after, next)} squares, ${slotsLeft(after, next)} units left).`
-            : `— ${next} activates (${diceLeft(after, next)} dice left).`,
-        ],
+        log: [...after.log, `— ${next} activates (${diceLeft(after, next)} dice left).`],
       }),
     );
   }
@@ -1644,6 +1703,7 @@ export function endActivation(state: GameState): GameState {
 }
 
 /**
+ * DICE VARIANT ONLY (the movement allowance hands over through `endGo`).
  * Close the round and open the next one. The new round opens on the player
  * whose go it would have been — the one who could not act, which is what ended
  * the round — so the strict alternation carries straight across the boundary
@@ -1672,7 +1732,7 @@ function newRound(state: GameState): GameState {
     log: [
       ...state.log,
       budget
-        ? `— Round ${turn}. ${starter} starts — ${budgetOf(state)} squares across up to ${UNITS_PER_ROUND} units.`
+        ? `— Round ${turn}. ${starter} starts — ${budgetOf(state)} squares across up to ${UNITS_PER_GO} units.`
         : `— Round ${turn}. ${starter} starts. Roll the dice.`,
     ],
   });

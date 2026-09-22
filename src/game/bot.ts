@@ -51,7 +51,7 @@ import {
   moveDistance,
   movesLeft,
   slotsLeft,
-  UNITS_PER_ROUND,
+  UNITS_PER_GO,
   magePowerDie,
   moveUnit,
   novaVictims,
@@ -1305,7 +1305,7 @@ function evaluate(state: GameState, me: PlayerColor): number {
       // are gone the danger is next round's full allowance, one step further off.
       const soon = actsLeft(state, e) > 0;
       const reach = soon ? movesLeft(state, e) : budgetOf(state);
-      const slots = soon ? actsLeft(state, e) : UNITS_PER_ROUND;
+      const slots = soon ? actsLeft(state, e) : UNITS_PER_GO;
       v -= w * (soon ? 1 : 0.8) * budgetThreat(state, e, me, occ, reach, slots);
       v -= BRAIN.tempo * (soon ? slots : 0);
       v += 0.4 * budgetThreat(state, me, e, occ, movesLeft(state, me), actsLeft(state, me));
@@ -1679,14 +1679,15 @@ function searchAction(state: GameState): BotAction | null {
   const sr = newSearch(BRAIN.rollouts && replyActive() ? passEnd : hardDeadline);
   const cands = candidateActions(state, 'hard');
   if (!cands.length) return null;
-  // Before a die is committed, "do nothing" is a PASS: it forfeits every die
-  // still in hand for the rest of the round. Judge standing pat as exactly
-  // that — otherwise any turn where no single play beats the board as it
-  // stands hands the whole rest of the round to the opponent.
-  const endNow =
-    BRAIN.known && state.activationDice.length === 0
-      ? evaluate({ ...state, passed: [...state.passed, me] }, me)
-      : evaluate(state, me);
+  // "Do nothing more" ends the GO, and an unused allowance is LOST — it never
+  // banks for later. So standing pat must be judged as a player with no plays
+  // left at all (`passed` is what `actsLeft` reads), whether or not something
+  // has already been committed. Judged as the plain position instead, the bot
+  // prices the units it is about to throw away as if it still had them, and
+  // stops its go one or two moves early, every go.
+  const endNow = BRAIN.known
+    ? evaluate({ ...state, passed: [...state.passed, me] }, me)
+    : evaluate(state, me);
 
   const pass1 = rootCandidates(cands).map((c) => ({ c, v: actionValue(state, c.a, me, 2, sr) }));
   pass1.sort((a, b) => b.v - a.v);

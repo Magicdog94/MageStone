@@ -226,8 +226,8 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <span className="htp-win-title">Priest Ritual Victory</span>
-            Move your Priest onto the central Nexus and declare a ritual. If it still holds when play returns to you — and still holds
-            the Nexus for a full round, you win.
+            Move your Priest onto the central Nexus and declare a ritual. If it is still holding
+            the Nexus when play returns to you, you win.
           </li>
           <li>
             <span className="htp-win-title">Conquest Victory</span>
@@ -302,10 +302,10 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p className="htp-p">
-          There are <span className="htp-em">no turn dice</span>. Every round you have{' '}
+          There are <span className="htp-em">no turn dice</span>. On your go you have{' '}
           <span className="htp-em">six squares of movement</span> to spend across{' '}
-          <span className="htp-em">at most three units</span>, and you take turns{' '}
-          <span className="htp-em">activating</span>, one unit at a time, back and forth.
+          <span className="htp-em">at most three units</span>, and you take the whole go{' '}
+          <span className="htp-em">in one continuous stretch</span> before play passes.
         </p>
         <ol className="htp-ol">
           <li>
@@ -314,7 +314,7 @@ const SECTIONS: Section[] = [
             Warrior 1, another 2 and a third 3.
           </li>
           <li>
-            Take one <span className="htp-em">activation</span>, then pass to your opponent:
+            For each unit you use:
             <ul className="htp-list htp-list--sub">
               <li>Choose one of your units — any kind, no die needed.</li>
               <li>Move it as far as your remaining squares allow — orthogonal (never diagonal), through empty squares; the path may turn. Whatever it walks comes off your six.</li>
@@ -323,23 +323,24 @@ const SECTIONS: Section[] = [
                 Mage), collect or activate a MageStone, resurrect a Warrior, or start a Nexus
                 Ritual.
               </li>
-              <li>Play passes to the other player.</li>
+              <li>Then carry straight on with your next unit — up to three in all.</li>
             </ul>
           </li>
           <li>
-            <span className="htp-em">A unit goes once per round.</span> Acting without moving is
+            <span className="htp-em">A unit goes once per turn.</span> Acting without moving is
             still one of your three units — it just costs no squares.
           </li>
           <li>
-            You alternate until both players are out of units or squares (or choose to pass, which
-            gives up the rest of your round). Then everything refills, with the{' '}
-            <span className="htp-em">starting player alternating</span> each round.
+            <span className="htp-em">Use it or lose it.</span> Press End Turn when you are done;
+            any squares still in hand are forfeit and never carry over. Play then passes — you,
+            your opponent, you — and your next go opens on a full six squares and three fresh
+            units, however this one went.
           </li>
         </ol>
         <h4 className="htp-sub">Ganging up</h4>
         <p className="htp-p">
           Two or three Warriors standing beside the same enemy can attack together for 2d6 or 3d6.
-          Each Warrior joining in uses one of your three units for the round, but the attack itself
+          Each Warrior joining in uses one of your three units for the go, but the attack itself
           costs no squares — only walking them into place does.
         </p>
         <div className="htp-note">
@@ -578,12 +579,12 @@ const SECTIONS: Section[] = [
     icon: 'scroll',
     body: (
       <ol className="htp-ol">
-        <li>Each round you have 6 squares of movement, across at most 3 units.</li>
-        <li>Take turns activating: pick a unit → move it → resolve its action → pass.</li>
-        <li>A unit goes once a round; acting without moving still uses one of your three.</li>
+        <li>On your go you have 6 squares of movement, across at most 3 units.</li>
+        <li>Spend them in one stretch: pick a unit → move it → resolve its action → next unit.</li>
+        <li>A unit goes once a turn; acting without moving still uses one of your three.</li>
         <li>Two or three Warriors beside the same enemy can attack together (2d6 / 3d6).</li>
         <li>Fight, collect stones, activate stones, resurrect Warriors, or attempt the Nexus Ritual.</li>
-        <li>When both players are done, the round ends and the starting player alternates.</li>
+        <li>End your turn when you are done — leftover squares are lost, and play alternates.</li>
         <li>Win by MageStone Victory, Priest Ritual Victory, or Conquest Victory.</li>
       </ol>
     ),

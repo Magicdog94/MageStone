@@ -1,14 +1,17 @@
-// The movement-BUDGET variant (GameState.variant === 'budget'): each round a
-// player activates at most three units and moves six squares in total between
-// them, and dice are rolled for combat only. Off by default — these tests also
-// pin that the shipped dice game is untouched.
+// The movement allowance (GameState.variant === 'budget'): a go is one
+// CONTINUOUS stretch in which a player activates at most three units and moves
+// six squares in total between them, and dice are rolled for combat only.
+// Unused allowance is lost at the end of the go, never banked, so every go
+// opens on a full six. These tests also pin that the dice variant — kept behind
+// the flag — is untouched.
 
 import { describe, expect, it } from 'vitest';
 import { createGame } from './setup';
 import {
   MOVE_BUDGET,
-  UNITS_PER_ROUND,
+  UNITS_PER_GO,
   NOVA_COST,
+  beginRitual,
   boltTargets,
   canAct,
   canNova,
@@ -53,7 +56,7 @@ describe('Movement-budget variant', () => {
     expect(g.dice).toEqual([]);
     expect(g.turnPhase).toBe('act');
     expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET);
-    expect(slotsLeft(g, 'red')).toBe(UNITS_PER_ROUND);
+    expect(slotsLeft(g, 'red')).toBe(UNITS_PER_GO);
   });
 
   it('spends exactly the squares walked, and refuses a move it cannot pay for', () => {
@@ -70,7 +73,7 @@ describe('Movement-budget variant', () => {
     expect(movesLeft(g, 'red')).toBe(0);
   });
 
-  it('allows at most three units a round, and one activation each', () => {
+  it('allows at most three units a go, and one activation each', () => {
     let g = budgetGame();
     for (const [i, id] of ['red-w1', 'red-w2', 'red-w3'].entries()) {
       g = place(g, id, { r: 5, c: 4 + i * 2 });
@@ -143,15 +146,64 @@ describe('Movement-budget variant', () => {
     expect(unitById(g, 'blue-w2')).toBeUndefined();
   });
 
-  it('refills the allowance when the round turns over', () => {
+  it('keeps the go going — moving a unit does not pass play', () => {
     let g = place(budgetGame(), 'red-w1', { r: 5, c: 5 });
-    g = moveUnit(g, 'red-w1', '', { r: 10, c: 5 }); // all five… plus one to spare
-    expect(movesLeft(g, 'red')).toBe(1);
-    for (let i = 0; i < 12 && g.turn === 1; i++) g = endActivation(g);
-    expect(g.turn).toBe(2);
-    g = rollDice(g);
-    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET);
-    expect(slotsLeft(g, 'red')).toBe(UNITS_PER_ROUND);
+    g = place(g, 'red-w2', { r: 5, c: 7 });
+    g = moveUnit(g, 'red-w1', '', { r: 7, c: 5 }); // two squares
+    expect(g.current).toBe('red'); // still Red's go
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET - 2);
+    g = moveUnit(g, 'red-w2', '', { r: 7, c: 7 }); // two more, same go
+    expect(g.current).toBe('red');
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET - 4);
+    expect(slotsLeft(g, 'red')).toBe(UNITS_PER_GO - 2);
+    g = endActivation(g); // only THIS hands over
+    expect(g.current).toBe('blue');
+  });
+
+  it('loses whatever is unused — every go opens on a full allowance', () => {
+    let g = place(budgetGame(), 'red-w1', { r: 5, c: 5 });
+    g = moveUnit(g, 'red-w1', '', { r: 6, c: 5 }); // one square of the six
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET - 1);
+    g = endActivation(g); // the other five are thrown away, not banked
+    expect(g.current).toBe('blue');
+    expect(movesLeft(g, 'blue')).toBe(MOVE_BUDGET);
+    g = endActivation(g); // Blue does nothing at all
+    expect(g.current).toBe('red');
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET); // a full six again, not one
+    expect(slotsLeft(g, 'red')).toBe(UNITS_PER_GO);
+    expect(g.unitsMovedThisTurn).toEqual([]); // and red-w1 may march again
+  });
+
+  it('counts a round only when play comes full circle', () => {
+    let g = budgetGame(); // Red opens round 1
+    expect(g.turn).toBe(1);
+    g = endActivation(g);
+    expect(g.current).toBe('blue');
+    expect(g.turn).toBe(1); // mid-round: Blue has yet to go
+    g = endActivation(g);
+    expect(g.current).toBe('red');
+    expect(g.turn).toBe(2); // back to the opener — the round ticks over
+  });
+
+  it('gives the defender a WHOLE go to break a Rite, not one unit', () => {
+    let g = place(budgetGame(), 'red-p', { r: 7, c: 7 }); // a Nexus square
+    g = place(g, 'blue-w1', { r: 4, c: 8 }); // four squares from (8,8)
+    g = place(g, 'blue-w2', { r: 4, c: 6 });
+    g = beginRitual(g, 'red-p');
+    expect(g.ritual).not.toBeNull();
+    g = endActivation(g);
+    expect(g.current).toBe('blue');
+    expect(movesLeft(g, 'blue')).toBe(MOVE_BUDGET);
+    // Blue spends a unit on something else FIRST and still gets to the Nexus —
+    // under a one-unit activation that first move would have handed Red the win.
+    g = moveUnit(g, 'blue-w2', '', { r: 6, c: 6 }); // two squares
+    expect(g.current).toBe('blue'); // the go runs on
+    expect(g.winner).toBeNull();
+    g = moveUnit(g, 'blue-w1', '', { r: 8, c: 8 }); // four more, into the Nexus
+    expect(g.ritual).toBeNull(); // broken before it could pay out
+    g = endActivation(g);
+    expect(g.current).toBe('red');
+    expect(g.winner).toBeNull();
   });
 
   it('alternates strictly — nobody ever takes two goes in a row', () => {
@@ -174,18 +226,21 @@ describe('Movement-budget variant', () => {
     expect(g.turn).toBeGreaterThan(1); // the run crossed a round boundary
   });
 
-  it('ends the round rather than giving the other player a free extra go', () => {
+  it('costs a passer their go and nothing more', () => {
     let g = budgetGame();
-    // Blue passes immediately; Red then gets ONE more go and the round closes.
-    g = endActivation(g); // red passes (nothing committed)
+    g = endActivation(g); // Red commits nothing — the whole go is forfeit
     expect(g.current).toBe('blue');
     const mover = g.units.find((u) => u.owner === 'blue' && legalMoves(g, u, 1).length > 0)!;
     g = moveUnit(g, mover.id, '', legalMoves(g, mover, 1)[0]);
     g = endActivation(g);
-    // Red passed, so it is owed nothing — the round turns over instead of
-    // letting Blue run on with its remaining two units.
+    // Blue does NOT run on into a second go, and Red comes back whole: passing
+    // never used to be recoverable inside a round, and now there is nothing to
+    // recover — the next go is a clean six.
+    expect(g.current).toBe('red');
     expect(g.turn).toBe(2);
-    expect(movesLeft(g, 'blue')).toBe(MOVE_BUDGET); // a fresh allowance, not a continuation
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET);
+    expect(slotsLeft(g, 'red')).toBe(UNITS_PER_GO);
+    expect(g.passed).toEqual([]);
   });
 
   it('leaves the shipped dice game alone', () => {

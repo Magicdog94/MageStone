@@ -539,7 +539,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'ritual-lit',
       title: 'The ritual is lit',
-      body: 'Now HOLD it: Blue gets exactly ONE go to break it — reach the Nexus or kill your Priest — and if it survives that, the Rite completes the moment play returns to you. Blue’s units are far away. Watch.',
+      body: 'Now HOLD it: in a two-player game Blue gets TWO goes to break it — reach the Nexus or kill your Priest — and if it survives both, the Rite completes when play comes back round to you the second time. (With four players it is one go each instead.) Blue’s units are far away. Watch.',
       anchor: '.ritual-flag',
       placement: 'top',
     });
@@ -548,7 +548,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'ritual-blue',
       title: 'Blue can’t reach',
-      body: 'Blue would need to touch the Nexus or kill the Priest, and its army is home. It takes its one go…',
+      body: 'Blue would need to touch the Nexus or kill the Priest, and its army is home. It takes its two goes…',
       anchor: '.player-strip',
       placement: 'bottom',
     });
@@ -561,7 +561,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'win2-done',
       title: 'Ritual Victory!',
-      body: 'Blue had its one go and could not reach you — so the moment play came back, the Rite completed. That’s the second road, and the fastest one when the centre is clear.',
+      body: 'Blue had both its goes and could not reach you — so when play came back round the second time, the Rite completed. That’s the second road, and the fastest one when the centre is clear.',
       anchor: '.winner',
       placement: 'left',
     });

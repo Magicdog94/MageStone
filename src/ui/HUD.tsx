@@ -16,6 +16,7 @@ import {
   magePowerDie,
   movesLeft,
   novaVictims,
+  ritualHoldOf,
   slotsLeft,
   unitById,
   UNITS_PER_GO,
@@ -469,17 +470,25 @@ export function HUD() {
 
         <div className="spacer" />
 
-        {game.ritual && (
-          <span
-            className="ritual-flag"
-            title={
-              `${label(game.ritual.player)}'s Rite of the Nexus completes the moment play returns ` +
-              `to them — every rival gets exactly one activation to break it.`
-            }
-          >
-            Ritual · {label(game.ritual.player)} · wins on their next go
-          </span>
-        )}
+        {game.ritual &&
+          (() => {
+            // How many more times play has to come back round to the ritualist:
+            // two in a heads-up game, one with four players.
+            const left = ritualHoldOf(game) - (game.ritual.returns ?? 0);
+            return (
+              <span
+                className="ritual-flag"
+                title={
+                  `${label(game.ritual.player)}'s Rite of the Nexus completes when play has come ` +
+                  `back round to them ${left === 1 ? 'once more' : `${left} more times`}. ` +
+                  `Reach any Nexus square, or kill the Priest, before then.`
+                }
+              >
+                Ritual · {label(game.ritual.player)} ·{' '}
+                {left === 1 ? 'wins on their next go' : 'wins on their go after next'}
+              </span>
+            );
+          })()}
 
         <div className="actions">
           {!myTurn ? (

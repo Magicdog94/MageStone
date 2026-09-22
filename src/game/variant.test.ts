@@ -185,6 +185,36 @@ describe('Movement-budget variant', () => {
     expect(g.turn).toBe(2); // back to the opener — the round ticks over
   });
 
+  it('holds a heads-up Rite for TWO returns and a four-player one for a single return', () => {
+    // Heads-up: Blue gets TWO goes at it.
+    let g = place(budgetGame(), 'red-p', { r: 7, c: 7 });
+    g = beginRitual(g, 'red-p');
+    g = endActivation(g); // Blue's first go
+    expect(g.winner).toBeNull();
+    g = endActivation(g); // back to Red — only half held
+    expect(g.current).toBe('red');
+    expect(g.winner).toBeNull();
+    expect(g.ritual?.returns).toBe(1);
+    g = endActivation(g); // Blue's second go
+    expect(g.winner).toBeNull();
+    g = endActivation(g); // and now it pays out
+    expect(g.winner).toBe('red');
+    expect(g.winMethod).toBe('Ritual');
+
+    // Four players: one lap of the table is the whole hold, because that lap
+    // already hands three rivals a go each.
+    let h = createGame(['red', 'blue', 'green', 'yellow'], 'diamond');
+    h = place(h, 'red-p', { r: 7, c: 7 });
+    h = beginRitual(h, 'red-p');
+    const seats: string[] = [];
+    for (let i = 0; i < 4 && !h.winner; i++) {
+      h = endActivation(h);
+      if (!h.winner) seats.push(h.current);
+    }
+    expect(seats).toEqual(['blue', 'green', 'yellow']); // one go each
+    expect(h.winner).toBe('red');
+  });
+
   it('gives the defender a WHOLE go to break a Rite, not one unit', () => {
     let g = place(budgetGame(), 'red-p', { r: 7, c: 7 }); // a Nexus square
     g = place(g, 'blue-w1', { r: 4, c: 8 }); // four squares from (8,8)

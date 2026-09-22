@@ -61,6 +61,7 @@ import {
   resolveAttack,
   resolveBolt,
   resolveNova,
+  ritualHoldOf,
   ritualIntact,
   resurrect,
   rollDice,
@@ -1138,7 +1139,15 @@ function breakersBefore(state: GameState, ritualist: PlayerColor): PlayerColor[]
     if (p === ritualist) break;
     out.push(p);
   }
-  return out;
+  // A hold above 1 (every heads-up game) makes the Rite come round the table
+  // more than once, so every rival gets that many goes at it. (The ritualist's
+  // own goes in between are not modelled — this deliberately under-rates the
+  // defence it can mount, which keeps the estimate on the safe side.)
+  const left = ritualHoldOf(state) - (state.ritual?.returns ?? 0);
+  if (left <= 1) return out;
+  const many: PlayerColor[] = [];
+  for (let i = 0; i < left; i++) many.push(...out);
+  return many;
 }
 
 /**

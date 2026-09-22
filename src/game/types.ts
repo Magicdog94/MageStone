@@ -107,6 +107,10 @@ export interface Ritual {
    *  the win is claimed when play RETURNS to this player in a later round —
    *  which may be several activations into that round. */
   round: number;
+  /** How many times play has already come back to the ritualist with the Rite
+   *  still standing. It pays out on the `ritualHoldOf(state)`-th return — TWO
+   *  in a 2-player game, one with 4 players. */
+  returns?: number;
 }
 
 /** A Mage/Priest awaiting respawn because an enemy is holding its base. */
@@ -176,6 +180,12 @@ export interface GameState {
   /** Squares a player may move per round in the budget variant (default
    *  MOVE_BUDGET) — the dial that sets the game's pace. */
   moveBudget?: number;
+  /** Overrides how many times play must RETURN to the ritualist before a Rite
+   *  pays out. Normally UNSET, and `ritualHoldOf` then derives it from the
+   *  player count: 2 in a heads-up game, 1 with four players — see the note
+   *  there for why the two counts need different numbers. A balance dial for
+   *  the arena. */
+  ritualHold?: number;
   /** Players knocked out of the game: reduced to zero units on the board while
    *  their base was besieged. They take no turns and never respawn. */
   eliminated: PlayerColor[];

@@ -15,6 +15,7 @@ import {
   activate,
   beginRitual,
   canBolt,
+  ritualHoldOf,
   canNova,
   canResurrect,
   canRitual,
@@ -987,25 +988,33 @@ describe('TEST 11 — Ritual', () => {
     return g;
   };
 
-  it('pays out the moment play RETURNS to the player who began it', () => {
+  it('pays out on the SECOND return in a heads-up game', () => {
     let g = rolled(acting(['red', 'blue']), 2);
     g = place(g, 'red-p', { r: 7, c: 7 });
     g = beginRitual(g, 'red-p'); // a real declaration, so Red has not passed
     expect(g.ritual).not.toBeNull();
-    // Red's activation ends → Blue gets its ONE go → play returns to Red.
+    expect(ritualHoldOf(g)).toBe(2);
+    // Blue's first go…
     g = endActivation(g);
     expect(g.current).toBe('blue');
     expect(g.winner).toBeNull();
+    // …play comes back to Red once, and the Rite is still only HALF held.
     g = endActivation(g);
     expect(g.current).toBe('red');
+    expect(g.winner).toBeNull();
+    expect(g.ritual?.returns).toBe(1);
+    // Blue's second go, and then it pays out.
+    g = playOn(g, 4);
     expect(g.winner).toBe('red');
     expect(g.winMethod).toBe('Ritual');
   });
 
-  it('can win inside the round it was declared in', () => {
-    const g = playOn(startRitual(['red', 'blue']), 4);
+  it('wins two rounds after it was declared', () => {
+    const start = startRitual(['red', 'blue']);
+    const g = playOn(start, 12);
     expect(g.winner).toBe('red');
-    expect(g.turn).toBeLessThanOrEqual(2); // no full round of waiting any more
+    // Declared in round N, won in round N+2 — the doubled heads-up hold.
+    expect(g.turn).toBe(start.turn + 2);
   });
 
   it('gives every rival exactly ONE activation first (4 players)', () => {
@@ -1062,9 +1071,9 @@ describe('TEST 11 — Ritual', () => {
     expect(playOn(g).winner).toBe('red');
   });
 
-  it('one activation is ALL the opponent gets — a Rite out of reach simply lands', () => {
-    // Blue's nearest Warrior is four squares from the Nexus and the dice are
-    // all 3s: it cannot arrive in the single go it has before Red's next turn.
+  it('two goes is ALL the opponent gets — a Rite out of reach simply lands', () => {
+    // Blue's nearest Warrior is far from the Nexus and the dice are all 3s: it
+    // cannot arrive in the two goes it has before the Rite pays out.
     let g = rolled(acting(['red', 'blue']), 3);
     g = place(g, 'red-p', { r: 7, c: 7 });
     g = place(g, 'blue-w1', { r: 12, c: 8 });
@@ -1075,7 +1084,7 @@ describe('TEST 11 — Ritual', () => {
     const die = g.dice.find((d) => d.kind === 'warrior')!;
     g = moveUnit(g, 'blue-w1', die.id, { r: 9, c: 8 }); // as close as it gets
     expect(g.ritual).not.toBeNull();
-    g = endActivation(g);
+    g = playOn(endActivation(g), 6);
     expect(g.winner).toBe('red');
   });
 

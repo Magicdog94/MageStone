@@ -227,7 +227,8 @@ const SECTIONS: Section[] = [
           <li>
             <span className="htp-win-title">Priest Ritual Victory</span>
             Move your Priest onto the central Nexus and declare a ritual. If it is still holding
-            the Nexus when play returns to you, you win.
+            the Nexus when play has come back round to you — twice in a two-player game, once
+            with four — you win.
           </li>
           <li>
             <span className="htp-win-title">Conquest Victory</span>
@@ -562,12 +563,12 @@ const SECTIONS: Section[] = [
           player’s colour.
         </p>
         <p className="htp-p">
-          The Rite is won the moment <span className="htp-em">play returns to you</span>. Every
-          rival gets exactly <span className="htp-em">one activation</span> to break it in
-          between — in a two-player game, your opponent has a single go to reach the Nexus or kill
-          the Priest. A single enemy stepping onto any Nexus square is enough, and it also breaks
-          if the Priest is killed or leaves the Nexus. Declaring it where the enemy can reach you
-          simply loses the Priest.
+          The Rite needs play to come back round to you — <span className="htp-em">twice</span>{' '}
+          in a two-player game, <span className="htp-em">once</span> with four. So your lone
+          opponent gets two full goes to reach the Nexus or kill the Priest, and in a four-player
+          game each of your three rivals gets one. A single enemy stepping onto any Nexus square
+          is enough, and it also breaks if the Priest is killed or leaves the Nexus. Declaring it
+          where the enemy can reach you simply loses the Priest.
         </p>
         <NexusDiagram />
       </>

@@ -1584,9 +1584,42 @@ function nextInOrder(state: GameState, from: PlayerColor): PlayerColor | null {
  * break it, and if it is still standing when their next go comes round, they
  * win. Called wherever `current` changes hands.
  */
+/**
+ * How many times play must RETURN to the ritualist before the Rite pays out.
+ *
+ * TWO in a heads-up game, ONE with four players — because a "return" is worth
+ * wildly different amounts at the two counts. With two players it hands your
+ * opponent a SINGLE go to reach the Nexus or kill the Priest; with four it
+ * hands your three rivals a go each. One return in a 4-player game is already
+ * three times the defence, and measurement bears it out: at one return apiece
+ * the Rite took 64% of 2-player games but only 9% of 4-player ones. Doubling
+ * it heads-up brings that to 32% and leaves all three victories live; doubling
+ * it at four players killed the Rite outright (4%) and handed the game to the
+ * stone race. So the hold is set per player count, not globally.
+ *
+ * `state.ritualHold` overrides it for arena work.
+ */
+export function ritualHoldOf(state: GameState): number {
+  return Math.max(1, state.ritualHold ?? (state.players.length <= 2 ? 2 : 1));
+}
+
 function claimRitual(state: GameState): GameState {
   const rit = state.ritual;
   if (!rit || state.current !== rit.player || !ritualIntact(state)) return state;
+  // Each pass through here banks one return; until the hold is met the Rite
+  // simply keeps burning.
+  const need = ritualHoldOf(state);
+  const seen = (rit.returns ?? 0) + 1;
+  if (seen < need) {
+    return {
+      ...state,
+      ritual: { ...rit, returns: seen },
+      log: [
+        ...state.log,
+        `The Rite burns on — ${need - seen} more time${need - seen === 1 ? '' : 's'} round the table.`,
+      ],
+    };
+  }
   return {
     ...state,
     winner: rit.player,

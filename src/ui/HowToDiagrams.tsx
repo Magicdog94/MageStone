@@ -170,7 +170,7 @@ export function MoveDiagram() {
   return (
     <Figure
       label="Orthogonal movement path"
-      caption="Spend squares from your go's six to move a unit — orthogonally, turning corners if you like, but never diagonally. Any number of units may share the six."
+      caption="Spend squares from your go's six to move a unit — orthogonally, turning corners if you like, but never diagonally. Up to three units may share the six."
       height={oy + n * cell + 8}
     >
       {checker(n, n, ox, oy, cell)}

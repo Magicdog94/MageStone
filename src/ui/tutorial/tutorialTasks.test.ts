@@ -24,6 +24,7 @@ import {
   resolveBolt,
   resolveNova,
   resurrect,
+  slotsLeft,
 } from '../../game/rules';
 import type { GameState } from '../../game/types';
 import { TUT_LOCK, tutAllows, type TutRestrict } from './restrict';
@@ -62,7 +63,7 @@ function gestures(st: GameState, r: TutRestrict): GameState[] {
   for (const u of units) {
     // Moves: every square this unit's share of the round's allowance reaches,
     // that the task allows to glow.
-    if (squares > 0) {
+    if (slotsLeft(st, st.current) > 0 && squares > 0) {
       for (const c of legalMoves(st, u, squares)) {
         if (r.dests && !r.dests.some((x) => sameCell(x, c))) continue;
         add(moveUnit(st, u.id, '', c));

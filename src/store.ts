@@ -28,6 +28,7 @@ import {
   resurrect,
   rollDice,
   setRolledValues,
+  slotsLeft,
   unitById,
 } from './game/rules';
 import { sameCell } from './game/board';
@@ -858,6 +859,7 @@ export function moveDestinations(
     // left, provided it hasn't gone yet and an activation is spare.
     if (unit.owner !== game.current) return [];
     if (game.unitsMovedThisTurn.includes(unit.id) || game.unitsActedThisTurn.includes(unit.id)) return [];
+    if (slotsLeft(game, game.current) <= 0) return [];
     all = legalMoves(game, unit, movesLeft(game, game.current));
   } else {
     const die = game.dice.find((d) => d.id === dieId);

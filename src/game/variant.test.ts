@@ -1,6 +1,7 @@
 // The movement allowance (GameState.variant === 'budget'): a go is one
-// CONTINUOUS stretch in which a player moves six squares in total, divided
-// between AS MANY UNITS AS THEY LIKE, and dice are rolled for combat only.
+// CONTINUOUS stretch in which a player activates at most three units and moves
+// six squares in total between them, and dice are rolled for combat only.
+// TWO currencies: squares ration movement, the three activations ration ACTION.
 // Unused allowance is lost at the end of the go, never banked, so every go
 // opens on a full six. These tests also pin that the dice variant — kept behind
 // the flag — is untouched.
@@ -24,6 +25,10 @@ import {
   resolveBolt,
   resolveNova,
   rollDice,
+  attackTargets,
+  plannedAttackers,
+  resolveAttack,
+  slotsLeft,
   syncStones,
   unitById,
   unitsActivated,
@@ -134,36 +139,55 @@ describe('Movement-budget variant', () => {
     expect(g.gravestones).toHaveLength(1);
   });
 
-  it('caps nothing but the squares — six units may each take one', () => {
+  it('allows at most three units a go, and one activation each', () => {
     let g = budgetGame();
-    const ids = ['red-w1', 'red-w2', 'red-w3', 'red-w4', 'red-w5', 'red-w6'];
-    for (const [i, id] of ids.entries()) {
-      g = place(g, id, { r: 5, c: 3 + i * 2 });
-      g = moveUnit(g, id, '', { r: 6, c: 3 + i * 2 });
-      expect(unitsActivated(g, 'red')).toBe(i + 1);
+    for (const [i, id] of ['red-w1', 'red-w2', 'red-w3'].entries()) {
+      g = place(g, id, { r: 5, c: 4 + i * 2 });
+      g = moveUnit(g, id, '', { r: 6, c: 4 + i * 2 });
     }
-    // All six walked a square each, so the SQUARES are what ran out.
-    expect(movesLeft(g, 'red')).toBe(0);
-    expect(unitsActivated(g, 'red')).toBe(6);
-    // A seventh unit is refused for want of squares, not for want of a slot.
-    g = place(g, 'red-p', { r: 5, c: 15 });
-    expect(moveUnit(g, 'red-p', '', { r: 6, c: 15 })).toBe(g);
-    // and a unit that already moved still cannot move again
-    expect(moveUnit(g, 'red-w1', '', { r: 7, c: 3 })).toBe(g);
+    expect(slotsLeft(g, 'red')).toBe(0);
+    expect(movesLeft(g, 'red')).toBe(3); // squares to spare, but no units
+    // a fourth unit cannot start, even with squares in hand
+    g = place(g, 'red-w4', { r: 5, c: 10 });
+    expect(moveUnit(g, 'red-w4', '', { r: 6, c: 10 })).toBe(g);
+    expect(canAct(g, 'red-w4')).toBe(false);
+    // and a unit that already moved cannot move again
+    expect(moveUnit(g, 'red-w1', '', { r: 7, c: 4 })).toBe(g);
   });
 
-  it('lets every unit act in place for free — no slot, no squares', () => {
-    let g = budgetGame();
-    // Three Warriors already walked their six squares away.
-    g = { ...g, moveSpent: { red: MOVE_BUDGET }, unitsMovedThisTurn: ['red-w1', 'red-w2', 'red-w3'] };
-    expect(movesLeft(g, 'red')).toBe(0);
-    // A FOURTH unit that has not moved can still act from where it stands.
-    g = place(g, 'red-m', { r: 8, c: 8 });
+  it('counts acting in place as one of the three activations', () => {
+    let g = place(budgetGame(), 'red-m', { r: 8, c: 8 });
     g = place(g, 'blue-w1', { r: 8, c: 9 });
     expect(canAct(g, 'red-m')).toBe(true);
-    expect(canAct(g, 'red-w4')).toBe(true);
-    // …and so can one that already moved, since acting follows its move.
-    expect(canAct(g, 'red-w1')).toBe(true);
+    // Acting from where it stands: no squares spent, one slot gone.
+    g = { ...g, unitsActedThisTurn: ['red-m'], unitsMovedThisTurn: [] };
+    expect(slotsLeft(g, 'red')).toBe(2);
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET);
+  });
+
+  it('rations the FREE kills: no fourth attacker once the slots are gone', () => {
+    // The v0.11.0 hole this closes — six Warriors already in place around two
+    // enemies could take TWO coordinated kills for zero squares.
+    let g = budgetGame();
+    g = place(g, 'blue-w1', { r: 6, c: 4 });
+    g = place(g, 'red-w1', { r: 5, c: 4 });
+    g = place(g, 'red-w2', { r: 7, c: 4 });
+    g = place(g, 'red-w3', { r: 6, c: 3 });
+    g = place(g, 'blue-w2', { r: 6, c: 9 });
+    g = place(g, 'red-w4', { r: 5, c: 9 });
+    g = place(g, 'red-w5', { r: 7, c: 9 });
+    g = place(g, 'red-w6', { r: 6, c: 10 });
+    const gang = plannedAttackers(g, 'red-w1', 'blue-w1');
+    expect(gang).toHaveLength(3); // the first gang uses all three slots
+    g = resolveAttack(g, gang, 'blue-w1', () => 0.99);
+    expect(slotsLeft(g, 'red')).toBe(0);
+    // The second gang has nothing left to pay with. (plannedAttackers still
+    // names a lead Warrior — it never trims below one — but the unit cannot
+    // act and the engine refuses the attack, so the UI never offers it.)
+    expect(canAct(g, 'red-w4')).toBe(false);
+    expect(attackTargets(g, 'red-w4')).toEqual([]);
+    expect(resolveAttack(g, ['red-w4'], 'blue-w2', () => 0.99)).toBe(g);
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET); // and no squares were spent
   });
 
   it('flies a Bolt as far as the squares left — and spends them', () => {

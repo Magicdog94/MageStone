@@ -293,22 +293,29 @@ export const DICE_PER_ROUND = 3;
 //
 // The shipped ruleset (`GameState.variant === 'budget'`; the dice pool lives on
 // behind the flag for the tests). A go is one UNINTERRUPTED stretch: the player
-// moves MOVE_BUDGET squares in TOTAL, divided between AS MANY UNITS AS THEY
-// LIKE — one unit six squares, three units two each, six units one each — and
-// only then does play pass. Dice are rolled for combat only.
+// activates at most UNITS_PER_GO units and moves MOVE_BUDGET squares in TOTAL
+// between them — one unit six squares, or three units two each, and so on —
+// and only then does play pass. Dice are rolled for combat only.
 //
-// There is NO cap on how many units take part (v0.11). Squares are the only
-// currency: each unit gets ONE activation per go (move, then act, or act in
-// place), and an action that costs no squares — an attack from where you
-// stand, a collect, a resurrection — costs nothing at all.
+// TWO currencies, and both matter. Squares ration MOVEMENT; the three
+// activations ration ACTION. A unit that acts without moving — a Warrior
+// swinging from where it stands, a Mage casting Nova — spends no squares but
+// still spends one of the three. That is what stops a dug-in cluster taking
+// free kills for ever: v0.11.0 briefly removed the cap and self-play showed a
+// player could take TWO coordinated kills for zero squares, and 4-player games
+// stalled out (1 in 10 hit the round cap, up from 1 in 40). Restored v0.11.1.
 //
 // The allowance does NOT bank. Whatever is left when a player ends their go is
-// LOST, so everyone starts their go with a full six squares however the last
-// one went. That is what makes `endGo` — not the round — the
+// LOST, so everyone starts their go with a full six squares and three units
+// however the last one went. That is what makes `endGo` — not the round — the
 // point where the allowance refills.
 
 /** Default squares a player may move in total per go. */
 export const MOVE_BUDGET = 6;
+
+/** Units a player may activate per go. Rations ACTION as the squares ration
+ *  movement — see the note above on why both are needed. */
+export const UNITS_PER_GO = 3;
 
 /** This game's allowance — `moveBudget` overrides the default, so the pace can
  *  be tuned without touching the rules. */
@@ -334,9 +341,7 @@ export function movesLeft(state: GameState, player: PlayerColor): number {
 /** Unit ids carry their colour ('red-w1', 'red-w-res3'). */
 const colourOfId = (id: string): string => id.slice(0, id.indexOf('-'));
 
-/** Distinct units `player` has already activated in this go. Nothing LIMITS
- *  this any more — it is reporting only (the HUD, and the bot's read of how
- *  much a side has already committed). */
+/** Distinct units `player` has already activated in this go. */
 export function unitsActivated(state: GameState, player: PlayerColor): number {
   const ids = new Set<string>();
   for (const id of [...state.unitsMovedThisTurn, ...state.unitsActedThisTurn]) {
@@ -345,10 +350,21 @@ export function unitsActivated(state: GameState, player: PlayerColor): number {
   return ids.size;
 }
 
+/** Activations `player` has left in their go. */
+export function slotsLeft(state: GameState, player: PlayerColor): number {
+  return Math.max(0, UNITS_PER_GO - unitsActivated(state, player));
+}
+
 /** Has this unit already had its activation this go? A unit moves once and
  *  acts once, and acting in place uses that same single activation. */
 function onSlot(state: GameState, unitId: string): boolean {
   return state.unitsMovedThisTurn.includes(unitId) || state.unitsActedThisTurn.includes(unitId);
+}
+
+/** May this unit be activated now — either it already holds one of the go's
+ *  three slots, or the player still has one spare? */
+function canTakeSlot(state: GameState, unitId: string): boolean {
+  return onSlot(state, unitId) || slotsLeft(state, state.current) > 0;
 }
 
 /**
@@ -371,7 +387,7 @@ export function rollDice(state: GameState, rng: RNG = defaultRng): GameState {
       turnPhase: 'act',
       log: [
         ...state.log,
-        `${state.current}'s go: ${budgetOf(state)} squares of movement.`,
+        `${state.current}'s go: ${budgetOf(state)} squares across up to ${UNITS_PER_GO} units.`,
       ],
     };
   }
@@ -566,6 +582,7 @@ export function moveUnit(state: GameState, unitId: string, dieId: string, dest: 
   if (isBudget(state)) {
     if (unit.owner !== state.current) return state;
     if (onSlot(state, unitId)) return state; // one activation per unit per go
+    if (!canTakeSlot(state, unitId)) return state;
     const walked = moveDistance(state, unit, dest, movesLeft(state, state.current));
     if (walked === null || walked === 0) return state;
     const moved = checkVictory(
@@ -640,9 +657,8 @@ export function canAct(state: GameState, unitId: string): boolean {
   const unit = unitById(state, unitId);
   if (!unit || unit.owner !== state.current) return false;
   if (state.unitsActedThisTurn.includes(unitId)) return false;
-  // Budget variant: an action needs no die and no slot — every unit that has
-  // not already acted may act, and an action in place costs nothing at all.
-  if (isBudget(state)) return true;
+  // Budget variant: acting needs an activation, not a die.
+  if (isBudget(state)) return canTakeSlot(state, unitId);
   if (unitDie(state, unitId)) return true;
   return availableDice(state).some((d) => d.kind === unit.kind);
 }
@@ -654,8 +670,8 @@ export function canAct(state: GameState, unitId: string): boolean {
  * both the new dice array and the activation it belongs to.
  */
 function spendActionDie(state: GameState, unitId: string): Die[] | null {
-  // Budget variant: an action spends no die, and since v0.11 no slot either.
-  if (isBudget(state)) return state.dice;
+  // Budget variant: the action spends an activation, and no die at all.
+  if (isBudget(state)) return canTakeSlot(state, unitId) ? state.dice : null;
   const existing = unitDie(state, unitId);
   if (existing) return state.dice;
   const unit = unitById(state, unitId);
@@ -732,11 +748,10 @@ export function coordinationCandidates(state: GameState, targetId: string): Unit
 /**
  * The attackers an attack on `targetId` led by `attackerId` would actually use:
  * a lone Mage/Warrior, or a Warrior plus auto-coordinating adjacent Warriors
- * (capped at 3 by the combat rules, and — in the DICE game only — by the free
- * Warrior dice left. Under the movement allowance an attack costs nothing, so
- * every adjacent Warrior that has not acted piles in). The store and the
- * pre-attack odds preview both call this so the preview matches what actually
- * happens.
+ * (capped at 3, and at what the player can still pay for — ACTIVATIONS under
+ * the movement allowance, free Warrior dice in the dice game). The store and
+ * the pre-attack odds preview both call this so the preview matches what
+ * actually happens.
  */
 export function plannedAttackers(state: GameState, attackerId: string, targetId: string): string[] {
   const sel = unitById(state, attackerId);
@@ -744,9 +759,14 @@ export function plannedAttackers(state: GameState, attackerId: string, targetId:
   if (sel.kind !== 'warrior') return [attackerId];
   const others = coordinationCandidates(state, targetId).filter((w) => w.id !== sel.id);
   const chosen = [sel, ...others].slice(0, 3);
-  // Under the movement allowance nothing further limits the gang: joining in
-  // costs no squares and no activation, only that Warrior's own go.
-  if (isBudget(state)) return chosen.map((w) => w.id);
+  if (isBudget(state)) {
+    // Each Warrior joining in costs one of the go's activations, unless it is
+    // already one of them (it moved earlier this go).
+    const spare = slotsLeft(state, state.current);
+    const needing = () => chosen.filter((w) => !onSlot(state, w.id)).length;
+    while (needing() > spare && chosen.length > 1) chosen.pop();
+    return chosen.map((w) => w.id);
+  }
   const freeCount = availableDice(state).filter((d) => d.kind === 'warrior').length;
   const needing = () => chosen.filter((w) => !unitDie(state, w.id)).length;
   while (needing() > freeCount && chosen.length > 1) chosen.pop();
@@ -825,6 +845,13 @@ export function resolveAttack(
 
   const isMage = attackers.length === 1 && attackers[0].kind === 'mage';
   if (!isMage && attackers.some((a) => a.kind !== 'warrior')) return state;
+
+  // Budget variant: every attacker not already activated this go costs one of
+  // the three activations, so a gang-up is limited by what is left.
+  if (isBudget(state)) {
+    const fresh = attackers.filter((a) => !onSlot(state, a.id)).length;
+    if (fresh > slotsLeft(state, state.current)) return state;
+  }
 
   // Spend a die for each attacker (reusing move dice where present).
   let dice = state.dice;
@@ -1627,9 +1654,9 @@ function claimRitual(state: GameState): GameState {
 /**
  * End the current player's GO and hand over.
  *
- * A go is CONTINUOUS — the player moves any number of units for at most
- * MOVE_BUDGET squares in total, all in one uninterrupted stretch — so ending
- * it IS the handover. Play then passes to the next player in order, who picks
+ * A go is CONTINUOUS — the player activates up to UNITS_PER_GO units for at
+ * most MOVE_BUDGET squares in total, all in one uninterrupted stretch — so
+ * ending it IS the handover. Play then passes to the next player in order, who picks
  * it up with a FULL allowance: whatever the outgoing player had left over is
  * lost, never banked.
  *
@@ -1678,7 +1705,7 @@ function endGo(state: GameState): GameState {
       ...state.log,
       note,
       ...(wrapped ? [`— Round ${turn}.`] : []),
-      `— ${next}'s go: ${budgetOf(state)} squares of movement.`,
+      `— ${next}'s go: ${budgetOf(state)} squares across up to ${UNITS_PER_GO} units.`,
     ],
   });
 
@@ -1761,7 +1788,7 @@ function newRound(state: GameState): GameState {
     log: [
       ...state.log,
       budget
-        ? `— Round ${turn}. ${starter} starts — ${budgetOf(state)} squares of movement.`
+        ? `— Round ${turn}. ${starter} starts — ${budgetOf(state)} squares across up to ${UNITS_PER_GO} units.`
         : `— Round ${turn}. ${starter} starts. Roll the dice.`,
     ],
   });
@@ -1785,7 +1812,7 @@ export function hasPlayLeft(state: GameState): boolean {
       (u) =>
         u.owner === p &&
         (canAct(state, u.id) ||
-          (canWalk && !onSlot(state, u.id) && legalMoves(state, u, 1).length > 0)),
+          (canWalk && !onSlot(state, u.id) && slotsLeft(state, p) > 0 && legalMoves(state, u, 1).length > 0)),
     );
   }
   if (diceLeft(state, state.current) <= 0) return false;

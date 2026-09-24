@@ -1,5 +1,5 @@
 import { asTutorialScript, useGame, type TutRestrict } from '../../store';
-import { legalMoves, movesLeft, unitById } from '../../game/rules';
+import { legalMoves, movesLeft, slotsLeft, unitById } from '../../game/rules';
 import type { Callout } from './useTutorial';
 import type { Cell, GameState } from '../../game/types';
 import { useTutorial } from './useTutorial';
@@ -159,7 +159,7 @@ function stepToward(unitId: string, target: Cell): boolean {
   const u = unitById(st, unitId);
   if (!u) return false;
   const reach = movesLeft(st, st.current);
-  if (reach <= 0) return false;
+  if (reach <= 0 || slotsLeft(st, st.current) <= 0) return false;
   const moves = legalMoves(st, u, reach);
   if (moves.length === 0) return false;
   const best = moves.reduce((a, b) => (dist(b, target) < dist(a, target) ? b : a));
@@ -218,8 +218,8 @@ export async function runTutorial(onDone: () => void) {
 
     await note({
       id: 'allowance',
-      title: 'Six squares of movement',
-      body: 'No dice for your turn: on every go you have SIX squares of movement to spend, divided between AS MANY UNITS AS YOU LIKE. One unit can march all six, three can take two each, or six can take one each — your choice, every go.',
+      title: 'Six squares, three units',
+      body: 'No dice for your turn: on every go you have SIX squares of movement to spend, across at most THREE units. One unit can march all six, or three units can take two each — your choice, every go.',
       anchor: '.budget-tray',
       placement: 'top',
     });
@@ -227,7 +227,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'alternate',
       title: 'Your whole go, in one stretch',
-      body: 'Move a unit, resolve what it does there, then carry on with the next — SIX squares in total, spread over as many units as you like. Actions cost no squares, so a Warrior already beside an enemy attacks for free. Play passes only when you press End Turn, and any squares you have not used are LOST.',
+      body: 'Move a unit, resolve what it does there, then carry on with the next — up to THREE units and SIX squares in total. Acting costs no squares but still uses one of your three units. Play passes only when you press End Turn, and any squares you have not used are LOST.',
       placement: 'bottom',
     });
 

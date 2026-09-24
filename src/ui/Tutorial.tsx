@@ -305,15 +305,14 @@ const SECTIONS: Section[] = [
         <p className="htp-p">
           There are <span className="htp-em">no turn dice</span>. On your go you have{' '}
           <span className="htp-em">six squares of movement</span> to spend across{' '}
-          <span className="htp-em">as many units as you like</span>, and you take the whole go{' '}
+          <span className="htp-em">at most three units</span>, and you take the whole go{' '}
           <span className="htp-em">in one continuous stretch</span> before play passes.
         </p>
         <ol className="htp-ol">
           <li>
             Divide your six squares however you like: one unit marching all{' '}
-            <span className="htp-em">6</span>, two units on 3 and 3, three units on 2 each, or six
-            units on one each. Nothing caps how many take part — the squares are the only
-            currency.
+            <span className="htp-em">6</span>, two units on 3 and 3, three units on 2 each — or a
+            Warrior 1, another 2 and a third 3.
           </li>
           <li>
             For each unit you use:
@@ -330,8 +329,8 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <span className="htp-em">A unit goes once per turn</span> — it moves and then acts,
-            or simply acts where it stands. An action costs no squares at all, so a Warrior
-            already beside an enemy attacks for free.
+            or simply acts where it stands. Acting costs no squares, but it is still one of your{' '}
+            <span className="htp-em">three units</span>.
           </li>
           <li>
             <span className="htp-em">Use it or lose it.</span> Press End Turn when you are done;
@@ -343,8 +342,8 @@ const SECTIONS: Section[] = [
         <h4 className="htp-sub">Ganging up</h4>
         <p className="htp-p">
           Two or three Warriors standing beside the same enemy can attack together for 2d6 or 3d6.
-          Each Warrior joining in uses up its own go, but the attack itself costs no squares —
-          only walking them into place does.
+          Each Warrior joining in uses one of your three units for the go, but the attack itself
+          costs no squares — only walking them into place does.
         </p>
         <div className="htp-note">
           <strong>Important:</strong> dice are rolled for <span className="htp-em">fights only</span>{' '}
@@ -583,9 +582,9 @@ const SECTIONS: Section[] = [
     icon: 'scroll',
     body: (
       <ol className="htp-ol">
-        <li>On your go you have 6 squares of movement, across as many units as you like.</li>
+        <li>On your go you have 6 squares of movement, across at most 3 units.</li>
         <li>Spend them in one stretch: pick a unit → move it → resolve its action → next unit.</li>
-        <li>A unit goes once a turn; an action costs no squares, so attacking in place is free.</li>
+        <li>A unit goes once a turn; acting without moving costs no squares but still uses one of your three.</li>
         <li>Two or three Warriors beside the same enemy can attack together (2d6 / 3d6).</li>
         <li>Fight, collect stones, activate stones, resurrect Warriors, or attempt the Nexus Ritual.</li>
         <li>End your turn when you are done — leftover squares are lost, and play alternates.</li>

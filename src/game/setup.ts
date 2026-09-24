@@ -1,7 +1,7 @@
 // Initial game-state construction: base formations, MageStone scatter, pools.
 
 import { PLAYER_ROTATION, rotateCell } from './board';
-import { GRAVES_PER_PLAYER, MOVE_BUDGET, UNITS_PER_GO } from './rules';
+import { GRAVES_PER_PLAYER, MOVE_BUDGET } from './rules';
 import type {
   Cell,
   GameState,
@@ -202,7 +202,7 @@ function buildGame(players: PlayerColor[], layout: StoneLayout, variant: 'dice' 
     winMethod: null,
     log: [
       budget
-        ? `Round 1: ${players[0]} starts — ${MOVE_BUDGET} squares across up to ${UNITS_PER_GO} units.`
+        ? `Round 1: ${players[0]} starts — ${MOVE_BUDGET} squares of movement.`
         : `Round 1: ${players[0]} starts. Roll the dice.`,
     ],
   };

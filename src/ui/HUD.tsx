@@ -17,9 +17,7 @@ import {
   movesLeft,
   novaVictims,
   ritualHoldOf,
-  slotsLeft,
   unitById,
-  UNITS_PER_GO,
 } from '../game/rules';
 import { useTokenUrl } from '../three/tokens';
 import { EliminationToast } from './EliminationToast';
@@ -36,7 +34,7 @@ const KIND_LABEL = { warrior: 'Warrior', mage: 'Mage', priest: 'Priest' } as con
 const KIND_ABILITY = {
   warrior: 'Attacks adjacent enemies · coordinates 1–3d6',
   mage: 'Collects & activates stones · power die d6→d12→d20',
-  priest: 'No attack · resurrects Warriors · Nexus ritual',
+  priest: 'Cannot attack, but kills what attacks it · resurrects · Nexus ritual',
 } as const;
 
 /** Camera-lock toggle: keep the camera at its start pose and rotate the BOARD
@@ -63,17 +61,16 @@ function PhaseTrack() {
   if (gameOver(game)) return null;
   const phase = game.turnPhase;
   const squares = movesLeft(game, game.current);
-  const units = slotsLeft(game, game.current);
   const steps = [
     {
       key: 'act',
-      label: `1 · Move up to 3 units — ${squares} square${squares === 1 ? '' : 's'} left`,
+      label: `1 · Move any units — ${squares} square${squares === 1 ? '' : 's'} left`,
       done: false,
       active: phase === 'act',
     },
     {
       key: 'units',
-      label: `2 · ${units} of ${UNITS_PER_GO} units left this go`,
+      label: '2 · Each unit may act once — attacking costs no squares',
       done: false,
       active: false,
     },
@@ -260,9 +257,9 @@ export function HUD() {
   const attackOpts = myTurn ? attackOptions(game, selectedUnitId, tutRestrict) : [];
   const phase = game.turnPhase;
 
-  // The go's allowance for whoever is acting: squares and units left.
+  // The go's allowance for whoever is acting. Squares are the only currency
+  // now — how many units join in is up to the player.
   const squaresLeft = movesLeft(game, game.current);
-  const unitsLeft = slotsLeft(game, game.current);
   const graveBank = gravestoneBank(game);
   const graveCap = gravestoneCapacity(game);
   const graveUrl = useTokenUrl('gravestone');
@@ -368,9 +365,9 @@ export function HUD() {
       {/* Bottom control frame — fixed width; right column: ritual · button */}
       <div className="hud-bottom">
         <div className="tray">
-          {/* The go's allowance: squares to spend between at most three
-              units. Pips go out as they are walked (a Bolt spends them too),
-              and whatever is still lit when the go ends is simply lost. */}
+          {/* The go's allowance: squares to spend between as many units as
+              the player likes. Pips go out as they are walked (a Bolt spends
+              them too), and whatever is still lit when the go ends is lost. */}
           <div className="budget-tray" aria-label="Movement left this go">
             <div className="sq-row">
               {Array.from({ length: budgetOf(game) }, (_, i) => (
@@ -382,8 +379,7 @@ export function HUD() {
               ))}
             </div>
             <div className="budget-read">
-              <strong>{squaresLeft}</strong> square{squaresLeft === 1 ? '' : 's'} ·{' '}
-              <strong>{unitsLeft}</strong> unit{unitsLeft === 1 ? '' : 's'} left
+              <strong>{squaresLeft}</strong> square{squaresLeft === 1 ? '' : 's'} of movement left
             </div>
           </div>
         </div>
@@ -406,7 +402,7 @@ export function HUD() {
                 const moved = game.unitsMovedThisTurn.includes(selectedUnit.id);
                 // A task with no movement in it hides the "move up to N" hint.
                 if (tutRestrict?.dests && tutRestrict.dests.length === 0) return null;
-                return !moved && squaresLeft > 0 && unitsLeft > 0 ? (
+                return !moved && squaresLeft > 0 ? (
                   <div className="muted">
                     move up to {squaresLeft} square{squaresLeft === 1 ? '' : 's'} — whatever you
                     walk comes off this go
@@ -461,8 +457,8 @@ export function HUD() {
                 {actions.ritual && <button onClick={doRitual}>Begin Ritual</button>}
               </div>
             </>
-          ) : phase === 'act' && unitsLeft === 0 ? (
-            <strong>No units left this go — end your turn</strong>
+          ) : phase === 'act' && !hasPlayLeft(game) ? (
+            <strong>Nothing left to do this go — end your turn</strong>
           ) : (
             <span className="muted">No unit selected</span>
           )}

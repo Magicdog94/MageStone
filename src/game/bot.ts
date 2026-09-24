@@ -50,8 +50,6 @@ import {
   legalMoves,
   moveDistance,
   movesLeft,
-  slotsLeft,
-  UNITS_PER_GO,
   magePowerDie,
   moveUnit,
   novaVictims,
@@ -406,7 +404,7 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
     // still walk out of the round's shared allowance.
     const onBudget = isBudget(state);
     const reach = onBudget ? movesLeft(state, me) : 0;
-    if (onBudget && (reach <= 0 || slotsLeft(state, me) <= 0)) continue;
+    if (onBudget && reach <= 0) continue;
     const seen = new Set<number>();
     const dice = onBudget
       ? [{ id: '', kind: u.kind, value: reach, usedBy: {} } as Die]
@@ -907,12 +905,31 @@ function knownThreat(state: GameState, atk: PlayerColor, vic: PlayerColor, hand:
   return Math.max(0, options[0]) + 0.3 * second;
 }
 
-/** Activations `p` will really get this round. A PASS forfeits the rest of the
- *  round, so a passed player has none — without this, passing looks free and
- *  the brain simply stops playing. */
+/** Units of `p`'s that have not had their go yet. Since v0.11 nothing caps
+ *  this, so it is simply the army still to act. */
+function unitsFree(state: GameState, p: PlayerColor): number {
+  return state.units.filter(
+    (u) =>
+      u.owner === p &&
+      !state.unitsMovedThisTurn.includes(u.id) &&
+      !state.unitsActedThisTurn.includes(u.id),
+  ).length;
+}
+
+/** Activations `p` will really get this go. A PASS forfeits the rest of it, so
+ *  a passed player has none — without this, passing looks free and the brain
+ *  simply stops playing. */
 function actsLeft(state: GameState, p: PlayerColor): number {
   if (state.passed.includes(p) || state.eliminated.includes(p)) return 0;
-  return slotsLeft(state, p);
+  return unitsFree(state, p);
+}
+
+/** The same figure held to the 0-3 range the TEMPO weight was tuned against,
+ *  back when three activations was the hard cap. Without this the uncapped
+ *  count (up to eight) would quietly multiply the tempo term by nearly three
+ *  and drown out everything else in `evaluate`. */
+function tempoActs(state: GameState, p: PlayerColor): number {
+  return Math.min(3, actsLeft(state, p));
 }
 
 /**
@@ -1006,7 +1023,6 @@ function budgetMageGetsHome(state: GameState, mage: Unit, occ: Uint8Array): bool
   if (state.unitsMovedThisTurn.includes(mage.id)) {
     return mage.activated < STONES_TO_WIN && home.some((c) => sameCell(c, mage.cell));
   }
-  if (slotsLeft(state, mage.owner) <= 0) return false;
   const reach = movesLeft(state, mage.owner);
   if (reach <= 0) return home.some((c) => sameCell(c, mage.cell));
   const dist = routeDist(occ, mage.cell, reach);
@@ -1303,7 +1319,7 @@ function evaluate(state: GameState, me: PlayerColor): number {
   let v = sideScore(state, me);
   if (myHand) v += BRAIN.tempo * myHand.acts;
   // Budget rules: what is left of my round is the same kind of asset.
-  if (budget && occ) v += BRAIN.tempo * actsLeft(state, me);
+  if (budget && occ) v += BRAIN.tempo * tempoActs(state, me);
   for (const e of state.players) {
     if (e === me || state.eliminated.includes(e)) continue;
     const w = state.players.length === 2 || e === nextP ? 1 : 0.7;
@@ -1314,9 +1330,9 @@ function evaluate(state: GameState, me: PlayerColor): number {
       // are gone the danger is next round's full allowance, one step further off.
       const soon = actsLeft(state, e) > 0;
       const reach = soon ? movesLeft(state, e) : budgetOf(state);
-      const slots = soon ? actsLeft(state, e) : UNITS_PER_GO;
+      const slots = soon ? actsLeft(state, e) : unitsFree(state, e);
       v -= w * (soon ? 1 : 0.8) * budgetThreat(state, e, me, occ, reach, slots);
-      v -= BRAIN.tempo * (soon ? slots : 0);
+      v -= BRAIN.tempo * (soon ? tempoActs(state, e) : 0);
       v += 0.4 * budgetThreat(state, me, e, occ, movesLeft(state, me), actsLeft(state, me));
     } else if (eHand && occ) {
       // They act again this round, on dice everyone can see: read them exactly.

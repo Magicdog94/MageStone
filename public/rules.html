@@ -35,17 +35,18 @@ td,th{border:1px solid rgba(201,162,74,.35);padding:6px 12px;text-align:center}
 <h2>Taking your turn</h2>
 <p>Players take it in turns — you, then your opponent, then you — and nobody ever takes two goes in a row.</p>
 <ol>
-<li><strong>Six squares, three units.</strong> On your go you have <strong>6 squares of movement</strong> to spend, across <strong>at most 3 units</strong>. One unit can march all six, or three units can take two each — however you divide it. There are no turn dice.</li>
+<li><strong>Six squares, any number of units.</strong> On your go you have <strong>6 squares of movement</strong> to spend, divided between <strong>as many units as you like</strong>. One unit can march all six, three units can take two each, or six units can take one each — however you divide it. There are no turn dice, and no cap on how many units join in.</li>
 <li><strong>Your go is one continuous turn.</strong> Move a unit and resolve its action, then the next, then the next. Play does NOT pass between units — it passes when you say your go is done.</li>
 <li><strong>Whatever you do not use is lost.</strong> Squares never carry over to your next go, so end it with four squares in hand and those four are gone. Every go begins on a full six squares and three fresh units, however the last one went.</li>
-<li><strong>A unit goes once per turn</strong>, and acting without moving still uses one of your three units — so three Warriors ganging up on one enemy is your whole go's worth of units, but costs no squares.</li>
+<li><strong>A unit goes once per turn</strong> — it moves, then acts, or simply acts where it stands. An action costs no squares, so a Warrior already beside an enemy can attack for free, and three Warriors ganging up cost nothing at all.</li>
+<li><strong>Landing on something picks it up.</strong> A Mage that stops on MageStones collects them, and a Priest that stops on a Gravestone raises the Warrior and steps back one square to make room for it. Both happen automatically, and both count as that unit's action for the turn — so it cannot also attack.</li>
 <li><strong>Dice are for combat only</strong> — fights, and a Mage's power die.</li>
 </ol>
 <p>Movement is an orthogonal route that may bend through empty squares; units block, stones and gravestones do not. Every square walked comes off your six. A unit's action comes after its move — or instead of it — and is one of: attack, collect MageStones, activate MageStones, resurrect, or begin the ritual.</p>
 
 <h2>Combat</h2>
-<p>Warriors and Mages attack an enemy on an orthogonally adjacent square; Priests never attack. One Warrior rolls 1d6; two or three Warriors adjacent to the same target <strong>coordinate</strong> for 2d6 or 3d6 summed. The Mage rolls its power die — d6 with 0–1 activated MageStones, d12 with 2–3, d20 with 4+.</p>
-<p>The defender rolls 1d6 (a defending Mage rolls its own power die). Higher total wins, and <strong>a tie is re-rolled</strong> until the result is decisive — neither side has any advantage, so an even fight is exactly 50:50. If the attacker wins, the target is defeated; if the defender wins, one attacker falls — except against a defending Priest, which never kills its attacker. A repelled Priest does not move.</p>
+<p>Warriors and Mages attack an enemy on an orthogonally adjacent square; <strong>Priests never attack</strong> — though they kill what attacks them. One Warrior rolls 1d6; two or three Warriors adjacent to the same target <strong>coordinate</strong> for 2d6 or 3d6 summed. The Mage rolls its power die — d6 with 0–1 activated MageStones, d12 with 2–3, d20 with 4+.</p>
+<p>The defender rolls 1d6 (a defending Mage rolls its own power die). Higher total wins, and <strong>a tie is re-rolled</strong> until the result is decisive — neither side has any advantage, so an even fight is exactly 50:50. If the attacker wins, the target is defeated; if the defender wins, <strong>one attacker falls</strong> — and that now includes a defending Priest, which kills its attacker like anything else even though it can never attack of its own accord. A defender never moves off its square.</p>
 <table>
 <tr><th>Attacker</th><th>vs d6</th><th>vs d12</th><th>vs d20</th></tr>
 <tr><td>1 Warrior (1d6)</td><td>50%</td><td>23%</td><td>13%</td></tr>
@@ -74,7 +75,7 @@ td,th{border:1px solid rgba(201,162,74,.35);padding:6px 12px;text-align:center}
 <p><strong>Activation is permanent.</strong> Once a MageStone has ever been Activated it can never become Unactivated again — not when it is dropped, not when its Mage is killed, not when it is spent on a spell, and not when an enemy takes it. A Mage that picks up an already-Activated stone counts it immediately and does not need to carry it home. More of the board's stones therefore become instantly useful as a game goes on.</p>
 
 <h2>The Priest</h2>
-<p>A Priest standing on any gravestone may <strong>resurrect</strong> a Warrior there (up to 6 alive), stepping back one square; that gravestone then leaves the game for good. Only one gravestone may be resurrected per turn. A Priest that wins its defence roll repels the attack but does not move.</p>
+<p>A Priest that <strong>lands on a gravestone resurrects</strong> a Warrior there automatically (up to 6 alive), then steps back one square the way it came so the Warrior can stand on the gravestone square; that gravestone then leaves the game for good. It costs no extra action and no extra squares, but it is that Priest's action for the turn. Only one gravestone may be raised per turn. A Priest that wins its defence roll kills its attacker and does not move.</p>
 
 <h2>The Rite of the Nexus</h2>
 <p>The Nexus is the central 2&times;2. A Priest standing on it may declare the Rite, which costs that Priest's action. To begin it, and to keep it, <strong>all four Nexus squares</strong> must be free of enemy units; friendly units may stand on the other three, and screening them is the usual way to hold one. While a Rite is running the Nexus glows in that player's colour.</p>

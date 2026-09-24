@@ -13,6 +13,7 @@ import {
   NOVA_COST,
   STONES_TO_WIN,
   activate,
+  attackTargets,
   beginRitual,
   canBolt,
   ritualHoldOf,
@@ -1225,7 +1226,7 @@ describe('Combat — neither side is favoured', () => {
 
 // ---- The Priest: repels, and does NOT move ---------------------------------
 
-describe('Priest — repel only, never flees', () => {
+describe('Priest — kills its attacker, but never attacks', () => {
   const attackPriest = (rig: number[]) => {
     let g = withDice(acting(), ['warrior'], [1]);
     g = place(g, 'red-w1', { r: 8, c: 8 });
@@ -1233,24 +1234,33 @@ describe('Priest — repel only, never flees', () => {
     return resolveAttack(g, ['red-w1'], 'blue-p', seq(rig));
   };
 
-  it('never kills its attacker, and neither unit moves', () => {
+  it('KILLS its attacker when it wins, and does not move (v0.11)', () => {
     const g = attackPriest([LO, HI]); // attacker 1, priest 6
     expect(g.lastCombat?.outcome).toBe('lose');
-    expect(unitById(g, 'red-w1')).toBeDefined(); // the attacker survives
-    expect(at(g, 'red-w1').cell).toEqual({ r: 8, c: 8 }); // and stays put
-    expect(at(g, 'blue-p').cell).toEqual({ r: 8, c: 9 }); // the Priest does NOT flee
+    expect(unitById(g, 'red-w1')).toBeUndefined(); // the attacker is destroyed
+    expect(g.kills.blue).toBe(1); // and it counts for the Priest's owner
+    expect(at(g, 'blue-p').cell).toEqual({ r: 8, c: 9 }); // the Priest does NOT move
   });
 
-  it('does not move whatever its winning defence roll was', () => {
-    // A 3 and a 6 both merely repel; the Priest is rooted either way.
+  it('kills whatever its winning defence roll was', () => {
+    // A 3 and a 6 both beat the attacker's 1, and both are fatal.
     for (const roll of [0.34, HI]) {
       const g = attackPriest([LO, roll]);
       expect(g.lastCombat?.outcome).toBe('lose');
+      expect(unitById(g, 'red-w1')).toBeUndefined();
       expect(at(g, 'blue-p').cell).toEqual({ r: 8, c: 9 });
     }
   });
 
-  it('play continues immediately — nothing is left pending after a repel', () => {
+  it('still cannot attack anything itself', () => {
+    let g = withDice(acting(), ['priest'], [1]);
+    g = place(g, 'red-p', { r: 8, c: 8 });
+    g = place(g, 'blue-w1', { r: 8, c: 9 });
+    expect(attackTargets(g, 'red-p')).toEqual([]);
+    expect(resolveAttack(g, ['red-p'], 'blue-w1', seq([HI, LO]))).toBe(g);
+  });
+
+  it('play continues immediately — nothing is left pending', () => {
     const g = attackPriest([LO, HI]);
     // Red's other Warriors can act at once; there is no retreat to settle.
     const moved = moveUnit(withDice(g, ['warrior'], [2]), 'red-w2', 'd0', { r: 2, c: 5 });

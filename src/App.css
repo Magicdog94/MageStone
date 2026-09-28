@@ -3850,3 +3850,220 @@ body.ui-mobile .layout-map {
 body.ui-mobile .winner {
   padding: var(--space-4) var(--space-6);
 }
+
+/* ======================================================================
+   Playtester pass (v0.11.2): allowance at the top, dice in the combat
+   banner, plain-language piece dice, and the four-card Quick Start.
+   ====================================================================== */
+
+/* ---- the go's allowance, first chip in the row under the turn timer ---- */
+.top-chips .allowance-chip {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 0;
+  height: var(--control-md);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--gold-line);
+  border-radius: var(--radius-sm);
+  background: rgba(8, 12, 9, 0.78);
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.5);
+}
+.top-chips .allowance-chip .sq-pip {
+  width: 13px;
+  height: 13px;
+}
+.top-chips .allowance-chip .budget-read {
+  font-family: var(--display);
+  font-size: var(--text-sm);
+  color: var(--ink);
+}
+.top-chips .allowance-chip .budget-read strong {
+  color: var(--gold-bright);
+}
+body.ui-mobile .top-chips .allowance-chip {
+  gap: 6px;
+  padding: 0 8px;
+}
+body.ui-mobile .top-chips .allowance-chip .sq-pip {
+  width: 9px;
+  height: 9px;
+}
+body.ui-mobile .top-chips .allowance-chip .budget-read {
+  font-size: 10px;
+}
+
+/* ---- the dice themselves, rolled in the combat banner ---- */
+.combat-announce.with-dice {
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-2) var(--space-5) var(--space-3);
+  border-radius: var(--radius-lg);
+}
+.ca-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.ca-dice {
+  display: inline-flex;
+  gap: 5px;
+}
+.ca-die {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 2px solid var(--accent, var(--gold));
+  background: linear-gradient(180deg, #fbf4e2, #e2d4b3);
+  color: #1c1407;
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+/* a d12/d20 reads as a bigger, rounder die so the Mage's upgrade is visible */
+.ca-die.big {
+  width: 34px;
+  border-radius: 50%;
+}
+.ca-die.tumbling {
+  animation: ca-tumble 0.18s linear infinite alternate;
+  opacity: 0.9;
+}
+@keyframes ca-tumble {
+  from {
+    transform: rotate(-9deg) translateY(1px);
+  }
+  to {
+    transform: rotate(9deg) translateY(-2px);
+  }
+}
+.ca-side {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ca-eq,
+.ca-vs {
+  font-family: var(--display);
+  color: var(--gold-bright);
+}
+.ca-vs {
+  color: var(--gold-line);
+  font-size: var(--text-sm);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.ca-verdict {
+  font-family: var(--display);
+  font-size: var(--text-sm);
+  letter-spacing: 0.5px;
+  color: var(--ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ca-die.tumbling {
+    animation: none;
+  }
+}
+body.ui-mobile .ca-die {
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+}
+body.ui-mobile .combat-announce.with-dice {
+  padding: 6px 12px 8px;
+}
+
+/* ---- the selected piece's dice, in plain words ---- */
+.unit-dice {
+  color: var(--gold-bright);
+  opacity: 0.9;
+}
+
+/* ---- Quick Start ---- */
+.qs-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4) 0;
+  max-width: 440px;
+  margin: 0 auto;
+  animation: ca-in 0.25s ease-out;
+}
+.qs-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1px solid var(--gold-line);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--gold-bright);
+}
+.qs-glyph {
+  font-family: var(--display);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+.qs-title {
+  margin: var(--space-2) 0 0;
+  font-family: var(--display);
+  font-size: var(--text-lg);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--gold-bright);
+}
+.qs-body {
+  margin: 0;
+  font-size: var(--text-md);
+  line-height: 1.55;
+  color: var(--ink);
+}
+.qs-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: var(--space-4);
+}
+.qs-dot {
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--gold-line);
+  background: transparent;
+  cursor: pointer;
+}
+.qs-dot.on {
+  background: var(--gold-bright);
+  border-color: var(--gold-bright);
+}
+.qs-spacer {
+  flex: 1;
+}
+
+/* ---- phone layout: restack the top rows now that local games have a turn
+   banner too. The chip row (with the allowance) ends at 86px, so the banner
+   drops to 92px; during a fight the combat banner takes that same row and the
+   turn banner steps aside, so the two never sit on top of each other. ---- */
+body.ui-mobile .turn-banner {
+  top: 92px;
+}
+body.ui-mobile .combat-announce {
+  top: 92px;
+}
+body.ui-mobile .hud:has(.combat-announce) .turn-banner {
+  visibility: hidden;
+}
+body.ui-mobile .siege-alert {
+  top: 124px;
+}
+body.ui-mobile .elim-toasts {
+  top: 150px;
+}

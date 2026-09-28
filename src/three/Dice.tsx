@@ -701,6 +701,9 @@ interface CombatRun {
     defender: PlayerColor;
     defenseRoll: number;
     outcome: 'win' | 'lose' | 'draw';
+    attackDice: number[];
+    attackFaces: number;
+    defenseFaces: number;
   };
 }
 
@@ -826,6 +829,9 @@ function CombatDice() {
           defender: c.defenderOwner,
           defenseRoll: c.defenseRoll,
           outcome: c.outcome,
+          attackDice: c.attackDice,
+          attackFaces: c.attackFaces,
+          defenseFaces: c.defenseFaces,
         },
         spec: [
           ...c.attackDice.map((v, i) => ({

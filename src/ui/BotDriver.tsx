@@ -79,8 +79,8 @@ export function BotDriver() {
       const s = useGame.getState();
       const g = s.game;
       const lvl = s.bots[g.current];
-      if (!lvl || !s.botController || gameOver(g) || s.rolling || s.tutorial) {
-        dbg.__botLast = `guard:${!lvl ? 'lvl' : !s.botController ? 'ctl' : gameOver(g) ? 'over' : s.rolling ? 'rolling' : 'tutorial'}`;
+      if (!lvl || !s.botController || gameOver(g) || s.rolling || s.tutorial || s.quickStart || s.welcomeOpen) {
+        dbg.__botLast = `guard:${!lvl ? 'lvl' : !s.botController ? 'ctl' : gameOver(g) ? 'over' : s.rolling ? 'rolling' : s.tutorial ? 'tutorial' : 'quickstart'}`;
         return;
       }
       const now = performance.now();

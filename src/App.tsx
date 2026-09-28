@@ -4,6 +4,7 @@ import { SceneBoundary } from './ui/SceneBoundary';
 import { BotDriver } from './ui/BotDriver';
 import { HUD } from './ui/HUD';
 import { AlphaWelcome } from './ui/AlphaWelcome';
+import { QuickStart } from './ui/QuickStart';
 import { CopyrightNotice } from './ui/CopyrightNotice';
 import { LoadingGate } from './ui/LoadingGate';
 import { OrientationGate } from './ui/OrientationGate';
@@ -74,6 +75,7 @@ export default function App() {
           <HUD />
           <BotDriver />
           <AlphaWelcome />
+          <QuickStart />
           {/* Cover the board with "Loading Game" until the 3D assets are ready. */}
           <LoadingGate />
           {/* Guided tutorial: spotlights + notes that drive the game itself. */}

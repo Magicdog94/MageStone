@@ -33,11 +33,29 @@ import { FeedbackModal } from './FeedbackModal';
 import { BookIcon, CameraLockIcon, CogIcon, GraveIcon } from './Icons';
 
 const KIND_LABEL = { warrior: 'Warrior', mage: 'Mage', priest: 'Priest' } as const;
+// What a piece is FOR, in plain words — a playtester clicking pieces read
+// "coordinates 1–3d6" and "power die d6→d12→d20" and could not tell what the
+// dice meant or whether stones changed them. Numbers go in the line below.
 const KIND_ABILITY = {
-  warrior: 'Attacks adjacent enemies · coordinates 1–3d6',
-  mage: 'Collects & activates stones · power die d6→d12→d20',
-  priest: 'Cannot attack, but kills what attacks it · resurrects · Nexus ritual',
+  warrior: 'Fights the enemy next to it. Two or three Warriors beside one enemy attack together.',
+  mage: 'Picks up MageStones and carries them home. Activated stones make its attack stronger.',
+  priest: 'Cannot attack, but kills any attacker it beats. Raises fallen Warriors.',
 } as const;
+
+/** The dice line under a selected piece: what it rolls, and — for the Mage —
+ *  exactly how Activated stones improve it. */
+function diceLine(kind: 'warrior' | 'mage' | 'priest', activated: number): string {
+  if (kind === 'warrior') return 'Rolls one d6 (1–6) · 2 Warriors roll 2d6, 3 roll 3d6';
+  if (kind === 'priest') return 'Defends with one d6 (1–6)';
+  const die = magePowerDie(activated);
+  const next =
+    activated < 2
+      ? ` · ${2 - activated} more Activated → d12`
+      : activated < 4
+        ? ` · ${4 - activated} more Activated → d20`
+        : ' · strongest die';
+  return `Attack die d${die} (rolls 1–${die})${next}`;
+}
 
 /** Camera-lock toggle: keep the camera at its start pose and rotate the BOARD
  *  toward whichever human is playing (bots don't move the view). */
@@ -93,23 +111,88 @@ function PhaseTrack() {
 
 /** "Red rolls 15 · Green rolls 4" — shown only once the physical combat dice
  *  have settled face-up (set by three/Dice.tsx::CombatDice on settle). */
+/** A die face drawn in the HUD. While the table dice are still in the air it
+ *  TUMBLES (cycling faces) so the roll is visible even when the 3D dice are
+ *  off-screen or under the UI; once they land it shows the value they read. */
+function HudDie({
+  faces,
+  value,
+  accent,
+  tumbling = false,
+}: {
+  faces: number;
+  value: number;
+  accent: string;
+  tumbling?: boolean;
+}) {
+  return (
+    <span
+      className={`ca-die${tumbling ? ' tumbling' : ''}${faces > 6 ? ' big' : ''}`}
+      style={{ '--accent': accent } as CSSProperties}
+      title={`d${faces}`}
+    >
+      {value}
+    </span>
+  );
+}
+
+/** Cycles a pseudo-random face per die while `on` — the tumble animation. */
+function useTumble(on: boolean): number {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!on) return;
+    const id = window.setInterval(() => setTick((t) => t + 1), 90);
+    return () => window.clearInterval(id);
+  }, [on]);
+  return tick;
+}
+
+const facesOf = (s: string): number => Number(s.replace(/^\d*d/, '')) || 6;
+const countOf = (s: string): number => Number(s.split('d')[0]) || 1;
+
 function CombatAnnounce() {
   const roll = useGame((s) => s.combatRoll);
   const intro = useGame((s) => s.combatIntro);
   const label = usePlayerLabel();
-  // Numbers once the dice settle; before that, WHO fights WHOM with WHAT.
+  // Dice in flight: an attack or a Mage-vs-Mage Bolt duel has been declared,
+  // and the table dice have not landed yet.
+  const duel = !!intro && (intro.kind === undefined || intro.kind === 'attack' || (intro.kind === 'bolt' && intro.defenderKind === 'mage'));
+  const tick = useTumble(duel && !roll);
+
+  // Landed: every die, the totals, and who won in plain words.
   if (roll) {
+    const aFaces = roll.attackFaces ?? (intro ? facesOf(intro.attackFaces) : 6);
+    const dFaces = roll.defenseFaces ?? (intro ? facesOf(intro.defenseFaces) : 6);
+    const aDice = roll.attackDice ?? [roll.attackRoll];
+    const attackerWon = roll.outcome === 'win';
+    const bolt = intro?.kind === 'bolt';
+    const loser = attackerWon
+      ? intro ? `${label(roll.defender)} ${KIND_LABEL[intro.defenderKind]}` : label(roll.defender)
+      : intro ? `${label(roll.attacker)} ${KIND_LABEL[intro.attackerKind]}` : label(roll.attacker);
+    const verdict = bolt
+      ? attackerWon
+        ? `${label(roll.attacker)} wins — ${loser} destroyed`
+        : `${label(roll.defender)} blocks the Bolt`
+      : `${attackerWon ? label(roll.attacker) : label(roll.defender)} wins — ${loser} destroyed`;
     return (
-      <div className="combat-announce" key={roll.nonce} role="status">
-        <span className="ca-side" style={{ '--accent': COLORS[roll.attacker] } as CSSProperties}>
-          <span className="ca-name">{label(roll.attacker)}</span> rolls{' '}
-          <span className="ca-roll">{roll.attackRoll}</span>
-        </span>
-        <span className="ca-dot">·</span>
-        <span className="ca-side" style={{ '--accent': COLORS[roll.defender] } as CSSProperties}>
-          <span className="ca-name">{label(roll.defender)}</span> rolls{' '}
-          <span className="ca-roll">{roll.defenseRoll}</span>
-        </span>
+      <div className="combat-announce with-dice" key={roll.nonce} role="status">
+        <div className="ca-row">
+          <span className="ca-side" style={{ '--accent': COLORS[roll.attacker] } as CSSProperties}>
+            <span className="ca-name">{label(roll.attacker)}</span>
+            <span className="ca-dice">
+              {aDice.map((v, i) => (
+                <HudDie key={i} faces={aFaces} value={v} accent={COLORS[roll.attacker]} />
+              ))}
+            </span>
+            {aDice.length > 1 && <span className="ca-eq">= {roll.attackRoll}</span>}
+          </span>
+          <span className="ca-vs">vs</span>
+          <span className="ca-side" style={{ '--accent': COLORS[roll.defender] } as CSSProperties}>
+            <HudDie faces={dFaces} value={roll.defenseRoll} accent={COLORS[roll.defender]} />
+            <span className="ca-name">{label(roll.defender)}</span>
+          </span>
+        </div>
+        <div className={`ca-verdict${attackerWon ? ' atk' : ' def'}`}>{verdict}</div>
       </div>
     );
   }
@@ -150,24 +233,37 @@ function CombatAnnounce() {
       </div>
     );
   }
+  const aFaces = facesOf(intro.attackFaces);
+  const dFaces = facesOf(intro.defenseFaces);
+  const aCount = countOf(intro.attackFaces);
+  const spin = (i: number, faces: number) => 1 + ((tick * 7 + i * 5) % faces);
   return (
-    <div className="combat-announce" role="status">
-      <span className="ca-side" style={{ '--accent': COLORS[intro.attacker] } as CSSProperties}>
-        <span className="ca-name">
-          {label(intro.attacker)} {KIND_LABEL[intro.attackerKind]}
-          {intro.count > 1 ? ` ×${intro.count}` : ''}
+    <div className="combat-announce with-dice" role="status">
+      <div className="ca-row">
+        <span className="ca-side" style={{ '--accent': COLORS[intro.attacker] } as CSSProperties}>
+          <span className="ca-name">
+            {label(intro.attacker)} {KIND_LABEL[intro.attackerKind]}
+            {intro.count > 1 ? ` ×${intro.count}` : ''}
+          </span>
         </span>
-      </span>
-      <span className="ca-dot">attacks</span>
-      <span className="ca-side" style={{ '--accent': COLORS[intro.defender] } as CSSProperties}>
-        <span className="ca-name">
-          {label(intro.defender)} {KIND_LABEL[intro.defenderKind]}
+        <span className="ca-dot">attacks</span>
+        <span className="ca-side" style={{ '--accent': COLORS[intro.defender] } as CSSProperties}>
+          <span className="ca-name">
+            {label(intro.defender)} {KIND_LABEL[intro.defenderKind]}
+          </span>
         </span>
-      </span>
-      <span className="ca-dot">·</span>
-      <span className="ca-faces">
-        {intro.attackFaces} vs {intro.defenseFaces} · ties re-roll
-      </span>
+      </div>
+      <div className="ca-row">
+        <span className="ca-dice">
+          {Array.from({ length: aCount }, (_, i) => (
+            <HudDie key={i} faces={aFaces} value={spin(i, aFaces)} accent={COLORS[intro.attacker]} tumbling />
+          ))}
+        </span>
+        <span className="ca-faces">
+          {intro.attackFaces} vs {intro.defenseFaces} · higher wins · ties re-roll
+        </span>
+        <HudDie faces={dFaces} value={spin(9, dFaces)} accent={COLORS[intro.defender]} tumbling />
+      </div>
     </div>
   );
 }
@@ -304,6 +400,31 @@ export function HUD() {
       <PhaseTrack />
       <TurnTimer key={`${game.current}:${turnSeconds ?? 'off'}`} width={timerWidth} />
       <div className="top-chips">
+        {/* The go's allowance — the two numbers that decide every move, so they
+            sit right under the turn timer rather than at the foot of the screen
+            (a playtester only found them after ten minutes). Pips go out as they
+            are walked; a Bolt spends them too; unused ones are lost at End Turn. */}
+        {!gameOver(game) && (
+          <span
+            className="budget-tray allowance-chip tip"
+            data-tip="Your movement this go: squares to share between up to 3 units. Anything unused is lost when you end your turn."
+            aria-label={`${squaresLeft} squares and ${unitsLeft} units left this go`}
+          >
+            <span className="sq-row">
+              {Array.from({ length: budgetOf(game) }, (_, i) => (
+                <span
+                  key={i}
+                  className={`sq-pip${i < squaresLeft ? '' : ' spent'}`}
+                  style={{ '--accent': COLORS[game.current] } as CSSProperties}
+                />
+              ))}
+            </span>
+            <span className="budget-read">
+              <strong>{squaresLeft}</strong> square{squaresLeft === 1 ? '' : 's'} ·{' '}
+              <strong>{unitsLeft}</strong> unit{unitsLeft === 1 ? '' : 's'} left
+            </span>
+          </span>
+        )}
         <span className="turn-chip tip" data-tip="Round — advances when play returns to the first player">
           Turn {game.turn ?? 1}
         </span>
@@ -319,6 +440,17 @@ export function HUD() {
           {graveBank}
         </span>
       </div>
+      {/* Whose go it is. Hotseat and vs-bot games had no banner at all, and a
+          playtester who picked Green assumed Green moved first. */}
+      {!online && !tutorial && !gameOver(game) && (
+        <div
+          className={`turn-banner${bots[game.current] ? '' : ' mine'}`}
+          style={{ '--accent': COLORS[game.current] } as CSSProperties}
+          role="status"
+        >
+          {bots[game.current] ? `${label(game.current)} (bot) is playing…` : `${label(game.current)}'s turn`}
+        </div>
+      )}
       {online &&
         (netDown ? (
           // The phone or browser dropped the connection while the player was
@@ -367,29 +499,6 @@ export function HUD() {
 
       {/* Bottom control frame — fixed width; right column: ritual · button */}
       <div className="hud-bottom">
-        <div className="tray">
-          {/* The go's allowance: squares to spend between at most three
-              units. Pips go out as they are walked (a Bolt spends them too),
-              and whatever is still lit when the go ends is simply lost. */}
-          <div className="budget-tray" aria-label="Movement left this go">
-            <div className="sq-row">
-              {Array.from({ length: budgetOf(game) }, (_, i) => (
-                <span
-                  key={i}
-                  className={`sq-pip${i < squaresLeft ? '' : ' spent'}`}
-                  style={{ '--accent': COLORS[game.current] } as CSSProperties}
-                />
-              ))}
-            </div>
-            <div className="budget-read">
-              <strong>{squaresLeft}</strong> square{squaresLeft === 1 ? '' : 's'} ·{' '}
-              <strong>{unitsLeft}</strong> unit{unitsLeft === 1 ? '' : 's'} left
-            </div>
-          </div>
-        </div>
-
-        <div className="divider" />
-
         <div className="selinfo">
           {selectedUnit ? (
             <>
@@ -397,10 +506,11 @@ export function HUD() {
               <div className="muted unit-ability">{KIND_ABILITY[selectedUnit.kind]}</div>
               {selectedUnit.kind === 'mage' && (
                 <div className="muted">
-                  carrying {selectedUnit.carried} unactivated · {selectedUnit.activated} Activated
-                  · attack d{magePowerDie(selectedUnit.activated)}
+                  Carrying {selectedUnit.carried} · {selectedUnit.activated} Activated — take them
+                  home to count
                 </div>
               )}
+              <div className="muted unit-dice">{diceLine(selectedUnit.kind, selectedUnit.activated)}</div>
               {/* how far this unit can still march out of the go's squares */}
               {(() => {
                 const moved = game.unitsMovedThisTurn.includes(selectedUnit.id);

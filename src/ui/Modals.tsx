@@ -250,6 +250,7 @@ function SettingsModal() {
   const setLayout = useGame((s) => s.setLayout);
   const openModal = useGame((s) => s.openModal);
   const closeModal = useGame((s) => s.closeModal);
+  const setQuickStart = useGame((s) => s.setQuickStart);
   const status = useNet((s) => s.status);
   const screen = useNet((s) => s.screen);
   const leaveRoom = useNet((s) => s.leaveRoom);
@@ -288,6 +289,22 @@ function SettingsModal() {
         </>
       }
     >
+      {inGame && (
+        <>
+          <div className="modal-section">New to MageStone?</div>
+          <Field label="Quick Start" hint="The four things you need to know — about a minute">
+            <button
+              className="primary"
+              onClick={() => {
+                closeModal();
+                setQuickStart(true);
+              }}
+            >
+              Show me
+            </button>
+          </Field>
+        </>
+      )}
       <div className="modal-section">Game</div>
       <Field label="Turn timer" hint="Time limit per turn (applies now)">
         <Segmented

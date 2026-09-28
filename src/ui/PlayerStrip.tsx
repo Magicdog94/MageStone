@@ -78,7 +78,7 @@ export function PlayerStrip() {
             </span>
             <span
               className="pstat-die tip"
-              data-tip={`Mage attack die (grows with activated stones)${mage ? '' : queuedMage ? ' — Mage waiting to respawn' : ''}`}
+              data-tip={`Mage's attack die — rolls 1 to ${powerDie}. Activated stones upgrade it: 2 → d12, 4 → d20${mage ? '' : queuedMage ? ' (Mage waiting to respawn)' : ''}`}
             >
               d{powerDie}
             </span>

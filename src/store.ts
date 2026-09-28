@@ -86,6 +86,11 @@ export interface CombatRollInfo {
   defenseRoll: number;
   outcome: 'win' | 'lose' | 'draw';
   nonce: number;
+  /** Each attacker die as it landed, so the HUD can show the dice themselves
+   *  and not just a total (a Triple attack is three numbers summed). */
+  attackDice?: number[];
+  attackFaces?: number;
+  defenseFaces?: number;
 }
 
 /** Announced the INSTANT an attack is declared (before the dice even settle):
@@ -151,6 +156,13 @@ interface UIState {
    *  resolve from engine values almost immediately instead of waiting 10s. */
   sceneDown: boolean;
   setSceneDown: (down: boolean) => void;
+  /** The four-card Quick Start is on screen. It PAUSES the turn clock and the
+   *  bots, so a new player reading it never loses their first go. */
+  quickStart: boolean;
+  setQuickStart: (open: boolean) => void;
+  /** The one-time alpha welcome is on screen — pauses play the same way. */
+  welcomeOpen: boolean;
+  setWelcomeOpen: (open: boolean) => void;
   /** Bumped to throw the whole 3D view away and build a fresh one — used when
    *  the browser takes the WebGL context (typically while the player is in
    *  another app or window) and a dead black board would otherwise remain. */
@@ -299,6 +311,8 @@ export const useGame = create<UIState>((set, get) => ({
   deathNonce: 0,
   physicsEpoch: 0,
   sceneDown: false,
+  quickStart: false,
+  welcomeOpen: false,
   sceneEpoch: 0,
   boltMode: false,
   combatNonce: 0,
@@ -479,6 +493,8 @@ export const useGame = create<UIState>((set, get) => ({
     set((s) => ({ physicsEpoch: s.physicsEpoch + 1 }));
   },
   setSceneDown: (down) => set({ sceneDown: down }),
+  setQuickStart: (open) => set({ quickStart: open }),
+  setWelcomeOpen: (open) => set({ welcomeOpen: open }),
   rebuildScene: () => {
     // Throttled so a context that keeps dying can't remount in a tight loop.
     const now = Date.now();

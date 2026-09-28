@@ -221,7 +221,7 @@ export async function runTutorial(onDone: () => void) {
       title: 'Six squares, three units',
       body: 'No dice for your turn: on every go you have SIX squares of movement to spend, across at most THREE units. One unit can march all six, or three units can take two each — your choice, every go.',
       anchor: '.budget-tray',
-      placement: 'top',
+      placement: 'bottom',
     });
     await wait(300);
     await note({

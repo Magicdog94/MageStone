@@ -303,8 +303,7 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p className="htp-p">
-          There are <span className="htp-em">no turn dice</span>. On your go you have{' '}
-          <span className="htp-em">six squares of movement</span> to spend across{' '}
+          On your go you have <span className="htp-em">six squares of movement</span> to spend across{' '}
           <span className="htp-em">at most three units</span>, and you take the whole go{' '}
           <span className="htp-em">in one continuous stretch</span> before play passes.
         </p>
@@ -317,7 +316,7 @@ const SECTIONS: Section[] = [
           <li>
             For each unit you use:
             <ul className="htp-list htp-list--sub">
-              <li>Choose one of your units — any kind, no die needed.</li>
+              <li>Choose one of your units — any kind.</li>
               <li>Move it as far as your remaining squares allow — orthogonal (never diagonal), through empty squares; the path may turn. Whatever it walks comes off your six.</li>
               <li>
                 Immediately resolve that unit’s action: attack (Warrior: Single, Double, Triple;
@@ -347,8 +346,8 @@ const SECTIONS: Section[] = [
         </p>
         <div className="htp-note">
           <strong>Important:</strong> dice are rolled for <span className="htp-em">fights only</span>{' '}
-          — coordinated attacks, and the Mage’s power die. Movement never involves a roll, so the
-          only luck in MageStone is in combat.
+          — Warrior attacks, defence rolls and the Mage’s power die. Movement is always your
+          choice, so the only luck in MageStone is in combat.
         </div>
         <MoveDiagram />
       </>
@@ -479,8 +478,10 @@ const SECTIONS: Section[] = [
         <h4 className="htp-sub htp-sub--m">Bolt — 1 Activated stone</h4>
         <ul className="htp-list">
           <li>
-            A ranged strike on any enemy within range — range equals the mage die’s roll for that
-            action (whether or not the Mage moved with it).
+            A ranged strike on any enemy within range — the Bolt reaches as many squares as you
+            have left this go (counted orthogonally), and its flight{' '}
+            <span className="htp-em">spends</span> them: a target three squares away costs three.
+            Casting it is the Mage’s action.
           </li>
           <li>
             <span className="htp-em">Only a Mage can block a Bolt.</span> Anything else gets no
@@ -507,6 +508,9 @@ const SECTIONS: Section[] = [
           <li>
             The 4 spent stones are placed on the four <span className="htp-em">diagonal</span>{' '}
             squares around the Mage, all still Activated — and claimable by your opponents too.
+          </li>
+          <li>
+            Nova spends no squares: it costs the Mage’s action and the four stones, nothing more.
           </li>
         </ul>
       </>

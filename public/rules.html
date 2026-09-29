@@ -35,18 +35,18 @@ td,th{border:1px solid rgba(201,162,74,.35);padding:6px 12px;text-align:center}
 <h2>Taking your turn</h2>
 <p>Players take it in turns — you, then your opponent, then you — and nobody ever takes two goes in a row.</p>
 <ol>
-<li><strong>Six squares, three units.</strong> On your go you have <strong>6 squares of movement</strong> to spend, across <strong>at most 3 units</strong>. One unit can march all six, or three units can take two each — however you divide it. There are no turn dice.</li>
-<li><strong>Your go is one continuous turn.</strong> Move a unit and resolve its action, then the next, then the next. Play does NOT pass between units — it passes when you say your go is done.</li>
+<li><strong>Six squares, three units.</strong> On your go you have <strong>6 squares of movement</strong> to spend, across <strong>at most 3 units</strong>. One unit can march all six, or three units can take two each — however you divide it.</li>
+<li><strong>Your go is one continuous turn.</strong> Move a unit and resolve its action, then the next, then the next. Play passes only when you end your go.</li>
 <li><strong>Whatever you do not use is lost.</strong> Squares never carry over to your next go, so end it with four squares in hand and those four are gone. Every go begins on a full six squares and three fresh units, however the last one went.</li>
 <li><strong>A unit goes once per turn</strong> — it moves, then acts, or simply acts where it stands. Acting costs no <em>squares</em>, but it still uses one of your <strong>three units</strong>: three Warriors ganging up on one enemy is your whole go's worth of units, even though the attack itself costs no movement.</li>
 <li><strong>Landing on something picks it up.</strong> A Mage that stops on MageStones collects them, and a Priest that stops on a Gravestone raises the Warrior and steps back one square to make room for it. Both happen automatically, and both count as that unit's action for the turn — so it cannot also attack.</li>
-<li><strong>Dice are for combat only</strong> — fights, and a Mage's power die.</li>
+<li><strong>Dice are for combat only</strong> — attacks, defence rolls and a Mage's power die. Movement involves no luck.</li>
 </ol>
 <p>Movement is an orthogonal route that may bend through empty squares; units block, stones and gravestones do not. Every square walked comes off your six. A unit's action comes after its move — or instead of it — and is one of: attack, collect MageStones, activate MageStones, resurrect, or begin the ritual.</p>
 
 <h2>Combat</h2>
 <p>Warriors and Mages attack an enemy on an orthogonally adjacent square; <strong>Priests never attack</strong> — though they kill what attacks them. One Warrior rolls 1d6; two or three Warriors adjacent to the same target <strong>coordinate</strong> for 2d6 or 3d6 summed. The Mage rolls its power die — d6 with 0–1 activated MageStones, d12 with 2–3, d20 with 4+.</p>
-<p>The defender rolls 1d6 (a defending Mage rolls its own power die). Higher total wins, and <strong>a tie is re-rolled</strong> until the result is decisive — neither side has any advantage, so an even fight is exactly 50:50. If the attacker wins, the target is defeated; if the defender wins, <strong>one attacker falls</strong> — and that now includes a defending Priest, which kills its attacker like anything else even though it can never attack of its own accord. A defender never moves off its square.</p>
+<p>The defender rolls 1d6 (a defending Mage rolls its own power die). Higher total wins, and <strong>a tie is re-rolled</strong> until the result is decisive — neither side has any advantage, so an even fight is exactly 50:50. If the attacker wins, the target is defeated; if the defender wins, <strong>one attacker falls</strong>. That holds for a defending Priest too: it kills its attacker like any other defender, even though it can never attack of its own accord. A defender never moves off its square.</p>
 <table>
 <tr><th>Attacker</th><th>vs d6</th><th>vs d12</th><th>vs d20</th></tr>
 <tr><td>1 Warrior (1d6)</td><td>50%</td><td>23%</td><td>13%</td></tr>
@@ -59,8 +59,8 @@ td,th{border:1px solid rgba(201,162,74,.35);padding:6px 12px;text-align:center}
 <h2>Mage sorcery</h2>
 <p>Activated MageStones can be spent as spells. A spent stone is never destroyed and never deactivated — it leaves the Mage, lands back on the board still Activated, and can be claimed by any Mage, including an opponent's.</p>
 <ul>
-<li><strong>Bolt (1 Activated stone)</strong> — a ranged attack on any enemy within the mage die's value in orthogonal steps. <strong>Only a Mage can block it.</strong> Any other unit gets no defence roll and is defeated immediately. A targeted Mage rolls its power die against yours (ties are re-rolled): if it wins, the Bolt is blocked — it does not bounce back, so your Mage is unharmed — and if it loses, it is defeated as normal. Either way the spent stone lands on the target's square, still Activated, so a Mage that blocks is standing on it and can pick it up on its turn.</li>
-<li><strong>Nova (4 Activated stones)</strong> — an area attack that <strong>nothing can block</strong>, not even a Mage. Every <strong>enemy</strong> unit in the 8 squares surrounding the Mage is defeated with no defence roll; friendly units are unharmed. The four spent stones are placed on the four diagonal squares around the Mage, all still Activated.</li>
+<li><strong>Bolt (1 Activated stone)</strong> — a ranged attack on any enemy within as many orthogonal steps as you have squares left this go. The flight <strong>spends</strong> those squares — a target three squares away costs three — and casting it is the Mage's action. <strong>Only a Mage can block it.</strong> Any other unit gets no defence roll and is defeated immediately. A targeted Mage rolls its power die against yours (ties are re-rolled): if it wins, the Bolt is blocked — it does not bounce back, so your Mage is unharmed — and if it loses, it is defeated as normal. Either way the spent stone lands on the target's square, still Activated, so a Mage that blocks is standing on it and can pick it up on its turn.</li>
+<li><strong>Nova (4 Activated stones)</strong> — an area attack that <strong>nothing can block</strong>, not even a Mage. Every <strong>enemy</strong> unit in the 8 squares surrounding the Mage is defeated with no defence roll; friendly units are unharmed. The four spent stones are placed on the four diagonal squares around the Mage, all still Activated. Nova spends no squares — only the Mage's action and the four stones.</li>
 </ul>
 
 <h2>Defeat, gravestones and respawns</h2>
@@ -84,7 +84,7 @@ td,th{border:1px solid rgba(201,162,74,.35);padding:6px 12px;text-align:center}
 <h2>Victory</h2>
 <ol>
 <li><strong>MageStone</strong> — your Mage stands on your own base holding 6 Activated MageStones. Instant win. Picking up a sixth Activated stone away from home does not win on its own — the Mage still has to reach its base.</li>
-<li><strong>Ritual</strong> — your Priest still holds a clear Nexus when play returns to you after declaring the Rite.</li>
+<li><strong>Ritual</strong> — your Priest still holds a clear Nexus when play has come back round to you after declaring the Rite — twice in a two-player game, once with four.</li>
 <li><strong>Conquest</strong> — every rival is eliminated.</li>
 </ol>
 <h2>Stalemate</h2>

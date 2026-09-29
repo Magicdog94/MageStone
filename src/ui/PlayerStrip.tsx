@@ -88,7 +88,7 @@ export function PlayerStrip() {
               </span>
             )}
             {ritual && (
-              <span className="pstat-flag ritual tip" data-tip="Ritual in progress — survives a full round to win">
+              <span className="pstat-flag ritual tip" data-tip="Ritual in progress — wins if it still holds when play comes back round">
                 RITUAL
               </span>
             )}

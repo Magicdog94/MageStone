@@ -245,7 +245,7 @@ export function NexusDiagram() {
   return (
     <Figure
       label="A Priest holding the Nexus"
-      caption="Move your Priest onto the central Nexus and hold it for a full round to win by Ritual."
+      caption="Move your Priest onto the central Nexus and declare the Rite; if it still holds the Nexus when play comes back round to you (twice with two players, once with four), you win by Ritual."
       height={oy + n * cell + 8}
     >
       {rects}

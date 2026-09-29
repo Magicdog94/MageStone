@@ -337,7 +337,7 @@ function SettingsModal() {
         />
       </Field>
       <div className="modal-section">Display</div>
-      <Field label="Graphics" hint="Low skips the castle town outside the windows (faster loads)">
+      <Field label="Graphics" hint="Low is much lighter on slower computers and phones: no shadows, candle lights or scenery outside the windows">
         <Segmented<'full' | 'low'>
           options={[
             { value: 'full', label: 'Full' },

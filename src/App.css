@@ -226,7 +226,7 @@ body:not(.ui-mobile):has(.entry) .fs-toggle {
 .brand em {
   display: block;
   font-family: var(--serif);
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--ink-dim);
@@ -697,13 +697,13 @@ button.ghost:focus-visible {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.6px;
   }
   .player-strip.p4 .pstat-metric {
     gap: 1px;
     padding-left: 3px;
-    font-size: 10px;
+    font-size: 11px;
   }
   .player-strip.p4 .pstat-metric svg,
   .player-strip.p4 .pstat-token {
@@ -712,11 +712,11 @@ button.ghost:focus-visible {
   }
   .player-strip.p4 .pstat-die,
   .player-strip.p4 .pstat-flag {
-    font-size: 8px;
+    font-size: 10px;
     padding: 0 3px;
   }
   .player-strip.p4 .pstat-badge {
-    font-size: 8px;
+    font-size: 10px;
     padding: 0 3px;
   }
 }
@@ -815,7 +815,7 @@ body:not(.ui-mobile) .hud:has(.leave-btn) .phase-track {
   border-radius: 999px;
   border: 1px solid var(--gold-line);
   font-family: var(--display);
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.5px;
   color: var(--ink-dim);
 }
@@ -860,7 +860,7 @@ body:not(.ui-mobile) .hud:has(.leave-btn) .phase-track {
   color: var(--pc);
 }
 .pstat-badge {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 1px;
   padding: 1px 5px;
@@ -1265,7 +1265,7 @@ body.ui-mobile .sq-pip {
   height: 12px;
 }
 body.ui-mobile .budget-read {
-  font-size: 10px;
+  font-size: 11px;
 }
 /* each die + its kind tag (M · P · W1 W2 W3), written in the die's colour */
 .die-col {
@@ -1276,7 +1276,7 @@ body.ui-mobile .budget-read {
 }
 .die-label {
   font-family: var(--display);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.6px;
   text-transform: uppercase;
@@ -1286,7 +1286,7 @@ body.ui-mobile .budget-read {
   user-select: none;
 }
 body.ui-mobile .die-label {
-  font-size: 8px;
+  font-size: 10px;
   min-height: 8px;
   letter-spacing: 0.4px;
 }
@@ -1679,7 +1679,7 @@ body.ui-mobile .feedback-btn {
   top: 8px;
   right: 12px;
   font-family: var(--display);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.5px;
   color: var(--ink-dim);
 }
@@ -2708,7 +2708,7 @@ body.ui-mobile .tut-gotit {
   padding: 0 6px;
   border: 1px solid var(--gold-line);
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--ink-dim);
@@ -3365,7 +3365,7 @@ body.ui-mobile .tut-gotit {
   border-radius: var(--radius-sm);
   border: 1px solid var(--gold-line);
   color: var(--gold);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 1px;
 }
@@ -3502,10 +3502,10 @@ body.ui-mobile {
   --control-sm: 24px;
   --control-md: 30px;
   --control-lg: 36px;
-  --text-xs: 10px;
-  --text-sm: 11px;
-  --text-md: 12px;
-  --text-lg: 15px;
+  --text-xs: 12px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 16px;
   --space-3: 8px;
   --space-4: 10px;
   --space-5: 12px;
@@ -3556,7 +3556,7 @@ body.ui-mobile .player-strip.p4 .pstat-name {
 body.ui-mobile .player-strip.p4 .pstat-metric {
   gap: 1px;
   padding-left: 3px;
-  font-size: 10px;
+  font-size: 11px;
 }
 body.ui-mobile .player-strip.p4 .pstat-metric svg,
 body.ui-mobile .player-strip.p4 .pstat-token {
@@ -3580,12 +3580,12 @@ body.ui-mobile .pstat-metric svg {
   height: 14px;
 }
 body.ui-mobile .pstat-badge {
-  font-size: 8px;
+  font-size: 10px;
   padding: 0 3px;
 }
 body.ui-mobile .pstat-die,
 body.ui-mobile .pstat-flag {
-  font-size: 8px;
+  font-size: 10px;
   padding: 0 4px;
 }
 /* phase tracker: second row on the LEFT — the top row belongs to the player
@@ -3596,9 +3596,14 @@ body.ui-mobile .phase-track {
   gap: 2px;
 }
 body.ui-mobile .phase-step {
-  height: 16px;
-  padding: 0 6px;
-  font-size: 8px;
+  /* wraps instead of running under the centred chip row */
+  height: auto;
+  min-height: 16px;
+  max-width: 220px;
+  padding: 1px 6px;
+  line-height: 1.25;
+  white-space: normal;
+  font-size: 10px;
 }
 body.ui-mobile .turn-timer-top {
   top: 40px;
@@ -3890,7 +3895,7 @@ body.ui-mobile .top-chips .allowance-chip .sq-pip {
   height: 9px;
 }
 body.ui-mobile .top-chips .allowance-chip .budget-read {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 /* ---- the dice themselves, rolled in the combat banner ---- */

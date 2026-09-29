@@ -68,6 +68,27 @@ function detectLayout(): LayoutMode {
   return coarse || small ? 'mobile' : 'desktop';
 }
 
+/** The player's saved Graphics choice, or null when they never picked one. */
+function savedLowGfx(): boolean | null {
+  try {
+    const v = localStorage.getItem('ms-lowgfx');
+    return v === '1' ? true : v === '0' ? false : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Default graphics for a player who never chose: Low on phones and on
+ *  machines with few cores or little memory, Full otherwise. The live frame
+ *  rate can still step a Full default down (`autoLowGfx`). */
+function weakDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  const cores = nav.hardwareConcurrency ?? 8;
+  const memory = nav.deviceMemory ?? 8;
+  return detectLayout() === 'mobile' || cores <= 4 || memory <= 4;
+}
+
 /** A unit that was just defeated — captured before the engine removes it, so the
  *  3D layer can play its collapse animation at the square where it fell. */
 export interface DeathEvent {
@@ -118,8 +139,11 @@ export interface Settings {
   layout: LayoutMode;
   /** Shorten combat dice/death timings for players who fight a lot. */
   fastDice: boolean;
-  /** Skip the exterior town + prop dressing for weaker machines. */
+  /** Low graphics for weaker machines: native resolution, no real-time
+   *  shadows or candle lights, no exterior town or prop dressing. */
   lowGfx: boolean;
+  /** True while lowGfx is the automatic default, not the player's choice. */
+  gfxAuto: boolean;
   /** Camera lock: keep the camera at its start position and ROTATE THE BOARD
    *  to face each human player instead (bots keep the last human's view). */
   cameraFix: boolean;
@@ -237,6 +261,8 @@ interface UIState {
   setLayout: (layout: LayoutMode) => void;
   setFastDice: (fast: boolean) => void;
   setLowGfx: (low: boolean) => void;
+  /** Frame rate is struggling: drop to Low, unless the player chose Full. */
+  autoLowGfx: () => void;
   setCameraFix: (on: boolean) => void;
   setHovered: (unitId: string | null) => void;
 
@@ -327,13 +353,8 @@ export const useGame = create<UIState>((set, get) => ({
     sfxMuted: false,
     layout: detectLayout(),
     fastDice: false,
-    lowGfx: (() => {
-      try {
-        return localStorage.getItem('ms-lowgfx') === '1';
-      } catch {
-        return false;
-      }
-    })(),
+    lowGfx: savedLowGfx() ?? weakDevice(),
+    gfxAuto: savedLowGfx() === null,
     cameraFix: (() => {
       try {
         return localStorage.getItem('ms-camerafix') === '1';
@@ -459,8 +480,12 @@ export const useGame = create<UIState>((set, get) => ({
     } catch {
       /* storage unavailable — applies for this session only */
     }
-    set((s) => ({ settings: { ...s.settings, lowGfx: low } }));
+    set((s) => ({ settings: { ...s.settings, lowGfx: low, gfxAuto: false } }));
   },
+  autoLowGfx: () =>
+    set((s) =>
+      s.settings.gfxAuto && !s.settings.lowGfx ? { settings: { ...s.settings, lowGfx: true } } : s,
+    ),
   setCameraFix: (on) => {
     try {
       localStorage.setItem('ms-camerafix', on ? '1' : '0');
@@ -844,17 +869,22 @@ useGame.subscribe((s, prev) => {
   }
 });
 
-// Camera-lock view offset: whenever a HUMAN's turn begins (or the toggle
-// flips), rotate the board so their home edge faces the fixed camera (visual
-// seat 2, the bottom). Bots never move the view — spectators keep watching
-// from wherever the last human left it.
+// View offset: rotate the board so YOUR home edge faces the camera (visual
+// seat 2, the bottom) — like sitting at a chessboard. Online that is always
+// this client's colour; against bots it is the one human. In hot-seat (two or
+// more humans) the first human's side faces the camera, unless the camera
+// lock is on, which turns the board to each human as their go begins (bots
+// never move the view). The tutorial keeps the default view: its coach notes
+// are laid out around that board.
 useGame.subscribe((s) => {
   let next = s.viewOffset;
-  if (!s.settings.cameraFix) next = 0;
-  else if (!s.bots[s.game.current]) {
-    const seat = s.game.seats[s.game.current] ?? 2;
-    next = (2 - seat + 4) % 4;
-  }
+  const faceSeat = (c: PlayerColor) => (2 - (s.game.seats[c] ?? 2) + 4) % 4;
+  const humans = s.game.players.filter((p) => !s.bots[p]);
+  if (s.tutorial) next = 0;
+  else if (s.online && s.myColor) next = faceSeat(s.myColor);
+  else if (humans.length === 0) next = 0;
+  else if (humans.length === 1 || !s.settings.cameraFix) next = faceSeat(humans[0]);
+  else if (!s.bots[s.game.current]) next = faceSeat(s.game.current);
   if (next !== s.viewOffset) useGame.setState({ viewOffset: next });
 });
 

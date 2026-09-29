@@ -57,8 +57,8 @@ function diceLine(kind: 'warrior' | 'mage' | 'priest', activated: number): strin
   return `Attack die d${die} (rolls 1–${die})${next}`;
 }
 
-/** Camera-lock toggle: keep the camera at its start pose and rotate the BOARD
- *  toward whichever human is playing (bots don't move the view). */
+/** Camera-lock toggle: snap the camera to its start pose; in hot-seat it also
+ *  turns the BOARD toward whichever human is playing (bots don't move the view). */
 function CamFixToggle() {
   const on = useGame((s) => s.settings.cameraFix);
   const setCameraFix = useGame((s) => s.setCameraFix);
@@ -68,7 +68,7 @@ function CamFixToggle() {
       onClick={() => setCameraFix(!on)}
       aria-pressed={on}
       aria-label="Camera lock"
-      title={on ? 'Camera lock ON — the board turns to face each player' : 'Camera lock OFF — click to fix the camera and turn the board instead'}
+      title={on ? 'Camera lock ON — the board turns to face each human player in hot-seat' : 'Camera lock OFF — click to reset the camera and, in hot-seat, turn the board to each player'}
     >
       <CameraLockIcon size={20} />
     </button>

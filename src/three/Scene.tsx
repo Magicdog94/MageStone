@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { ContactShadows, Environment, Lightformer, OrbitControls } from '@react-three/drei';
+import { ContactShadows, Environment, Lightformer, OrbitControls, PerformanceMonitor } from '@react-three/drei';
 import { Board } from './Board';
 import { DiceLayer } from './Dice';
 import { BoardTokens, ClashEffect, DeathAnimations, Units } from './Pieces';
@@ -150,7 +150,7 @@ function StudioEnv() {
  * wall to wall — with the grand gold summoning circle inlaid around the
  * stand, and slow-drifting gold motes.
  */
-function ArenaEnvironment() {
+function ArenaEnvironment({ motes: showMotes = true }: { motes?: boolean }) {
   const floorMap = useMemo(() => {
     const t = tudorFloorTexture();
     // 3 repeats over 200 units → boards ~11 units (~35 cm) wide: WIDE panels
@@ -215,7 +215,8 @@ function ArenaEnvironment() {
         <planeGeometry args={[90, 90]} />
         <meshBasicMaterial map={circle} transparent opacity={0.85} depthWrite={false} />
       </mesh>
-      {/* slow-drifting gold motes */}
+      {/* slow-drifting gold motes (skipped on Low graphics) */}
+      {showMotes && (
       <points ref={motes}>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[motePositions, 3]} />
@@ -231,6 +232,7 @@ function ArenaEnvironment() {
           depthWrite={false}
         />
       </points>
+      )}
     </group>
   );
 }
@@ -354,10 +356,12 @@ function ContextGuard() {
 export function Scene() {
   const clearSelection = useGame((s) => s.selectUnit);
   const lowGfx = useGame((s) => s.settings.lowGfx);
+  const autoLowGfx = useGame((s) => s.autoLowGfx);
   return (
     <Canvas
       shadows="percentage"
-      dpr={[1, 2]}
+      // Low graphics renders at native resolution: a 2x retina canvas is 4x the pixels.
+      dpr={lowGfx ? 1 : [1, 2]}
       camera={{ position: [0, 20, 21], fov: 38 }}
       gl={{
         toneMapping: THREE.ACESFilmicToneMapping,
@@ -373,9 +377,12 @@ export function Scene() {
       <FogBackdrop />
       <ContextGuard />
       <StudioEnv />
-      <ArenaEnvironment />
+      <ArenaEnvironment motes={!lowGfx} />
+      {/* Sustained low frame rate on the automatic Full default: step down to Low
+          (never overrides a Full the player picked in Settings). */}
+      {!lowGfx && <PerformanceMonitor flipflops={1} onDecline={autoLowGfx} />}
       <Suspense fallback={null}>
-        <SmithyRoom />
+        <SmithyRoom candleLights={!lowGfx} />
         <TeamBanners />
         {/* Low graphics: skip the exterior town + prop dressing entirely */}
         {!lowGfx && <FantasyProps />}
@@ -389,15 +396,17 @@ export function Scene() {
           the ambient floor is lifted well above the old candlelit murk */}
       {/* ground term lifted so DOWN-facing surfaces (the beamed ceiling when
           the player tilts up) read as warm wood instead of a black void */}
-      <hemisphereLight args={['#b8ac97', '#4a3b2c', 0.62]} />
-      <ambientLight intensity={0.24} color={'#e2d6c2'} />
+      {/* Low graphics drops the candle lights, so the fill makes up for them */}
+      <hemisphereLight args={['#b8ac97', '#4a3b2c', lowGfx ? 0.9 : 0.62]} />
+      <ambientLight intensity={lowGfx ? 0.36 : 0.24} color={'#e2d6c2'} />
       {/* cool daylight slanting in through the north windows (the candles
           carry the warmth; the windows carry the cool) */}
       <directionalLight
         position={[24, 60, -70]}
         intensity={2.2}
         color={'#dfe8ef'}
-        castShadow
+        // Low graphics: no shadow-map pass at all
+        castShadow={!lowGfx}
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0002}
         shadow-camera-left={-16}
@@ -428,7 +437,7 @@ export function Scene() {
       </Suspense>
       <CamReset />
 
-      <ContactShadows position={[0, 0.001, 0]} opacity={0.45} scale={24} blur={2.4} far={6} />
+      {!lowGfx && <ContactShadows position={[0, 0.001, 0]} opacity={0.45} scale={24} blur={2.4} far={6} />}
 
       <OrbitControls
         makeDefault

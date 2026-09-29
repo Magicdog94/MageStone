@@ -428,7 +428,7 @@ function GreatDoor({ pos, yaw }: { pos: [number, number, number]; yaw: number })
 }
 
 /** Iron wall sconce with a single dripping candle on a forged bracket. */
-function Sconce({ pos, yaw, seed }: { pos: [number, number, number]; yaw: number; seed: number }) {
+function Sconce({ pos, yaw, seed, light = true }: { pos: [number, number, number]; yaw: number; seed: number; light?: boolean }) {
   return (
     <group position={pos} rotation={[0, yaw, 0]}>
       <mesh geometry={rbox(1.8, 8, 1.2)} position={[0, 0, -1.5]} castShadow>
@@ -446,7 +446,7 @@ function Sconce({ pos, yaw, seed }: { pos: [number, number, number]; yaw: number
       <group position={[0, 1.4, 2]}>
         <Candle h={5.4} r={0.95} />
       </group>
-      <FlickerLight base={2.8} seed={seed} position={[0, 6, 4]} color="#ffa562" distance={62} decay={1.9} />
+      {light && <FlickerLight base={2.8} seed={seed} position={[0, 6, 4]} color="#ffa562" distance={62} decay={1.9} />}
     </group>
   );
 }
@@ -601,7 +601,7 @@ function RoomShading() {
  * pottery shelves, crates, candelabra and sconces — kept deliberately
  * uncluttered. Warm flame lights flicker on a shared clock.
  */
-export function SmithyRoom() {
+export function SmithyRoom({ candleLights = true }: { candleLights?: boolean }) {
   const plaster = useMemo(() => {
     const t = plasterTexture();
     t.repeat.set(2, 1);
@@ -704,12 +704,12 @@ export function SmithyRoom() {
       ))}
 
       {/* ---- lights: candles on the walls only (sconces carry the room) ---- */}
-      <Sconce pos={[-30, FLOOR_Y + 55, WALL_Z - 3]} yaw={Math.PI} seed={9.5} />
-      <Sconce pos={[64, FLOOR_Y + 55, WALL_Z - 3]} yaw={Math.PI} seed={11.4} />
-      <Sconce pos={[-WALL_X + 3, FLOOR_Y + 55, 44]} yaw={Math.PI / 2} seed={13.3} />
-      <Sconce pos={[-WALL_X + 3, FLOOR_Y + 55, -50]} yaw={Math.PI / 2} seed={15.2} />
+      <Sconce pos={[-30, FLOOR_Y + 55, WALL_Z - 3]} yaw={Math.PI} seed={9.5} light={candleLights} />
+      <Sconce pos={[64, FLOOR_Y + 55, WALL_Z - 3]} yaw={Math.PI} seed={11.4} light={candleLights} />
+      <Sconce pos={[-WALL_X + 3, FLOOR_Y + 55, 44]} yaw={Math.PI / 2} seed={13.3} light={candleLights} />
+      <Sconce pos={[-WALL_X + 3, FLOOR_Y + 55, -50]} yaw={Math.PI / 2} seed={15.2} light={candleLights} />
       {/* NE corner: a candle sconce where the iron wall torch used to hang */}
-      <Sconce pos={[56, FLOOR_Y + 55, -WALL_Z + 3]} yaw={0} seed={17.1} />
+      <Sconce pos={[56, FLOOR_Y + 55, -WALL_Z + 3]} yaw={0} seed={17.1} light={candleLights} />
     </group>
   );
 }
@@ -800,14 +800,17 @@ function WallBanner({ color, seat }: { color: PlayerColor; seat: number }) {
   );
 }
 
-/** One wall banner behind every PLAYING colour's seat — none for absent teams. */
+/** One wall banner behind every PLAYING colour's seat — none for absent teams.
+ *  The room does not turn with the board, so the seat is shifted by the
+ *  board's view rotation to keep each banner behind its own army. */
 export function TeamBanners() {
   const players = useGame((s) => s.game.players);
   const seats = useGame((s) => s.game.seats);
+  const viewOffset = useGame((s) => s.viewOffset);
   return (
     <group>
       {players.map((p) => (
-        <WallBanner key={p} color={p} seat={seats[p]} />
+        <WallBanner key={p} color={p} seat={(seats[p] + viewOffset) % 4} />
       ))}
     </group>
   );

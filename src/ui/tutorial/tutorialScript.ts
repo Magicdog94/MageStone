@@ -237,7 +237,7 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-move',
         title: 'Move a unit',
-        body: 'CLICK one of your units, then click any glowing square. Paths are orthogonal — never diagonal — and may bend. However far you walk comes out of your six.',
+        body: 'CLICK one of your units, then click any glowing square. Units move in a STRAIGHT line — up, down, left or right — never diagonally and never turning a corner. However far you walk comes out of your six.',
         placement: 'bottom',
       },
       () => g().game.unitsMovedThisTurn.length >= 1,

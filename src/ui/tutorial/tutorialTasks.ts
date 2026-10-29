@@ -8,8 +8,8 @@
 // allowed move can ever strand a player.
 import { createGame } from '../../game/setup';
 import { NEXUS_CELLS } from '../../game/board';
-import { endActivation, siegedPlayers, syncStones, unitById, warriorCount } from '../../game/rules';
-import type { Cell, GameState, Unit } from '../../game/types';
+import { endActivation, syncStones, unitById, warriorCount } from '../../game/rules';
+import type { GameState, Unit } from '../../game/types';
 import type { TutRestrict } from './restrict';
 
 /** Hand `unitId` real MageStone tokens for a staged lesson. Activation lives on
@@ -51,37 +51,6 @@ export interface TaskSpec {
 /** The first move: any unit, any square its allowance reaches — just no
  *  actions and no passing. */
 export const MOVE_RESTRICT: TutRestrict = { actions: [] };
-
-export const BLUE_BASE: Cell[] = Array.from({ length: 8 }, (_, i) => ({ r: 15, c: 4 + i }));
-/** The one base square the siege may be laid on: right in front of Red's
- *  Warrior AND beside Blue's guard. Any other base square within the round's
- *  squares leaves the intruder out of Blue's reach — and the "break the siege"
- *  task that follows could never be done. */
-export const SIEGE_DOOR: Cell = { r: 15, c: 8 };
-
-/** Blue down to its guard Warrior, Mage and Priest waiting to respawn. */
-function siegeBoard(st: GameState): void {
-  st.units = st.units.filter((u) => u.owner !== 'blue' || u.id === 'blue-w1');
-  st.pendingRespawns = [
-    { id: 'tut-sg-m', owner: 'blue', kind: 'mage', activated: 0 },
-    { id: 'tut-sg-p', owner: 'blue', kind: 'priest' },
-  ];
-  at(st, 'blue-w1').cell = { r: 15, c: 9 }; // guards its base
-}
-
-/** The Conquest endgame. `sealed` restores the base ALREADY held — the kill
- *  task's re-stage must keep the siege, or the kill wouldn't eliminate. */
-function win3Board(st: GameState, sealed: boolean): void {
-  st.units = st.units.filter((u) => u.owner !== 'blue' || u.id === 'blue-w1');
-  at(st, 'blue-w1').cell = { r: 12, c: 8 };
-  at(st, 'red-w1').cell = { r: 11, c: 8 };
-  at(st, 'red-w2').cell = { r: 12, c: 7 };
-  at(st, 'red-w4').cell = sealed ? { r: 15, c: 5 } : { r: 14, c: 5 };
-  st.pendingRespawns = [
-    { id: 'tut-pr-m', owner: 'blue', kind: 'mage', activated: 0 },
-    { id: 'tut-pr-p', owner: 'blue', kind: 'priest' },
-  ];
-}
 
 export const TASKS = {
   attack: {
@@ -145,20 +114,6 @@ export const TASKS = {
     done: (st) => !unitById(st, 'blue-w1'),
   },
 
-  nova: {
-    build: (st) => {
-      at(st, 'red-m').cell = { r: 5, c: 5 };
-      giveStones(st, 'red-m', 0, 4);
-      at(st, 'blue-w1').cell = { r: 4, c: 5 };
-      at(st, 'blue-w2').cell = { r: 6, c: 6 }; // diagonal!
-      at(st, 'blue-w3').cell = { r: 5, c: 6 };
-      at(st, 'red-w1').cell = { r: 5, c: 4 }; // friendly — caught too!
-    },
-    // Only the Mage, standing its ground, only Nova.
-    restrict: { units: ['red-m'], dests: [], actions: ['nova'] },
-    done: (st) => !unitById(st, 'blue-w2'),
-  },
-
   win1: {
     build: (st) => {
       at(st, 'red-m').cell = { r: 1, c: 8 };
@@ -183,66 +138,9 @@ export const TASKS = {
     done: (st) => st.ritual !== null,
   },
 
-  siegeHold: {
-    build: (st) => {
-      siegeBoard(st);
-      at(st, 'red-w1').cell = { r: 14, c: 8 };
-    },
-    // Only that Warrior, only onto the base square in front of it.
-    restrict: { units: ['red-w1'], dests: [SIEGE_DOOR], actions: [] },
-    done: (st) => siegedPlayers(st).includes('blue'),
-  },
-
-  siegeBreak: {
-    // Normally this carries on from the siege just laid (see afterSiegeLaid);
-    // the build is the re-stage for a retry: siege held, Blue to act.
-    build: (st) => {
-      siegeBoard(st);
-      at(st, 'red-w1').cell = { ...SIEGE_DOOR };
-      st.current = 'blue';
-    },
-    // Only Blue's Warrior, only the intruder — with scripted dice so the
-    // lesson's fight always lands.
-    restrict: {
-      units: ['blue-w1'],
-      dests: [],
-      actions: ['attack'],
-      targets: ['red-w1'],
-      rig: [0.99, 0],
-    },
-    done: (st) => !unitById(st, 'red-w1'),
-  },
-
-  win3Siege: {
-    build: (st) => win3Board(st, false),
-    // Only the sealing Warrior, only onto Blue's base squares.
-    restrict: { units: ['red-w4'], dests: BLUE_BASE, actions: [] },
-    done: (st) => siegedPlayers(st).includes('blue'),
-  },
-
-  win3Kill: {
-    build: (st) => win3Board(st, true),
-    // The two flankers, the one survivor, DOUBLE only — scripted dice land it.
-    restrict: {
-      units: ['red-w1', 'red-w2'],
-      dests: [],
-      actions: ['attack'],
-      targets: ['blue-w1'],
-      minAttackers: 2,
-      rig: [0.99, 0.99, 0],
-    },
-    done: (st) => !unitById(st, 'blue-w1'),
-  },
 } satisfies Record<string, TaskSpec>;
 
 // ---- Scripted beats between tasks -------------------------------------------
-
-/** Between laying the siege and breaking it: Red's activation ends and play
- *  passes to Blue, whose own six squares are untouched. The break task carries
- *  on from exactly this board. */
-export function afterSiegeLaid(st: GameState): GameState {
-  return endActivation(st);
-}
 
 /**
  * One beat of the Ritual lesson's hold: end the activation in progress (with

@@ -30,9 +30,7 @@ import type { GameState } from '../../game/types';
 import { TUT_LOCK, tutAllows, type TutRestrict } from './restrict';
 import {
   MOVE_RESTRICT,
-  SIEGE_DOOR,
   TASKS,
-  afterSiegeLaid,
   ritualBeat,
   stagedGame,
   type TaskSpec,
@@ -151,39 +149,6 @@ describe('Tutorial sweep — no allowed move can strand the player', () => {
     expect(moves.every((m) => m.unitsMovedThisTurn.length >= 1)).toBe(true);
     // and every one of them costs squares out of the round's allowance
     expect(moves.every((m) => movesLeft(m, 'red') < movesLeft(start, 'red'))).toBe(true);
-  });
-
-  it('siege: the siege can only be laid beside Blue’s guard, and Blue can always break it', () => {
-    const laid = reachable(stagedGame(TASKS.siegeHold.build), TASKS.siegeHold.restrict).filter(
-      TASKS.siegeHold.done,
-    );
-    expect(laid.length).toBeGreaterThan(0);
-    for (const s of laid) {
-      const blueTurn = afterSiegeLaid(s);
-      expect(blueTurn.current).toBe('blue');
-      const states = expectNoDeadEnds(blueTurn, TASKS.siegeBreak);
-      // …and breaking it frees the queue, as the next note says
-      for (const b of states.filter(TASKS.siegeBreak.done)) {
-        expect(b.units.some((u) => u.owner === 'blue' && u.kind === 'mage')).toBe(true);
-        expect(b.units.some((u) => u.owner === 'blue' && u.kind === 'priest')).toBe(true);
-      }
-    }
-    // (the reported bug: (15,7) was also allowed, and left the intruder out of reach)
-    for (const s of laid) expect(s.units.find((u) => u.id === 'red-w1')!.cell).toEqual(SIEGE_DOOR);
-  });
-
-  it('conquest: however the base is sealed, the last unit falls and Red wins', () => {
-    const sealed = reachable(stagedGame(TASKS.win3Siege.build), TASKS.win3Siege.restrict).filter(
-      TASKS.win3Siege.done,
-    );
-    expect(sealed.length).toBeGreaterThan(0);
-    for (const s of sealed) {
-      const states = expectNoDeadEnds(s, TASKS.win3Kill);
-      for (const k of states.filter(TASKS.win3Kill.done)) {
-        expect(k.winner).toBe('red');
-        expect(k.winMethod).toBe('Conquest');
-      }
-    }
   });
 
   it('ritual: the Rite the player declares is carried through its full-round hold to a win', () => {

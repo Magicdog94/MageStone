@@ -5,9 +5,7 @@ import type { Cell, GameState } from '../../game/types';
 import { useTutorial } from './useTutorial';
 import {
   MOVE_RESTRICT,
-  SIEGE_DOOR,
   TASKS,
-  afterSiegeLaid,
   ritualBeat,
   stagedGame,
 } from './tutorialTasks';
@@ -33,8 +31,8 @@ function guard() {
   if (!useGame.getState().tutorial) throw CANCELLED;
 }
 
-/** Total coached steps — keep in sync with tut-verify.mjs EXPECT. */
-const TOTAL_STEPS = 44;
+/** Total coached steps (one per note or task below). */
+const TOTAL_STEPS = 10;
 let stepNo = 0;
 /** Stamp "step n of m" onto a callout (shown as the box's progress counter). */
 function stamp(c: Callout): Callout {
@@ -179,10 +177,9 @@ function scriptMove(unitId: string, dest: Cell): void {
 }
 
 /**
- * The guided game — HANDS-ON. The player moves, fights,
- * resurrects, collects, casts, lays and breaks a siege (briefly playing Blue)
- * and WINS all three ways, coached step by step; only Blue's routine beats
- * (its roll/discard) play themselves.
+ * The guided game — HANDS-ON and short: ten steps. The player moves, fights,
+ * resurrects, collects, activates, casts Bolt and wins by MageStone and by
+ * Ritual; Conquest and the deeper rules are left to the Rule Book.
  */
 export async function runTutorial(onDone: () => void) {
   const myEpoch = ++epoch; // cancels any still-unwinding previous run
@@ -195,49 +192,22 @@ export async function runTutorial(onDone: () => void) {
     await wait(1200);
     guard();
 
+    // 1 ---- the go ----------------------------------------------------------
     await note({
       id: 'welcome',
       title: 'Welcome to MageStone',
-      body: 'This tutorial is HANDS-ON: you move, you fight, you win — the coach just points the way. Whenever the note says "Your move…", the game is yours. Let’s go.',
-      placement: 'center',
-    });
-    await note({
-      id: 'header',
-      title: 'Your scoreboard',
-      body: 'One card per team — Red is you. Silver stone = MageStones carried, gold = activated, the sword counts kills, W your living Warriors.',
-      anchor: '.player-strip',
-      placement: 'bottom',
-    });
-    await note({
-      id: 'chips',
-      title: 'Round & gravestones',
-      body: 'These chips track the round number and the shared gravestone bank. The bank is FINITE and never refills — every Warrior death and every resurrection spends one for good.',
-      anchor: '.grave-bank',
-      placement: 'bottom',
-    });
-
-    await note({
-      id: 'allowance',
-      title: 'Six squares, three units',
-      body: 'On every go you have SIX squares of movement to spend, across at most THREE units. One unit can march all six, or three units can take two each — your choice, every go.',
+      body: 'You are Red. Each go you get 6 squares of movement, shared by up to 3 units. Press End Turn when done — unused squares are lost.',
       anchor: '.budget-tray',
       placement: 'bottom',
     });
-    await wait(300);
-    await note({
-      id: 'alternate',
-      title: 'Your whole go, in one stretch',
-      body: 'Move a unit, resolve what it does there, then carry on with the next — up to THREE units and SIX squares in total. Acting costs no squares but still uses one of your three units. Play passes only when you press End Turn, and any squares you have not used are LOST.',
-      placement: 'bottom',
-    });
 
-    // ---- YOU move ----------------------------------------------------------
+    // 2 ---- YOU move ----------------------------------------------------------
     await playerTask(
       null,
       {
         id: 'task-move',
         title: 'Move a unit',
-        body: 'CLICK one of your units, then click any glowing square. Units move in a STRAIGHT line — up, down, left or right — never diagonally and never turning a corner. However far you walk comes out of your six.',
+        body: 'Click a unit, then a glowing square. Units move in a straight line: up, down, left or right. Units block the way; stones and gravestones don’t.',
         placement: 'bottom',
       },
       () => g().game.unitsMovedThisTurn.length >= 1,
@@ -249,37 +219,18 @@ export async function runTutorial(onDone: () => void) {
       // Any unit, any legal square — but not ending the go yet.
       { restrict: MOVE_RESTRICT },
     );
-    await wait(500);
-    await note({
-      id: 'moved',
-      title: 'Nicely done',
-      body: 'That’s movement: as far as your squares allow, through empty squares — units block the way, MageStones and gravestones don’t. Watch the pips: the squares you walked are gone for this go.',
-      placement: 'bottom',
-    });
+    await wait(1200);
 
-    // ---- YOU attack (staged) ----------------------------------------------
+    // 3 ---- YOU attack --------------------------------------------------------
     const stageFight = () => stage(TASKS.attack.build);
     stageFight();
     await wait(700);
-    await note({
-      id: 'fight-stage',
-      title: 'Time to fight',
-      body: 'We’ve arranged a textbook gang-up: THREE of your Warriors surround one Blue Warrior. Warriors COORDINATE — 1 rolls 1d6 (50%), 2 roll 2d6 (90%), 3 roll 3d6 (99%).',
-      placement: 'bottom',
-    });
-    await note({
-      id: 'oddsgrid',
-      title: 'Know your odds',
-      body: 'Your roll (row) against the defender’s die (column). Defenders roll a d6 — except a Mage, whose defence die grows with its stones (more on that soon). Ties are RE-ROLLED, so nobody gets an edge — an even fight is a straight 50:50.',
-      placement: 'center',
-      showOdds: true,
-    });
     await playerTask(
       stageFight,
       {
         id: 'task-attack',
-        title: 'Launch a Triple Attack',
-        body: 'CLICK one of your three Warriors around the enemy, then press TRIPLE ATTACK — 99% — and watch the real dice decide it.',
+        title: 'Attack',
+        body: 'Each Warrior next to an enemy adds a die. Click one of your three Warriors beside Blue, then press TRIPLE ATTACK.',
         placement: 'bottom',
       },
       () => TASKS.attack.done(g().game),
@@ -294,49 +245,18 @@ export async function runTutorial(onDone: () => void) {
       { timeoutMs: 120000, restrict: TASKS.attack.restrict },
     );
     await until(() => g().combatRoll !== null, 6000);
-    await wait(400);
-    {
-      // The 3D dice report the roll; if they ever don't (scene fallback), the
-      // ENGINE's result is authoritative — never narrate "rolled 0 against 0".
-      const roll = g().combatRoll;
-      const lc = g().game.lastCombat;
-      const a = roll?.attackRoll ?? lc?.attackRoll ?? 15;
-      const d = roll?.defenseRoll ?? lc?.defenseRoll ?? 2;
-      const won = !unitById(g().game, 'blue-w1');
-      await note({
-        id: 'fight-result',
-        title: won ? 'Down he goes' : 'The 1-in-100 upset!',
-        body: won
-          ? `Your three dice rolled ${a} against Blue’s ${d} — the defender falls. Stack attackers to win fights; even when a gang-up fails, only ONE attacker falls, never the group.`
-          : `Your ${a} lost to Blue’s ${d} — the 1%! When a coordinated attack fails only ONE attacker falls, never the group. That’s dice — and why you stack the odds.`,
-        anchor: '.combat-announce',
-        placement: 'bottom',
-      });
-    }
-    await note({
-      id: 'graverules',
-      title: 'A gravestone drops',
-      body: 'A fallen Warrior leaves a gravestone — but only while the shared bank (4 per player: 8 here, 16 in a 4-player game) still has one, and never on the Nexus. Once the bank is empty, Warriors die for good. Gravestones matter, because…',
-      anchor: '.grave-bank',
-      placement: 'bottom',
-    });
+    await wait(2200); // let the dice result read before the board changes
 
-    // ---- YOU resurrect (staged) -------------------------------------------
+    // 4 ---- YOU resurrect -----------------------------------------------------
     const stageRes = () => stage(TASKS.resurrect.build);
     stageRes();
     await wait(700);
-    await note({
-      id: 'priest',
-      title: 'The Priest',
-      body: 'Priests never attack — but do not think them harmless: a Priest that WINS its defence KILLS its attacker, without moving an inch. Their gift is RESURRECTION. One of your Warriors is down; there’s the gravestone.',
-      placement: 'bottom',
-    });
     await playerTask(
       stageRes,
       {
         id: 'task-resurrect',
-        title: 'Bring your Warrior back',
-        body: 'CLICK your Priest and walk it ONTO the gravestone. The Warrior rises the moment you land — no button needed — and your Priest steps back a square to make room.',
+        title: 'Resurrect',
+        body: 'A fallen Warrior leaves a gravestone. Click your Priest and move it onto the gravestone to bring the Warrior back.',
         placement: 'bottom',
       },
       () => TASKS.resurrect.done(g().game),
@@ -350,15 +270,9 @@ export async function runTutorial(onDone: () => void) {
       },
       { restrict: TASKS.resurrect.restrict },
     );
-    await wait(600);
-    await note({
-      id: 'res-done',
-      title: 'A Warrior returns',
-      body: 'The Warrior revives on the grave square and the Priest steps back the way it came. That gravestone is now GONE FROM THE GAME — it does not return to the bank. A Priest can use ANY gravestone, one per turn, and you can never have more than 6 Warriors.',
-      placement: 'bottom',
-    });
+    await wait(1200);
 
-    // ---- YOU collect + activate -------------------------------------------
+    // 5 ---- YOU collect -------------------------------------------------------
     const stageCollect = () => stage(TASKS.collect.build);
     stageCollect();
     await wait(700);
@@ -367,7 +281,7 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-collect',
         title: 'Collect a MageStone',
-        body: 'Your Mage gathers the stones that win games. CLICK your Mage and step ONTO the stone’s square — it is picked up automatically the moment you land.',
+        body: 'Only your Mage can carry stones. Click it and step onto the stone to pick it up.',
         placement: 'bottom',
       },
       () => TASKS.collect.done(g().game),
@@ -381,13 +295,9 @@ export async function runTutorial(onDone: () => void) {
       },
       { restrict: TASKS.collect.restrict },
     );
-    await note({
-      id: 'carried',
-      title: 'Carried — not yet yours',
-      body: 'The silver counter ticked up: the stone is CARRIED but UNACTIVATED. It scores nothing and adds no power yet — and if your Mage dies it drops every one of them where it fell.',
-      anchor: '[data-tut="carried"]',
-      placement: 'bottom',
-    });
+    await wait(900);
+
+    // 6 ---- YOU activate ------------------------------------------------------
     const stageActivate = () => stage(TASKS.activate.build);
     stageActivate();
     await wait(700);
@@ -396,7 +306,7 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-activate',
         title: 'Activate it',
-        body: 'Stones only COUNT once activated ON your own base. Your Mage stands home — CLICK it, then press ACTIVATE. Silver becomes gold.',
+        body: 'Stones only count once activated on your base, and they power up your Mage. Click your Mage, then press ACTIVATE.',
         placement: 'bottom',
       },
       () => TASKS.activate.done(g().game),
@@ -407,15 +317,9 @@ export async function runTutorial(onDone: () => void) {
         }),
       { restrict: TASKS.activate.restrict },
     );
-    await note({
-      id: 'gold',
-      title: 'Gold stones are power',
-      body: 'Activated stones score toward victory AND upgrade your Mage’s attack die: d6 normally, d12 at 2 stones, d20 at 4+. They can also be SPENT…',
-      anchor: '[data-tut="activated"]',
-      placement: 'bottom',
-    });
+    await wait(1200);
 
-    // ---- YOU cast Bolt -----------------------------------------------------
+    // 7 ---- YOU cast Bolt -----------------------------------------------------
     const stageBolt = () => stage(TASKS.bolt.build);
     stageBolt();
     await wait(700);
@@ -423,8 +327,8 @@ export async function runTutorial(onDone: () => void) {
       stageBolt,
       {
         id: 'task-bolt',
-        title: 'Cast BOLT — 1 stone',
-        body: 'A ranged kill: a Bolt flies as far as the squares you have left, and the flight SPENDS them — three squares away costs three. Only a Mage can block one; anything else gets no defence roll. CLICK your Mage, press BOLT — enemies in range glow — then click the Blue Warrior.',
+        title: 'Cast Bolt',
+        body: 'Spend one activated stone to kill at range. Click your Mage, press BOLT, then click the Blue Warrior.',
         placement: 'bottom',
       },
       () => TASKS.bolt.done(g().game),
@@ -435,52 +339,9 @@ export async function runTutorial(onDone: () => void) {
         }),
       { timeoutMs: 120000, restrict: TASKS.bolt.restrict },
     );
-    await wait(1200);
-    await note({
-      id: 'bolt-stone',
-      title: 'The stone disperses',
-      body: 'Look at the target’s square: that same stone landed THERE — never destroyed, never deactivated, and claimable by any Mage. Once a stone has been Activated it stays Activated for the rest of the game, whoever ends up holding it. The cost is real: your Mage dropped from 4 stones (d20) to 3 (d12).',
-      placement: 'bottom',
-    });
+    await wait(1500);
 
-    // ---- YOU cast Nova -----------------------------------------------------
-    const stageNova = () => stage(TASKS.nova.build);
-    stageNova();
-    await wait(700);
-    await note({
-      id: 'nova-intro',
-      title: 'NOVA — 4 stones',
-      body: 'Your Mage is mobbed — three enemies, one of them DIAGONAL. Nova destroys every ENEMY unit in the 8 squares around your Mage, diagonals included, with no defence roll. Your own Warrior beside it is unharmed.',
-      placement: 'bottom',
-    });
-    await playerTask(
-      stageNova,
-      {
-        id: 'task-nova',
-        title: 'Unleash it',
-        body: 'CLICK your Mage, then press NOVA.',
-        placement: 'bottom',
-      },
-      () => TASKS.nova.done(g().game),
-      () => {
-        const novaRig = [0.15, 0.5, 0.85];
-        let ni = 0;
-        S(() => {
-          g().selectUnit('red-m');
-          g().castNova(() => novaRig[Math.min(ni++, novaRig.length - 1)]);
-        });
-      },
-      { restrict: TASKS.nova.restrict },
-    );
-    await wait(1800);
-    await note({
-      id: 'nova-stones',
-      title: 'Count the cost',
-      body: 'All three Blue Warriors fell; your own Warrior stands untouched. The four spent stones now sit on the four DIAGONALS around your Mage — still ACTIVATED, and claimable by anyone, your enemy included. Your Mage is back to a d6. Sorcery is power lent to the battlefield — choose your moment.',
-      placement: 'bottom',
-    });
-
-    // ---- YOU win: MageStone ------------------------------------------------
+    // 8 ---- YOU win: MageStone ------------------------------------------------
     const stageWin1 = () => stage(TASKS.win1.build);
     stageWin1();
     await wait(700);
@@ -488,8 +349,8 @@ export async function runTutorial(onDone: () => void) {
       stageWin1,
       {
         id: 'task-win1',
-        title: 'Now WIN a game',
-        body: 'Your Mage carries SIX stones, one step from home. CLICK it, step onto your base, then press ACTIVATE — six gold on your base wins on the spot.',
+        title: 'Win with MageStones',
+        body: 'Six activated stones on your base wins. Your Mage carries six: step onto your base, then press ACTIVATE.',
         placement: 'bottom',
       },
       () => TASKS.win1.done(g().game),
@@ -503,16 +364,9 @@ export async function runTutorial(onDone: () => void) {
       },
       { timeoutMs: 120000, restrict: TASKS.win1.restrict },
     );
-    await wait(600);
-    await note({
-      id: 'win1-done',
-      title: 'MageStone Victory!',
-      body: 'You did that. Six activated MageStones, carried home and lit on your base — the first of the three roads to victory.',
-      anchor: '.winner',
-      placement: 'left',
-    });
+    await wait(2500); // let the victory land
 
-    // ---- YOU win: Ritual ---------------------------------------------------
+    // 9 ---- YOU win: Ritual ---------------------------------------------------
     const stageWin2 = () => stage(TASKS.win2.build);
     stageWin2();
     await wait(700);
@@ -520,8 +374,8 @@ export async function runTutorial(onDone: () => void) {
       stageWin2,
       {
         id: 'task-win2',
-        title: 'Victory 2 — the Ritual',
-        body: 'Walk your Priest into the NEXUS — the glowing 2×2 heart of the board — and press BEGIN RITUAL.',
+        title: 'Win with a Ritual',
+        body: 'Move your Priest into the glowing Nexus and press BEGIN RITUAL. If Blue can’t reach it or kill the Priest in two goes, you win.',
         placement: 'bottom',
       },
       () => TASKS.win2.done(g().game),
@@ -535,208 +389,19 @@ export async function runTutorial(onDone: () => void) {
       },
       { restrict: TASKS.win2.restrict },
     );
-    await wait(400);
-    await note({
-      id: 'ritual-lit',
-      title: 'The ritual is lit',
-      body: 'Now HOLD it: in a two-player game Blue gets TWO goes to break it — reach the Nexus or kill your Priest — and if it survives both, the Rite completes when play comes back round to you the second time. (With four players it is one go each instead.) Blue’s units are far away. Watch.',
-      anchor: '.ritual-flag',
-      placement: 'top',
-    });
-    beat(ritualBeat); // your go ends — Blue's turn
     await wait(600);
-    await note({
-      id: 'ritual-blue',
-      title: 'Blue can’t reach',
-      body: 'Blue would need to touch the Nexus or kill the Priest, and its army is home. It takes its two goes…',
-      anchor: '.player-strip',
-      placement: 'bottom',
-    });
-    // Play the hold out: Blue takes its single go, and the Rite pays out the
-    // moment play lands back on you.
+    // Play the hold out: Blue's army is home, and the Rite pays out once play
+    // comes back round.
     for (let i = 0; i < 12 && !g().game.winner; i++) {
       beat(ritualBeat);
       await wait(650);
     }
-    await note({
-      id: 'win2-done',
-      title: 'Ritual Victory!',
-      body: 'Blue had both its goes and could not reach you — so when play came back round the second time, the Rite completed. That’s the second road, and the fastest one when the centre is clear.',
-      anchor: '.winner',
-      placement: 'left',
-    });
 
-    // ---- Sieges (HANDS-ON: you lay one, then swap sides and break it) ------
-    const stageSiege = () => stage(TASKS.siegeHold.build);
-    stageSiege();
-    await wait(700);
-    await note({
-      id: 'siege-intro',
-      title: 'Sieges — starve the respawns',
-      body: 'Blue’s Mage and Priest have fallen and wait in the respawn queue — see the P… on Blue’s card. They return to Blue’s base squares… unless someone is STANDING there. Your Warrior is one step away.',
-      placement: 'center',
-    });
-    await playerTask(
-      stageSiege,
-      {
-        id: 'task-siege-hold',
-        title: 'Lay a siege',
-        body: 'CLICK your Warrior by Blue’s base and march it ONTO the glowing base square right in front of it — beside Blue’s guard. Plant your boots in their front door.',
-        placement: 'top', // the action is on the NEAR board rows — box sits high
-      },
-      () => TASKS.siegeHold.done(g().game),
-      () => scriptMove('red-w1', SIEGE_DOOR),
-      // Only that Warrior, only onto the one base square beside Blue's guard —
-      // any other square leaves the intruder out of reach of the next task.
-      { restrict: TASKS.siegeHold.restrict },
-    );
-    await wait(600);
-    await note({
-      id: 'siege-lock',
-      title: 'Under siege — no respawns',
-      body: 'That’s a SIEGE: while ANY enemy stands on a base square, the fallen Mage and Priest CANNOT return — the queue is frozen. Blue’s card carries the SIEGE flag for as long as you hold the square.',
-      anchor: '.siege-alert',
-      placement: 'bottom',
-    });
-    beat(afterSiegeLaid); // your go ends; play passes to Blue
-    await wait(1100);
-    await note({
-      id: 'siege-still',
-      title: 'A turn later — still locked out',
-      body: 'Blue’s turn has begun and the queue hasn’t moved: no Mage, no Priest, as long as the base is held. There is one way out — and for this move, YOU play Blue.',
-      anchor: '.player-strip',
-      placement: 'bottom',
-    });
-    await playerTask(
-      // Carries on from the siege just laid; a retry re-stages it, siege held.
-      () => stage(TASKS.siegeBreak.build),
-      {
-        id: 'task-siege-break',
-        title: 'Break the siege — as Blue',
-        body: 'Blue’s last Warrior guards the base. CLICK it, then press SINGLE ATTACK and throw the intruder out.',
-        placement: 'top', // the fight is on the near base row — keep it visible
-      },
-      () => TASKS.siegeBreak.done(g().game),
-      () => {
-        const siegeRig = [0.99, 0];
-        let si = 0;
-        S(() => {
-          g().selectUnit('blue-w1');
-          g().attack('red-w1', ['blue-w1'], () => siegeRig[Math.min(si++, siegeRig.length - 1)]);
-        });
-      },
-      { restrict: TASKS.siegeBreak.restrict },
-    );
-    await until(() => g().combatRoll !== null, 6000);
-    await wait(400);
-    {
-      const roll = g().combatRoll;
-      const lc = g().game.lastCombat;
-      const a = roll?.attackRoll ?? lc?.attackRoll ?? 6;
-      const d = roll?.defenseRoll ?? lc?.defenseRoll ?? 1;
-      await note({
-        id: 'siege-broken',
-        title: 'The besieger falls',
-        body: `Blue rolled ${a}, Red rolled ${d} — the intruder is defeated and Blue’s base is CLEAR. Look at the base: the queue emptied INSTANTLY.`,
-        anchor: '.combat-announce',
-        placement: 'bottom',
-      });
-    }
-    await wait(600);
-    await note({
-      id: 'siege-freed',
-      title: 'The queue empties — they’re back!',
-      body: 'The moment the base cleared, Blue’s Mage AND Priest respawned onto it. Hold an enemy base to keep their leaders dead; break a siege to bring yours home.',
-      placement: 'top', // their respawned leaders stand on the near base row
-    });
-
-    // ---- Conquest (HANDS-ON: you seal the door and finish it) --------------
-    // `sealed` restores the post-siege arrangement — the kill task's re-stage
-    // must come back with the base already held, or the kill wouldn't eliminate.
-    const stageWin3 = (sealed = false) => stage(sealed ? TASKS.win3Kill.build : TASKS.win3Siege.build);
-    stageWin3();
-    await wait(700);
-    await note({
-      id: 'win3-stage',
-      title: 'Victory 3 of 3 — Conquest',
-      body: 'Blue is down to ONE Warrior; its fallen Mage and Priest are queued. YOU finish this: first seal the door, then destroy the last unit. Kill it too soon and the leaders respawn — the siege must come FIRST.',
-      placement: 'top', // the staged endgame sits on the near half of the board
-    });
-    await playerTask(
-      stageWin3,
-      {
-        id: 'task-win3-siege',
-        title: 'Seal the base',
-        body: 'CLICK your Warrior standing beside Blue’s base and march it ONTO a base square — with the queue locked out, nobody is coming back.',
-        placement: 'top',
-      },
-      () => TASKS.win3Siege.done(g().game),
-      () =>
-        S(() => {
-          g().selectUnit('red-w4');
-          g().moveTo({ r: 15, c: 5 });
-        }),
-      { restrict: TASKS.win3Siege.restrict },
-    );
-    await wait(800);
-    await note({
-      id: 'win3-siege',
-      title: 'Under siege',
-      body: 'You stand ON Blue’s base — the queued Mage and Priest are locked out, exactly like the siege you laid before. This time, nobody is coming to break it.',
-      anchor: '.siege-alert',
-      placement: 'bottom',
-    });
-    await playerTask(
-      () => stageWin3(true),
-      {
-        id: 'task-win3-kill',
-        title: 'Destroy the last unit',
-        body: 'Two of your Warriors flank Blue’s survivor. CLICK one, then press DOUBLE ATTACK — no units left and no way to respawn is ELIMINATION.',
-        placement: 'top',
-      },
-      () => TASKS.win3Kill.done(g().game),
-      () => {
-        const rig3 = [0.99, 0.99, 0];
-        let i3 = 0;
-        S(() => {
-          g().selectUnit('red-w1');
-          g().attack('blue-w1', ['red-w1', 'red-w2'], () => rig3[Math.min(i3++, rig3.length - 1)]);
-        });
-      },
-      { restrict: TASKS.win3Kill.restrict },
-    );
-    await until(() => g().combatRoll !== null, 6000);
-    await wait(400);
-    {
-      const roll = g().combatRoll;
-      const lc = g().game.lastCombat;
-      const a = roll?.attackRoll ?? lc?.attackRoll ?? 12;
-      const d = roll?.defenseRoll ?? lc?.defenseRoll ?? 1;
-      await note({
-        id: 'win3-kill',
-        title: 'The last unit falls',
-        // The winner panel is already up — sit BESIDE it, never on top of it.
-        body: `You rolled ${a} against Blue’s ${d} — the final Blue Warrior is defeated. Zero units on the board and every respawn besieged: Blue is ELIMINATED.`,
-        anchor: '.winner',
-        placement: 'left',
-      });
-    }
-    await note({
-      id: 'win3-done',
-      title: 'Conquest Victory!',
-      body: 'Last player standing takes the game — the third road to victory. You sealed it and you struck it.',
-      anchor: '.winner',
-      placement: 'left',
-    });
-
-    // ---- Wrap up -----------------------------------------------------------
+    // 10 ---- Conquest + wrap up ----------------------------------------------
     await note({
       id: 'wrap',
-      title: 'You’ve played it all',
-      // Anchored beside the winner panel (its position names vary by layout —
-      // the golden book button lives top right on desktop, bottom left on
-      // phones, so the text names the BUTTON, not a corner).
-      body: 'You moved, fought, resurrected, collected, cast Bolt and Nova, laid a siege and broke one, and won by MageStone, Ritual AND Conquest yourself. The golden Rule Book button has every detail. Go play!',
+      title: 'One more way to win',
+      body: 'Conquest: destroy every enemy unit. Fallen Mages and Priests respawn on their base, unless an enemy stands on it. The Rule Book has the rest. Go play!',
       anchor: '.winner',
       placement: 'left',
       gotItLabel: 'Finish',

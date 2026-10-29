@@ -159,25 +159,25 @@ export function SetupDiagram() {
   );
 }
 
-/** A bending orthogonal move, paid for out of the go's squares. */
+/** A straight-line orthogonal move, paid for out of the go's squares. */
 export function MoveDiagram() {
   const n = 6;
   const cell = 30;
   const ox = 60;
   const oy = 8;
-  const path: XY[] = [[5, 2], [5, 3], [4, 3], [3, 3]];
+  const path: XY[] = [[5, 2], [5, 3], [5, 4]];
   const C = (r: number, c: number) => mid(ox, oy, cell, r, c);
   return (
     <Figure
-      label="Orthogonal movement path"
-      caption="Spend squares from your go's six to move a unit — orthogonally, turning corners if you like, but never diagonally. Up to three units may share the six."
+      label="Straight-line movement path"
+      caption="Spend squares from your go's six to move a unit — in one straight line, up, down, left or right. No diagonals and no turning corners. Up to three units may share the six."
       height={oy + n * cell + 8}
     >
       {checker(n, n, ox, oy, cell)}
       {path.map(([r, c], i) => (
         <rect key={i} x={ox + c * cell + 4} y={oy + r * cell + 4} width={cell - 8} height={cell - 8} rx={3} fill="rgba(86, 224, 168, 0.35)" />
       ))}
-      <Arrow from={C(5, 1)} to={C(3, 3)} color="#7ef0c0" />
+      <Arrow from={C(5, 1)} to={C(5, 4)} color="#7ef0c0" />
       <Disc cx={C(5, 1)[0]} cy={C(5, 1)[1]} r={12} color={WAR} label="W" />
     </Figure>
   );

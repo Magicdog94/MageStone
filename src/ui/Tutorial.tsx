@@ -317,7 +317,7 @@ const SECTIONS: Section[] = [
             For each unit you use:
             <ul className="htp-list htp-list--sub">
               <li>Choose one of your units — any kind.</li>
-              <li>Move it as far as your remaining squares allow — orthogonal (never diagonal), through empty squares; the path may turn. Whatever it walks comes off your six.</li>
+              <li>Move it as far as your remaining squares allow — in one straight line, up, down, left or right, through empty squares. No diagonals and no turning. Whatever it walks comes off your six.</li>
               <li>
                 Immediately resolve that unit’s action: attack (Warrior: Single, Double, Triple;
                 Mage), collect or activate a MageStone, resurrect a Warrior, or start a Nexus

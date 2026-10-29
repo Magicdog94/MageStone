@@ -716,29 +716,21 @@ function occupancyOf(state: GameState): Uint8Array {
   return g;
 }
 
-/** Route length from `from` to every square within `max` steps (255 = out of
- *  reach): orthogonal, bending, through empty squares — rules.ts::legalMoves. */
+/** Move length from `from` to every square within `max` steps (255 = out of
+ *  reach): one straight orthogonal line through empty squares —
+ *  rules.ts::legalMoves. */
 function routeDist(occ: Uint8Array, from: Cell, max: number): Uint8Array {
   const dist = new Uint8Array(N * N).fill(255);
-  const start = from.r * N + from.c;
-  dist[start] = 0;
-  let frontier = [start];
-  for (let d = 1; d <= max && frontier.length; d++) {
-    const next: number[] = [];
-    for (const i of frontier) {
-      const r = (i / N) | 0;
-      const c = i % N;
-      for (const [dr, dc] of DIRS4) {
-        const nr = r + dr;
-        const nc = c + dc;
-        if (!exists(nr, nc)) continue;
-        const j = nr * N + nc;
-        if (dist[j] !== 255 || occ[j]) continue;
-        dist[j] = d;
-        next.push(j);
-      }
+  dist[from.r * N + from.c] = 0;
+  for (const [dr, dc] of DIRS4) {
+    for (let d = 1; d <= max; d++) {
+      const nr = from.r + dr * d;
+      const nc = from.c + dc * d;
+      if (!exists(nr, nc)) break;
+      const j = nr * N + nc;
+      if (occ[j]) break;
+      dist[j] = d;
     }
-    frontier = next;
   }
   return dist;
 }

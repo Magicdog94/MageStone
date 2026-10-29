@@ -333,13 +333,23 @@ describe('A move uses up the LOWEST die that covers it', () => {
     expect(spentBy(die(g, 'd1'), 'red')).toBeNull();
   });
 
-  it('measures the real route, so a detour around a unit needs a bigger die', () => {
-    // A blocker directly below makes (8,6) a 4-step walk instead of 2.
+  it('moves only in a straight line, so a unit in the way blocks the square behind it', () => {
+    // A blocker directly below makes (8,6) unreachable — there is no detour.
     let g = open();
+    const w = at(g, 'red-w1');
+    expect(moveDistance(g, w, { r: 8, c: 6 }, 6)).toBe(2);
     g = place(g, 'red-w2', { r: 7, c: 6 });
-    expect(moveDistance(g, at(g, 'red-w1'), { r: 8, c: 6 }, 6)).toBe(4);
-    g = moveUnit(g, 'red-w1', 'd2', { r: 8, c: 6 });
-    expect(spentBy(die(g, 'd2'), 'red')).toBe('red-w1'); // 2 and 3 fall short
+    expect(moveDistance(g, at(g, 'red-w1'), { r: 8, c: 6 }, 6)).toBeNull();
+    expect(moveUnit(g, 'red-w1', 'd2', { r: 8, c: 6 })).toBe(g);
+  });
+
+  it('never turns a corner: only squares in the same row or column are reachable', () => {
+    const g = open();
+    const w = at(g, 'red-w1');
+    const moves = legalMoves(g, w, 6);
+    expect(moves.length).toBeGreaterThan(0);
+    for (const c of moves) expect(c.r === w.cell.r || c.c === w.cell.c).toBe(true);
+    expect(moveDistance(g, w, { r: w.cell.r + 1, c: w.cell.c + 1 }, 6)).toBeNull();
   });
 
   it('ignores dice this player already spent, and dice of another kind', () => {

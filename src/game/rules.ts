@@ -500,59 +500,40 @@ const DIRS = [
 ];
 
 /**
- * All cells reachable by an orthogonal route of up to `steps` squares. The
- * route may turn at each step but never moves diagonally, and may only pass
- * through / land on empty existing cells (units block; stones/graves do not).
+ * All cells reachable by a STRAIGHT orthogonal line of up to `steps` squares:
+ * up, down, left or right, with no turning. The line may only pass through /
+ * land on empty existing cells (units block; stones/graves do not), so a unit
+ * in the way stops it.
  */
 export function legalMoves(state: GameState, unit: Unit, steps: number): Cell[] {
   const out: Cell[] = [];
-  const seen = new Set<string>([`${unit.cell.r},${unit.cell.c}`]);
-  let frontier: Cell[] = [unit.cell];
-  for (let dist = 1; dist <= steps; dist++) {
-    const next: Cell[] = [];
-    for (const cell of frontier) {
-      for (const { dr, dc } of DIRS) {
-        const n = { r: cell.r + dr, c: cell.c + dc };
-        const key = `${n.r},${n.c}`;
-        if (seen.has(key)) continue;
-        if (!cellExists(n)) continue;
-        if (unitAt(state, n)) continue;
-        seen.add(key);
-        out.push(n);
-        next.push(n);
-      }
+  for (const { dr, dc } of DIRS) {
+    for (let dist = 1; dist <= steps; dist++) {
+      const n = { r: unit.cell.r + dr * dist, c: unit.cell.c + dc * dist };
+      if (!cellExists(n) || unitAt(state, n)) break;
+      out.push(n);
     }
-    frontier = next;
   }
   return out;
 }
 
 /**
- * Length of the shortest route from the unit to `dest` under the same rules as
- * `legalMoves` (orthogonal, bending, empty cells only), or null when `dest`
- * cannot be reached within `maxSteps`.
+ * Length of the straight-line move from the unit to `dest` under the same rules
+ * as `legalMoves` (one orthogonal line, empty cells only), or null when `dest`
+ * is not in line with the unit, is blocked, or is more than `maxSteps` away.
  */
 export function moveDistance(state: GameState, unit: Unit, dest: Cell, maxSteps: number): number | null {
   if (sameCell(unit.cell, dest)) return 0;
-  const seen = new Set<string>([`${unit.cell.r},${unit.cell.c}`]);
-  let frontier: Cell[] = [unit.cell];
-  for (let dist = 1; dist <= maxSteps; dist++) {
-    const next: Cell[] = [];
-    for (const cell of frontier) {
-      for (const { dr, dc } of DIRS) {
-        const n = { r: cell.r + dr, c: cell.c + dc };
-        const key = `${n.r},${n.c}`;
-        if (seen.has(key)) continue;
-        if (!cellExists(n)) continue;
-        if (unitAt(state, n)) continue;
-        if (sameCell(n, dest)) return dist;
-        seen.add(key);
-        next.push(n);
-      }
-    }
-    frontier = next;
+  const dr = Math.sign(dest.r - unit.cell.r);
+  const dc = Math.sign(dest.c - unit.cell.c);
+  if (dr !== 0 && dc !== 0) return null;
+  const len = Math.abs(dest.r - unit.cell.r) + Math.abs(dest.c - unit.cell.c);
+  if (len > maxSteps) return null;
+  for (let dist = 1; dist <= len; dist++) {
+    const n = { r: unit.cell.r + dr * dist, c: unit.cell.c + dc * dist };
+    if (!cellExists(n) || unitAt(state, n)) return null;
   }
-  return null;
+  return len;
 }
 
 /**

@@ -159,7 +159,7 @@ export function SetupDiagram() {
   );
 }
 
-/** A straight-line orthogonal move, paid for out of the go's squares. */
+/** A rook move: any distance along one straight orthogonal line. */
 export function MoveDiagram() {
   const n = 6;
   const cell = 30;
@@ -170,7 +170,7 @@ export function MoveDiagram() {
   return (
     <Figure
       label="Straight-line movement path"
-      caption="Spend squares from your go's six to move a unit — in one straight line, up, down, left or right. No diagonals and no turning corners. Up to three units may share the six."
+      caption="Units move like a chess rook: any distance in one straight line, up, down, left or right, until another unit blocks the way. No diagonals and no turning corners. Up to three units move each go."
       height={oy + n * cell + 8}
     >
       {checker(n, n, ox, oy, cell)}
@@ -218,7 +218,7 @@ export function StoneDiagram() {
   return (
     <Figure
       label="Collecting and activating a MageStone"
-      caption="Land the Mage on a MageStone to collect it, then return to your own base to activate it — powering up its attack die (d6 → d12 → d20)."
+      caption="Land the Mage on a MageStone to collect it, then return to your own base, where it activates automatically — powering up its attack die (d6 → d12 → d20)."
       height={oy + rows * cell + 8}
     >
       {checker(cols, rows, ox, oy, cell, 3)}

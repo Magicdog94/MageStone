@@ -35,14 +35,14 @@ td,th{border:1px solid rgba(201,162,74,.35);padding:6px 12px;text-align:center}
 <h2>Taking your turn</h2>
 <p>Players take it in turns — you, then your opponent, then you — and nobody ever takes two goes in a row.</p>
 <ol>
-<li><strong>Six squares, three units.</strong> On your go you have <strong>6 squares of movement</strong> to spend, across <strong>at most 3 units</strong>. One unit can march all six, or three units can take two each — however you divide it.</li>
+<li><strong>Three units, rook moves.</strong> On your go you may use <strong>at most 3 units</strong>. Each moves like a chess rook: <strong>any distance in one straight line</strong>.</li>
 <li><strong>Your go is one continuous turn.</strong> Move a unit and resolve its action, then the next, then the next. Play passes only when you end your go.</li>
-<li><strong>Whatever you do not use is lost.</strong> Squares never carry over to your next go, so end it with four squares in hand and those four are gone. Every go begins on a full six squares and three fresh units, however the last one went.</li>
-<li><strong>A unit goes once per turn</strong> — it moves, then acts, or simply acts where it stands. Acting costs no <em>squares</em>, but it still uses one of your <strong>three units</strong>: three Warriors ganging up on one enemy is your whole go's worth of units, even though the attack itself costs no movement.</li>
+<li><strong>Whatever you do not use is lost.</strong> Unused units never carry over: every go begins with three fresh units, however the last one went.</li>
+<li><strong>A unit goes once per turn</strong> — it moves, then acts, or simply acts where it stands. <strong>Acting ends that unit's go</strong>, and either way it uses one of your <strong>three units</strong>: three Warriors ganging up on one enemy is your whole go's worth of units.</li>
 <li><strong>Landing on something picks it up.</strong> A Mage that stops on MageStones collects them, and a Priest that stops on a Gravestone raises the Warrior and steps back one square to make room for it. Both happen automatically, and both count as that unit's action for the turn — so it cannot also attack.</li>
 <li><strong>Dice are for combat only</strong> — attacks, defence rolls and a Mage's power die. Movement involves no luck.</li>
 </ol>
-<p>Movement is a straight line up, down, left or right through empty squares. A unit cannot turn mid-move or go diagonally. Units block the line; stones and gravestones do not. Every square walked comes off your six. A unit's action comes after its move — or instead of it — and is one of: attack, collect MageStones, activate MageStones, resurrect, or begin the ritual.</p>
+<p>Every unit moves like a chess rook: any distance in a straight line up, down, left or right through empty squares. A unit cannot turn mid-move or go diagonally. Units block the line; stones and gravestones do not. A unit's action comes after its move — or instead of it — and is one of: attack, collect MageStones, resurrect, cast, or begin the ritual. Once a unit acts, its go is over.</p>
 
 <h2>Combat</h2>
 <p>Warriors and Mages attack an enemy on an orthogonally adjacent square; <strong>Priests never attack</strong> — though they kill what attacks them. One Warrior rolls 1d6; two or three Warriors adjacent to the same target <strong>coordinate</strong> for 2d6 or 3d6 summed. The Mage rolls its power die — d6 with 0–1 activated MageStones, d12 with 2–3, d20 with 4+.</p>
@@ -59,8 +59,8 @@ td,th{border:1px solid rgba(201,162,74,.35);padding:6px 12px;text-align:center}
 <h2>Mage sorcery</h2>
 <p>Activated MageStones can be spent as spells. A spent stone is never destroyed and never deactivated — it leaves the Mage, lands back on the board still Activated, and can be claimed by any Mage, including an opponent's.</p>
 <ul>
-<li><strong>Bolt (1 Activated stone)</strong> — a ranged attack on any enemy within as many orthogonal steps as you have squares left this go. The flight <strong>spends</strong> those squares — a target three squares away costs three — and casting it is the Mage's action. <strong>Only a Mage can block it.</strong> Any other unit gets no defence roll and is defeated immediately. A targeted Mage rolls its power die against yours (ties are re-rolled): if it wins, the Bolt is blocked — it does not bounce back, so your Mage is unharmed — and if it loses, it is defeated as normal. Either way the spent stone lands on the target's square, still Activated, so a Mage that blocks is standing on it and can pick it up on its turn.</li>
-<li><strong>Nova (4 Activated stones)</strong> — an area attack that <strong>nothing can block</strong>, not even a Mage. Every <strong>enemy</strong> unit in the 8 squares surrounding the Mage is defeated with no defence roll; friendly units are unharmed. The four spent stones are placed on the four diagonal squares around the Mage, all still Activated. Nova spends no squares — only the Mage's action and the four stones.</li>
+<li><strong>Bolt (1 Activated stone)</strong> — a ranged attack that flies like a rook: any distance in a straight line up, down, left or right, hitting the <strong>first unit</strong> in that line (so units in the way block it). Casting it is the Mage's action. <strong>Only a Mage can block it.</strong> Any other unit gets no defence roll and is defeated immediately. A targeted Mage rolls its power die against yours (ties are re-rolled): if it wins, the Bolt is blocked — it does not bounce back, so your Mage is unharmed — and if it loses, it is defeated as normal. Either way the spent stone lands on the target's square, still Activated, so a Mage that blocks is standing on it and can pick it up on its turn.</li>
+<li><strong>Nova (4 Activated stones)</strong> — an area attack that <strong>nothing can block</strong>, not even a Mage. Every <strong>enemy</strong> unit in the 8 squares surrounding the Mage is defeated with no defence roll; friendly units are unharmed. The four spent stones are placed on the four diagonal squares around the Mage, all still Activated. Nova costs only the Mage's action and the four stones.</li>
 </ul>
 
 <h2>Defeat, gravestones and respawns</h2>
@@ -71,11 +71,11 @@ td,th{border:1px solid rgba(201,162,74,.35);padding:6px 12px;text-align:center}
 </ul>
 
 <h2>MageStones</h2>
-<p>The Mage collects a stone by ending its move on it, and may <strong>activate</strong> carried stones only while standing on its own base. Activated stones power the Mage's combat die (d6 with 0–1, d12 with 2–3, d20 with 4–5) and count toward victory; Unactivated stones do neither.</p>
+<p>The Mage collects a stone by ending its move on it. Carried stones <strong>activate automatically</strong> the moment the Mage stands on its own base — no button, and it costs no action. Activated stones power the Mage's combat die (d6 with 0–1, d12 with 2–3, d20 with 4–5) and count toward victory; Unactivated stones do neither.</p>
 <p><strong>Activation is permanent.</strong> Once a MageStone has ever been Activated it can never become Unactivated again — not when it is dropped, not when its Mage is killed, not when it is spent on a spell, and not when an enemy takes it. A Mage that picks up an already-Activated stone counts it immediately and does not need to carry it home. More of the board's stones therefore become instantly useful as a game goes on.</p>
 
 <h2>The Priest</h2>
-<p>A Priest that <strong>lands on a gravestone resurrects</strong> a Warrior there automatically (up to 6 alive), then steps back one square the way it came so the Warrior can stand on the gravestone square; that gravestone then leaves the game for good. It costs no extra action and no extra squares, but it is that Priest's action for the turn. Only one gravestone may be raised per turn. A Priest that wins its defence roll kills its attacker and does not move.</p>
+<p>A Priest that <strong>lands on a gravestone resurrects</strong> a Warrior there automatically (up to 6 alive), then steps back one square the way it came so the Warrior can stand on the gravestone square; that gravestone then leaves the game for good. It costs no extra action, but it is that Priest's action for the turn. Only one gravestone may be raised per turn. A Priest that wins its defence roll kills its attacker and does not move.</p>
 
 <h2>The Rite of the Nexus</h2>
 <p>The Nexus is the central 2&times;2. A Priest standing on it may declare the Rite, which costs that Priest's action. To begin it, and to keep it, <strong>all four Nexus squares</strong> must be free of enemy units; friendly units may stand on the other three, and screening them is the usual way to hold one. While a Rite is running the Nexus glows in that player's colour.</p>
@@ -83,7 +83,7 @@ td,th{border:1px solid rgba(201,162,74,.35);padding:6px 12px;text-align:center}
 
 <h2>Victory</h2>
 <ol>
-<li><strong>MageStone</strong> — your Mage stands on your own base holding 6 Activated MageStones. Instant win. Picking up a sixth Activated stone away from home does not win on its own — the Mage still has to reach its base.</li>
+<li><strong>MageStone</strong> — your Mage stands on your own base holding 6 MageStones (they activate there automatically). Instant win. Picking up a sixth Activated stone away from home does not win on its own — the Mage still has to reach its base.</li>
 <li><strong>Ritual</strong> — your Priest still holds a clear Nexus when play has come back round to you after declaring the Rite — twice in a two-player game, once with four.</li>
 <li><strong>Conquest</strong> — every rival is eliminated.</li>
 </ol>

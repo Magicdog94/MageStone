@@ -48,7 +48,6 @@ import {
   gravestoneCapacity,
   isBudget,
   legalMoves,
-  moveDistance,
   movesLeft,
   magePowerDie,
   moveUnit,
@@ -402,8 +401,7 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
 
     // ---- moves (a die of the unit's kind must be free, unit not yet used) ----
     if (state.unitsMovedThisTurn.includes(u.id) || state.unitsActedThisTurn.includes(u.id)) continue;
-    // BUDGET variant: no dice — one "virtual die" carries how far this unit may
-    // still walk out of the round's shared allowance.
+    // BUDGET variant: no dice — one "virtual die" carries the rook reach.
     const onBudget = isBudget(state);
     const reach = onBudget ? movesLeft(state, me) : 0;
     if (onBudget && (reach <= 0 || slotsLeft(state, me) <= 0)) continue;
@@ -525,10 +523,8 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
         if (score > 0)
           cands.push({
             a: { type: 'move', unitId: u.id, dieId: die.id, dest },
-            // Dice: what the die burnt was worth. Budget: the squares it costs.
-            score: onBudget
-              ? score - (moveDistance(state, u, dest, reach) ?? 0) * 1.2
-              : score - dieWorth(die) * 0.5,
+            // Dice: what the die burnt was worth. Rook moves cost nothing.
+            score: onBudget ? score : score - dieWorth(die) * 0.5,
           });
       }
     }
@@ -735,6 +731,18 @@ function routeDist(occ: Uint8Array, from: Cell, max: number): Uint8Array {
   return dist;
 }
 
+/** Could a rook-line Bolt from `from` hit `to`: same row or column, with
+ *  nothing standing between them? */
+function boltLine(occ: Uint8Array, from: Cell, to: Cell): boolean {
+  if (from.r !== to.r && from.c !== to.c) return false;
+  const dr = Math.sign(to.r - from.r);
+  const dc = Math.sign(to.c - from.c);
+  for (let r = from.r + dr, c = from.c + dc; r !== to.r || c !== to.c; r += dr, c += dc) {
+    if (occ[r * N + c]) return false;
+  }
+  return true;
+}
+
 /** Steps for a unit to stand orthogonally beside `target`: 0 if it already
  *  does, 255 if it cannot get there. */
 function stepsBeside(dist: Uint8Array, occ: Uint8Array, from: Cell, target: Cell): number {
@@ -939,18 +947,11 @@ function budgetThreat(
     const defFaces = v.kind === 'mage' ? magePowerDie(v.activated) : 6;
     const val = worth(v, scarcity);
 
-    // Warrior gang: cheapest walks first until the squares (or units) run out.
+    // Warrior gang: every Warrior that can get beside it, up to the units left.
     const walks = gang
       .map((g) => (g.fresh ? stepsBeside(g.dist, occ, g.w.cell, v.cell) : manhattan(g.w.cell, v.cell) === 1 ? 0 : 255))
-      .filter((s) => s <= reach)
-      .sort((a, b) => a - b);
-    let spent = 0;
-    let n = 0;
-    for (const s of walks) {
-      if (n >= Math.min(3, slots) || spent + s > reach) break;
-      spent += s;
-      n++;
-    }
+      .filter((s) => s <= reach);
+    const n = Math.min(walks.length, 3, slots);
     if (n > 0) {
       const odds = quickOdds(n, defFaces);
       options.push(odds * val - (1 - odds) * warriorLoss);
@@ -964,8 +965,8 @@ function budgetThreat(
         const odds = faceOdds(magePowerDie(mage.activated), defFaces);
         options.push(odds * val - (1 - odds) * worth(mage, scarcity));
       }
-      // A Bolt costs the distance it flies, so its reach IS the allowance.
-      if (mage.activated >= 1 && manhattan(mage.cell, v.cell) <= reach) {
+      // A Bolt flies along a clear straight line.
+      if (mage.activated >= 1 && boltLine(occ, mage.cell, v.cell)) {
         if (v.kind === 'mage') {
           const hit = faceOdds(magePowerDie(mage.activated), defFaces);
           options.push(hit * val - 8 - (1 - hit) * 15);
@@ -1048,8 +1049,8 @@ function budgetBreakChance(
     const dist = fresh && reach > 0 ? routeDist(occ, u.cell, reach) : null;
     if (dist && open.some((c) => dist[c.r * N + c.c] <= reach)) return 1;
     if (u.kind === 'priest') continue;
-    // a Bolt reaches as far as their squares, and needs no walk at all
-    if (u.kind === 'mage' && u.activated >= 1 && manhattan(u.cell, priest.cell) <= reach) return 1;
+    // a Bolt down a clear line needs no walk at all
+    if (u.kind === 'mage' && u.activated >= 1 && boltLine(occ, u.cell, priest.cell)) return 1;
     const beside = dist
       ? stepsBeside(dist, occ, u.cell, priest.cell) <= reach
       : manhattan(u.cell, priest.cell) === 1;

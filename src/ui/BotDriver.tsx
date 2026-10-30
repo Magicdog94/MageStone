@@ -94,7 +94,7 @@ export function BotDriver() {
         }
         // act — one play per tick, right through the go; when `chooseAction`
         // finds nothing worth doing the bot ends the go and passes play.
-        // What the board owes this go: squares spent and units activated.
+        // What the board owes this go: units activated (moveSpent is legacy).
         const spent = Object.values(g.moveSpent ?? {}).reduce((n, v) => n + (v ?? 0), 0);
         const used = g.unitsMovedThisTurn.length + g.unitsActedThisTurn.length;
         const sig = `${g.current}:${g.turnPhase}:${spent}:${used}:${g.units.length}`;

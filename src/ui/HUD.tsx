@@ -5,16 +5,13 @@ import { usePlayerLabel } from './playerNames';
 import { COLORS } from '../three/coords';
 import {
   boltTargets,
-  budgetOf,
   canBolt,
   canNova,
   gameOver,
   gravestoneBank,
   gravestoneCapacity,
   hasPlayLeft,
-  mageActionDieValue,
   magePowerDie,
-  movesLeft,
   novaVictims,
   ritualHoldOf,
   slotsLeft,
@@ -80,12 +77,11 @@ function PhaseTrack() {
   const game = useGame((s) => s.game);
   if (gameOver(game)) return null;
   const phase = game.turnPhase;
-  const squares = movesLeft(game, game.current);
   const units = slotsLeft(game, game.current);
   const steps = [
     {
       key: 'act',
-      label: `1 · Move up to 3 units — ${squares} square${squares === 1 ? '' : 's'} left`,
+      label: '1 · Move up to 3 units — any distance in a straight line',
       done: false,
       active: phase === 'act',
     },
@@ -95,7 +91,7 @@ function PhaseTrack() {
       done: false,
       active: false,
     },
-    { key: 'pass', label: '3 · End your go — spare squares are lost', done: false, active: false },
+    { key: 'pass', label: '3 · End your go — unused units are lost', done: false, active: false },
   ];
   return (
     <div className="phase-track" aria-label="Turn phases">
@@ -356,8 +352,7 @@ export function HUD() {
   const attackOpts = myTurn ? attackOptions(game, selectedUnitId, tutRestrict) : [];
   const phase = game.turnPhase;
 
-  // The go's allowance for whoever is acting: squares and units left.
-  const squaresLeft = movesLeft(game, game.current);
+  // The go's allowance for whoever is acting: units left.
   const unitsLeft = slotsLeft(game, game.current);
   const graveBank = gravestoneBank(game);
   const graveCap = gravestoneCapacity(game);
@@ -400,27 +395,26 @@ export function HUD() {
       <PhaseTrack />
       <TurnTimer key={`${game.current}:${turnSeconds ?? 'off'}`} width={timerWidth} />
       <div className="top-chips">
-        {/* The go's allowance — the two numbers that decide every move, so they
-            sit right under the turn timer rather than at the foot of the screen
-            (a playtester only found them after ten minutes). Pips go out as they
-            are walked; a Bolt spends them too; unused ones are lost at End Turn. */}
+        {/* The go's allowance — the number that decides every go, so it sits
+            right under the turn timer rather than at the foot of the screen (a
+            playtester only found it after ten minutes). One pip per unit still
+            to use; unused ones are lost at End Turn. */}
         {!gameOver(game) && (
           <span
             className="budget-tray allowance-chip tip"
-            data-tip="Your movement this go: squares to share between up to 3 units. Anything unused is lost when you end your turn."
-            aria-label={`${squaresLeft} squares and ${unitsLeft} units left this go`}
+            data-tip="Units you can still use this go. Each moves any distance in a straight line. Unused units are lost when you end your turn."
+            aria-label={`${unitsLeft} units left this go`}
           >
             <span className="sq-row">
-              {Array.from({ length: budgetOf(game) }, (_, i) => (
+              {Array.from({ length: UNITS_PER_GO }, (_, i) => (
                 <span
                   key={i}
-                  className={`sq-pip${i < squaresLeft ? '' : ' spent'}`}
+                  className={`sq-pip${i < unitsLeft ? '' : ' spent'}`}
                   style={{ '--accent': COLORS[game.current] } as CSSProperties}
                 />
               ))}
             </span>
             <span className="budget-read">
-              <strong>{squaresLeft}</strong> square{squaresLeft === 1 ? '' : 's'} ·{' '}
               <strong>{unitsLeft}</strong> unit{unitsLeft === 1 ? '' : 's'} left
             </span>
           </span>
@@ -511,15 +505,15 @@ export function HUD() {
                 </div>
               )}
               <div className="muted unit-dice">{diceLine(selectedUnit.kind, selectedUnit.activated)}</div>
-              {/* how far this unit can still march out of the go's squares */}
+              {/* how this unit may still move */}
               {(() => {
                 const moved = game.unitsMovedThisTurn.includes(selectedUnit.id);
-                // A task with no movement in it hides the "move up to N" hint.
+                const acted = game.unitsActedThisTurn.includes(selectedUnit.id);
+                // A task with no movement in it hides the move hint.
                 if (tutRestrict?.dests && tutRestrict.dests.length === 0) return null;
-                return !moved && squaresLeft > 0 && unitsLeft > 0 ? (
+                return !moved && !acted && unitsLeft > 0 ? (
                   <div className="muted">
-                    move up to {squaresLeft} square{squaresLeft === 1 ? '' : 's'} — whatever you
-                    walk comes off this go
+                    moves any distance in a straight line — acting ends its go
                   </div>
                 ) : null;
               })()}
@@ -547,12 +541,12 @@ export function HUD() {
                     disabled={boltTargets(game, selectedUnit.id).length === 0}
                     title={
                       boltTargets(game, selectedUnit.id).length === 0
-                        ? 'No enemies within range'
-                        : 'Spend 1 Activated stone — click any enemy in range. Only an enemy Mage can block it (its power die against yours); nothing else gets a defence roll. Blocked or not, the stone lands on the target square, still Activated.'
+                        ? 'No enemy in a clear straight line'
+                        : 'Spend 1 Activated stone — click the first enemy in any straight line. Only an enemy Mage can block it (its power die against yours); nothing else gets a defence roll. Blocked or not, the stone lands on the target square, still Activated.'
                     }
                   >
                     {boltMode ? 'Pick a target…' : 'Bolt'}
-                    <small>1 stone · range {mageActionDieValue(game, selectedUnit.id)}</small>
+                    <small>1 stone · straight line</small>
                   </button>
                 )}
                 {myTurn && selectedUnit.kind === 'mage' && canNova(game, selectedUnit.id) && tutAllows(tutRestrict, 'nova') && (
@@ -631,7 +625,7 @@ export function HUD() {
                     onClick={endActivation}
                     title={
                       game.activationDice.length > 0
-                        ? 'End your go and pass play on — any squares left over are lost'
+                        ? 'End your go and pass play on — any units left over are lost'
                         : 'Nothing committed — this passes, and the whole go is forfeit'
                     }
                   >

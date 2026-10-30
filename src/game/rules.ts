@@ -10,6 +10,7 @@ import {
   rotateCell,
   PLAYER_ROTATION,
   NEXUS_CELLS,
+  N,
 } from './board';
 import type {
   Cell,
@@ -289,53 +290,42 @@ const DIE_KINDS: DieKind[] = ['mage', 'priest', 'warrior', 'warrior', 'warrior']
 /** How many of the five shared dice each player may spend per round. */
 export const DICE_PER_ROUND = 3;
 
-// ---- The movement allowance: the CONTINUOUS GO ------------------------------
+// ---- The go: ROOK MOVES, three units ----------------------------------------
 //
 // The shipped ruleset (`GameState.variant === 'budget'`; the dice pool lives on
 // behind the flag for the tests). A go is one UNINTERRUPTED stretch: the player
-// activates at most UNITS_PER_GO units and moves MOVE_BUDGET squares in TOTAL
-// between them — one unit six squares, or three units two each, and so on —
-// and only then does play pass. Dice are rolled for combat only.
+// activates at most UNITS_PER_GO units, and play passes on End Turn. Dice are
+// rolled for combat only.
 //
-// TWO currencies, and both matter. Squares ration MOVEMENT; the three
-// activations ration ACTION. A unit that acts without moving — a Warrior
-// swinging from where it stands, a Mage casting Nova — spends no squares but
-// still spends one of the three. That is what stops a dug-in cluster taking
-// free kills for ever: v0.11.0 briefly removed the cap and self-play showed a
-// player could take TWO coordinated kills for zero squares, and 4-player games
-// stalled out (1 in 10 hit the round cap, up from 1 in 40). Restored v0.11.1.
-//
-// The allowance does NOT bank. Whatever is left when a player ends their go is
-// LOST, so everyone starts their go with a full six squares and three units
-// however the last one went. That is what makes `endGo` — not the round — the
-// point where the allowance refills.
+// Since v0.13.0 every unit moves like a chess ROOK: any distance in one
+// straight line, up, down, left or right, until a unit blocks it. There is no
+// square allowance any more — the three activations are the only ration. A
+// unit moves once and may then act; acting (attacking, a pickup on landing,
+// resurrecting, casting) ends that unit's go. The three-unit cap still matters:
+// v0.11.0 briefly removed it and self-play showed dug-in clusters taking free
+// kills for ever.
 
-/** Default squares a player may move in total per go. */
-export const MOVE_BUDGET = 6;
+/** How far a straight-line move may go: the whole board, i.e. unlimited. */
+export const MOVE_REACH = N - 1;
 
-/** Units a player may activate per go. Rations ACTION as the squares ration
- *  movement — see the note above on why both are needed. */
+/** Units a player may activate per go. */
 export const UNITS_PER_GO = 3;
 
-/** This game's allowance — `moveBudget` overrides the default, so the pace can
- *  be tuned without touching the rules. */
+/** This game's per-move reach — `moveBudget` overrides the default. */
 export function budgetOf(state: GameState): number {
-  return state.moveBudget ?? MOVE_BUDGET;
+  return state.moveBudget ?? MOVE_REACH;
 }
-// Bolt has no die to read: it flies as far as the caster has squares left, and
-// the distance it travels comes OUT of them — move three and bolt three and the
-// go's six are gone.
+// Bolt has no die to read either: like a move, it flies in a straight line and
+// hits the first unit in that line (see boltTargets).
 
 export function isBudget(state: GameState): boolean {
   return state.variant === 'budget';
 }
 
-/** Squares `player` has left to move in their go. A player who is NOT on turn
- *  reads a full allowance: their records are wiped when they hand over, and a
- *  fresh six is exactly what they get back — which is what the bot's threat
- *  model needs to see. */
-export function movesLeft(state: GameState, player: PlayerColor): number {
-  return Math.max(0, budgetOf(state) - (state.moveSpent?.[player] ?? 0));
+/** How far `player`'s next move may reach. Rook moves are never used up, so
+ *  this is the full reach for every player at every point of the go. */
+export function movesLeft(state: GameState, _player: PlayerColor): number {
+  return budgetOf(state);
 }
 
 /** Unit ids carry their colour ('red-w1', 'red-w-res3'). */
@@ -558,8 +548,8 @@ export function moveUnit(state: GameState, unitId: string, dieId: string, dest: 
   const unit = unitById(state, unitId);
   if (!unit) return state;
 
-  // No die — the move costs exactly the squares it walks, out of the go's
-  // allowance, and opens one of the three activations.
+  // No die — a rook move of any length along one line, opening one of the
+  // three activations.
   if (isBudget(state)) {
     if (unit.owner !== state.current) return state;
     if (onSlot(state, unitId)) return state; // one activation per unit per go
@@ -567,21 +557,20 @@ export function moveUnit(state: GameState, unitId: string, dieId: string, dest: 
     const walked = moveDistance(state, unit, dest, movesLeft(state, state.current));
     if (walked === null || walked === 0) return state;
     const moved = checkVictory(
-      pruneRitual(
-        resolveRespawns({
-          ...state,
-          units: state.units.map((u) =>
-            u.id === unitId ? { ...u, prevCell: u.cell, cell: dest } : u,
-          ),
-          moveSpent: {
-            ...(state.moveSpent ?? {}),
-            [state.current]: (state.moveSpent?.[state.current] ?? 0) + walked,
-          },
-          activationDice: state.activationDice.includes(unitId)
+      autoActivate(
+        pruneRitual(
+          resolveRespawns({
+            ...state,
+            units: state.units.map((u) =>
+              u.id === unitId ? { ...u, prevCell: u.cell, cell: dest } : u,
+            ),
+            activationDice: state.activationDice.includes(unitId)
             ? state.activationDice
-            : [...state.activationDice, unitId],
-          unitsMovedThisTurn: [...state.unitsMovedThisTurn, unitId],
-        }),
+              : [...state.activationDice, unitId],
+            unitsMovedThisTurn: [...state.unitsMovedThisTurn, unitId],
+          }),
+        ),
+        unitId,
       ),
     );
     if (moved.winner) return moved;
@@ -1012,15 +1001,42 @@ export function collect(state: GameState, unitId: string): GameState {
   const gainedActivated = here.filter((s) => s.activated).length;
   const note = gainedActivated > 0 ? ` (${gainedActivated} already Activated)` : '';
   return checkVictory(
-    syncStones({
-      ...state,
-      dice,
-      activationDice,
-      stones: state.stones.map((s) => (ids.has(s.id) ? { ...s, carrier: unitId } : s)),
-      unitsActedThisTurn: markActed(state, unitId),
-      log: [...state.log, `${unit.owner}'s Mage collects ${here.length} MageStone(s)${note}.`],
-    }),
+    autoActivate(
+      syncStones({
+        ...state,
+        dice,
+        activationDice,
+        stones: state.stones.map((s) => (ids.has(s.id) ? { ...s, carrier: unitId } : s)),
+        unitsActedThisTurn: markActed(state, unitId),
+        log: [...state.log, `${unit.owner}'s Mage collects ${here.length} MageStone(s)${note}.`],
+      }),
+      unitId,
+    ),
   );
+}
+
+/**
+ * Rook rules: a Mage standing on its own base activates every stone it carries
+ * AUTOMATICALLY — no button, and it costs no action. Called after a move and
+ * after a pickup; a no-op off base, with nothing to activate, or under dice.
+ */
+function autoActivate(state: GameState, unitId: string): GameState {
+  if (!isBudget(state)) return state;
+  const unit = unitById(state, unitId);
+  if (!unit || unit.kind !== 'mage' || !onOwnBase(state, unit)) return state;
+  const fresh = carriedStones(state, unitId).filter((s) => !s.activated);
+  if (fresh.length === 0) return state;
+  const ids = new Set(fresh.map((s) => s.id));
+  return syncStones({
+    ...state,
+    stones: state.stones.map((s) => (ids.has(s.id) ? { ...s, activated: true } : s)),
+    log: [
+      ...state.log,
+      `${unit.owner}'s Mage reaches home and activates ${fresh.length} MageStone(s) (now ${
+        unit.activated + fresh.length
+      }).`,
+    ],
+  });
 }
 
 export function canActivate(state: GameState, unitId: string): boolean {
@@ -1069,8 +1085,7 @@ const chebyshev = (a: Cell, b: Cell) => Math.max(Math.abs(a.r - b.r), Math.abs(a
 /** The die value a Mage action would use (its move die, else the best free
  *  mage die) — the Bolt's RANGE. 0 when no die is available. */
 export function mageActionDieValue(state: GameState, unitId: string): number {
-  // Budget rules: a Bolt reaches as far as the squares the caster has left,
-  // and spends them (see resolveBolt).
+  // Rook rules: a Bolt flies along a straight line (see boltTargets).
   if (isBudget(state)) {
     const mage = unitById(state, unitId);
     return mage && mage.owner === state.current ? movesLeft(state, state.current) : 0;
@@ -1090,10 +1105,31 @@ export function canBolt(state: GameState, unitId: string): boolean {
   return mageActionDieValue(state, unitId) > 0;
 }
 
-/** Enemy units within Bolt range (the mage die's value, orthogonal steps). */
+/** The first unit in each straight line from `from` — what a rook-line Bolt
+ *  would hit. */
+function firstInLines(state: GameState, from: Cell): Unit[] {
+  const out: Unit[] = [];
+  for (const { dr, dc } of DIRS) {
+    for (let d = 1; ; d++) {
+      const n = { r: from.r + dr * d, c: from.c + dc * d };
+      if (!cellExists(n)) break;
+      const u = unitAt(state, n);
+      if (u) {
+        out.push(u);
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/** Enemy units a Bolt can hit. Rook rules: the first unit in any straight line
+ *  from the Mage, if it is an enemy — units in the way block the Bolt. Dice
+ *  rules: anything within the mage die's value in orthogonal steps. */
 export function boltTargets(state: GameState, unitId: string): Unit[] {
   if (!canBolt(state, unitId)) return [];
   const mage = unitById(state, unitId)!;
+  if (isBudget(state)) return firstInLines(state, mage.cell).filter((u) => u.owner !== mage.owner);
   const range = mageActionDieValue(state, unitId);
   return state.units.filter(
     (u) => u.owner !== mage.owner && manhattan(u.cell, mage.cell) <= range,
@@ -1101,7 +1137,7 @@ export function boltTargets(state: GameState, unitId: string): Unit[] {
 }
 
 /**
- * BOLT — spend 1 Activated stone to strike any enemy in range.
+ * BOLT — spend 1 Activated stone to strike an enemy in range (see boltTargets).
  *
  * Only a MAGE can block it. Against any other unit there is no defence roll at
  * all: the target is defeated immediately by its normal defeat rules. A
@@ -1126,7 +1162,7 @@ export function resolveBolt(
   const target = unitById(state, targetId);
   if (!mage || !target || !canBolt(state, mageId)) return state;
   if (target.owner === mage.owner) return state;
-  if (manhattan(target.cell, mage.cell) > mageActionDieValue(state, mageId)) return state;
+  if (!boltTargets(state, mageId).some((u) => u.id === targetId)) return state;
 
   const dice = spendActionDie(state, mageId);
   if (!dice) return state;
@@ -1137,9 +1173,6 @@ export function resolveBolt(
   const spent = carriedStones(state, mageId).filter((s) => s.activated).slice(0, BOLT_COST);
   if (spent.length < BOLT_COST) return state;
   const spentIds = new Set(spent.map((s) => s.id));
-  // Budget rules: the flight costs squares — the Bolt's distance comes out of
-  // the round's allowance, on top of anything the Mage walked first.
-  const flight = isBudget(state) ? manhattan(target.cell, mage.cell) : 0;
 
   // Only a Mage may try to block: its power die against the caster's.
   let combat: CombatResult | null = null;
@@ -1185,9 +1218,6 @@ export function resolveBolt(
         ...state,
         dice,
         activationDice,
-        moveSpent: flight
-          ? { ...(state.moveSpent ?? {}), [state.current]: (state.moveSpent?.[state.current] ?? 0) + flight }
-          : state.moveSpent,
         unitsActedThisTurn: markActed(state, mageId),
         // Only a Mage-on-Mage Bolt throws dice; the physical dice layer keys
         // off `lastCombat`, so an unopposed Bolt leaves it null.
@@ -1635,11 +1665,10 @@ function claimRitual(state: GameState): GameState {
 /**
  * End the current player's GO and hand over.
  *
- * A go is CONTINUOUS — the player activates up to UNITS_PER_GO units for at
- * most MOVE_BUDGET squares in total, all in one uninterrupted stretch — so
- * ending it IS the handover. Play then passes to the next player in order, who picks
- * it up with a FULL allowance: whatever the outgoing player had left over is
- * lost, never banked.
+ * A go is CONTINUOUS — the player activates up to UNITS_PER_GO units, all in
+ * one uninterrupted stretch — so ending it IS the handover. Play then passes to
+ * the next player in order, who picks it up with three fresh units: unused
+ * activations are lost, never banked.
  *
  * Because the allowance refills on every handover rather than on a round
  * boundary, `newRound` has no part in this. The round number still ticks over

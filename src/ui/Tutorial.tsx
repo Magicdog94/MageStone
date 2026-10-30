@@ -220,8 +220,8 @@ const SECTIONS: Section[] = [
         <ol className="htp-win">
           <li>
             <span className="htp-win-title">MageStone Victory</span>
-            Return your Mage to your own base holding 6 Activated MageStones — the moment it steps
-            onto your base with six, you win instantly. Picking up a sixth already-Activated stone
+            Return your Mage to your own base with 6 MageStones — stones activate by themselves the
+            moment it steps onto your base, and six Activated stones there win instantly. Picking up a sixth already-Activated stone
             out on the board is <em>not</em> enough on its own: you still have to get home.
           </li>
           <li>
@@ -303,46 +303,40 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p className="htp-p">
-          On your go you have <span className="htp-em">six squares of movement</span> to spend across{' '}
-          <span className="htp-em">at most three units</span>, and you take the whole go{' '}
-          <span className="htp-em">in one continuous stretch</span> before play passes.
+          On your go you may use <span className="htp-em">at most three units</span>, and you take
+          the whole go <span className="htp-em">in one continuous stretch</span> before play passes.
+          Every unit moves like a chess <span className="htp-em">rook</span>.
         </p>
         <ol className="htp-ol">
-          <li>
-            Divide your six squares however you like: one unit marching all{' '}
-            <span className="htp-em">6</span>, two units on 3 and 3, three units on 2 each — or a
-            Warrior 1, another 2 and a third 3.
-          </li>
           <li>
             For each unit you use:
             <ul className="htp-list htp-list--sub">
               <li>Choose one of your units — any kind.</li>
-              <li>Move it as far as your remaining squares allow — in one straight line, up, down, left or right, through empty squares. No diagonals and no turning. Whatever it walks comes off your six.</li>
+              <li>Move it any distance in one straight line — up, down, left or right, through empty squares. No diagonals and no turning. Units block the line; MageStones and gravestones do not.</li>
               <li>
-                Immediately resolve that unit’s action: attack (Warrior: Single, Double, Triple;
-                Mage), collect or activate a MageStone, resurrect a Warrior, or start a Nexus
-                Ritual.
+                Then, if you like, resolve that unit’s action: attack (Warrior: Single, Double,
+                Triple; Mage), collect a MageStone, resurrect a Warrior, cast, or start a Nexus
+                Ritual. <span className="htp-em">Acting ends that unit’s go</span> — it cannot move
+                afterwards.
               </li>
               <li>Then carry straight on with your next unit — up to three in all.</li>
             </ul>
           </li>
           <li>
             <span className="htp-em">A unit goes once per turn</span> — it moves and then acts,
-            or simply acts where it stands. Acting costs no squares, but it is still one of your{' '}
+            or simply acts where it stands. Either way it is one of your{' '}
             <span className="htp-em">three units</span>.
           </li>
           <li>
             <span className="htp-em">Use it or lose it.</span> Press End Turn when you are done;
-            any squares still in hand are forfeit and never carry over. Play then passes — you,
-            your opponent, you — and your next go opens on a full six squares and three fresh
-            units, however this one went.
+            unused units never carry over. Play then passes — you, your opponent, you — and your
+            next go opens on three fresh units, however this one went.
           </li>
         </ol>
         <h4 className="htp-sub">Ganging up</h4>
         <p className="htp-p">
           Two or three Warriors standing beside the same enemy can attack together for 2d6 or 3d6.
-          Each Warrior joining in uses one of your three units for the go, but the attack itself
-          costs no squares — only walking them into place does.
+          Each Warrior joining in uses one of your three units for the go.
         </p>
         <div className="htp-note">
           <strong>Important:</strong> dice are rolled for <span className="htp-em">fights only</span>{' '}
@@ -447,9 +441,10 @@ const SECTIONS: Section[] = [
         <p className="htp-p">
           Your Mage collects a stone by landing on it. A stone taken from the board starts{' '}
           <span className="htp-em">Unactivated</span> (carried, silver): it adds no combat power and
-          counts for nothing. Carry it back to your own base and{' '}
-          <span className="htp-em">Activate</span> it (gold) — Activated stones drive the Mage’s
-          power die and count toward MageStone Victory.
+          counts for nothing. Carry it back to your own base and it{' '}
+          <span className="htp-em">activates automatically</span> (gold) — no button, and it
+          costs no action. Activated stones drive the Mage’s power die and count toward
+          MageStone Victory.
         </p>
         <h4 className="htp-sub">Activation is permanent</h4>
         <p className="htp-p">
@@ -478,10 +473,9 @@ const SECTIONS: Section[] = [
         <h4 className="htp-sub htp-sub--m">Bolt — 1 Activated stone</h4>
         <ul className="htp-list">
           <li>
-            A ranged strike on any enemy within range — the Bolt reaches as many squares as you
-            have left this go (counted orthogonally), and its flight{' '}
-            <span className="htp-em">spends</span> them: a target three squares away costs three.
-            Casting it is the Mage’s action.
+            A ranged strike that flies like a rook: any distance in a straight line, up, down,
+            left or right. It hits the <span className="htp-em">first unit</span> in that line, so
+            any unit in the way blocks it. Casting it is the Mage’s action.
           </li>
           <li>
             <span className="htp-em">Only a Mage can block a Bolt.</span> Anything else gets no
@@ -509,9 +503,7 @@ const SECTIONS: Section[] = [
             The 4 spent stones are placed on the four <span className="htp-em">diagonal</span>{' '}
             squares around the Mage, all still Activated — and claimable by your opponents too.
           </li>
-          <li>
-            Nova spends no squares: it costs the Mage’s action and the four stones, nothing more.
-          </li>
+          <li>Nova costs the Mage’s action and the four stones, nothing more.</li>
         </ul>
       </>
     ),
@@ -586,12 +578,12 @@ const SECTIONS: Section[] = [
     icon: 'scroll',
     body: (
       <ol className="htp-ol">
-        <li>On your go you have 6 squares of movement, across at most 3 units.</li>
-        <li>Spend them in one stretch: pick a unit → move it → resolve its action → next unit.</li>
-        <li>A unit goes once a turn; acting without moving costs no squares but still uses one of your three.</li>
+        <li>On your go you use at most 3 units, each moving like a rook: any distance in one straight line.</li>
+        <li>Take them in one stretch: pick a unit → move it → resolve its action → next unit.</li>
+        <li>A unit goes once a turn, and acting ends its go.</li>
         <li>Two or three Warriors beside the same enemy can attack together (2d6 / 3d6).</li>
-        <li>Fight, collect stones, activate stones, resurrect Warriors, or attempt the Nexus Ritual.</li>
-        <li>End your turn when you are done — leftover squares are lost, and play alternates.</li>
+        <li>Fight, collect stones (they activate on your base), resurrect Warriors, or attempt the Nexus Ritual.</li>
+        <li>End your turn when you are done — unused units are lost, and play alternates.</li>
         <li>Win by MageStone Victory, Priest Ritual Victory, or Conquest Victory.</li>
       </ol>
     ),

@@ -147,8 +147,8 @@ describe('Tutorial sweep — no allowed move can strand the player', () => {
     const moves = gestures(start, MOVE_RESTRICT);
     expect(moves.length).toBeGreaterThan(0);
     expect(moves.every((m) => m.unitsMovedThisTurn.length >= 1)).toBe(true);
-    // and every one of them costs squares out of the round's allowance
-    expect(moves.every((m) => movesLeft(m, 'red') < movesLeft(start, 'red'))).toBe(true);
+    // and every one of them uses up one of the go's three units
+    expect(moves.every((m) => slotsLeft(m, 'red') === slotsLeft(start, 'red') - 1)).toBe(true);
   });
 
   it('ritual: the Rite the player declares is carried through its full-round hold to a win', () => {

@@ -32,7 +32,7 @@ function guard() {
 }
 
 /** Total coached steps (one per note or task below). */
-const TOTAL_STEPS = 10;
+const TOTAL_STEPS = 12;
 let stepNo = 0;
 /** Stamp "step n of m" onto a callout (shown as the box's progress counter). */
 function stamp(c: Callout): Callout {
@@ -151,7 +151,7 @@ function beat(next: (st: GameState) => GameState): void {
   });
 }
 
-/** Move `unitId` as far toward `target` as the go's squares allow. */
+/** Move `unitId` as close to `target` as one straight-line move allows. */
 function stepToward(unitId: string, target: Cell): boolean {
   const st = g().game;
   const u = unitById(st, unitId);
@@ -177,9 +177,10 @@ function scriptMove(unitId: string, dest: Cell): void {
 }
 
 /**
- * The guided game — HANDS-ON and short: ten steps. The player moves, fights,
- * resurrects, collects, activates, casts Bolt and wins by MageStone and by
- * Ritual; Conquest and the deeper rules are left to the Rule Book.
+ * The guided game — HANDS-ON and short: twelve steps. The player moves, fights,
+ * resurrects, collects, carries a stone home, casts Bolt and Nova and wins by
+ * MageStone and by Ritual; Conquest and the deeper rules are left to the Rule
+ * Book.
  */
 export async function runTutorial(onDone: () => void) {
   const myEpoch = ++epoch; // cancels any still-unwinding previous run
@@ -196,7 +197,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'welcome',
       title: 'Welcome to MageStone',
-      body: 'You are Red. Each go you get 6 squares of movement, shared by up to 3 units. Press End Turn when done — unused squares are lost.',
+      body: 'You are Red. Each go you can use up to 3 units, then press End Turn.',
       anchor: '.budget-tray',
       placement: 'bottom',
     });
@@ -206,8 +207,8 @@ export async function runTutorial(onDone: () => void) {
       null,
       {
         id: 'task-move',
-        title: 'Move a unit',
-        body: 'Click a unit, then a glowing square. Units move in a straight line: up, down, left or right. Units block the way; stones and gravestones don’t.',
+        title: 'Move like a rook',
+        body: 'Units move any distance up, down, left or right, in one straight line. Units block the way. Click a unit, then a glowing square.',
         placement: 'bottom',
       },
       () => g().game.unitsMovedThisTurn.length >= 1,
@@ -230,7 +231,7 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-attack',
         title: 'Attack',
-        body: 'Each Warrior next to an enemy adds a die. Click one of your three Warriors beside Blue, then press TRIPLE ATTACK.',
+        body: 'Each Warrior beside an enemy adds a die. Click one of your three Warriors next to Blue, then press TRIPLE ATTACK.',
         placement: 'bottom',
       },
       () => TASKS.attack.done(g().game),
@@ -245,9 +246,27 @@ export async function runTutorial(onDone: () => void) {
       { timeoutMs: 120000, restrict: TASKS.attack.restrict },
     );
     await until(() => g().combatRoll !== null, 6000);
-    await wait(2200); // let the dice result read before the board changes
+    await wait(400);
 
-    // 4 ---- YOU resurrect -----------------------------------------------------
+    // 4 ---- the result --------------------------------------------------------
+    {
+      // The 3D dice report the roll; if they ever don't (scene fallback), the
+      // ENGINE's result is authoritative — never narrate "rolled 0 against 0".
+      const roll = g().combatRoll;
+      const lc = g().game.lastCombat;
+      const a = roll?.attackRoll ?? lc?.attackRoll ?? 15;
+      const d = roll?.defenseRoll ?? lc?.defenseRoll ?? 2;
+      const won = !unitById(g().game, 'blue-w1');
+      await note({
+        id: 'fight-result',
+        title: won ? 'Down he goes' : 'Unlucky!',
+        body: `${a} against ${d}. Higher roll wins and ties re-roll. Attacking ends a unit’s go.`,
+        anchor: '.combat-announce',
+        placement: 'bottom',
+      });
+    }
+
+    // 5 ---- YOU resurrect -----------------------------------------------------
     const stageRes = () => stage(TASKS.resurrect.build);
     stageRes();
     await wait(700);
@@ -256,7 +275,7 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-resurrect',
         title: 'Resurrect',
-        body: 'A fallen Warrior leaves a gravestone. Click your Priest and move it onto the gravestone to bring the Warrior back.',
+        body: 'A fallen Warrior leaves a gravestone. Move your Priest onto it to bring the Warrior back.',
         placement: 'bottom',
       },
       () => TASKS.resurrect.done(g().game),
@@ -272,7 +291,7 @@ export async function runTutorial(onDone: () => void) {
     );
     await wait(1200);
 
-    // 5 ---- YOU collect -------------------------------------------------------
+    // 6 ---- YOU collect -------------------------------------------------------
     const stageCollect = () => stage(TASKS.collect.build);
     stageCollect();
     await wait(700);
@@ -281,7 +300,7 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-collect',
         title: 'Collect a MageStone',
-        body: 'Only your Mage can carry stones. Click it and step onto the stone to pick it up.',
+        body: 'Only your Mage carries stones. Move it onto the stone to pick it up.',
         placement: 'bottom',
       },
       () => TASKS.collect.done(g().game),
@@ -297,29 +316,25 @@ export async function runTutorial(onDone: () => void) {
     );
     await wait(900);
 
-    // 6 ---- YOU activate ------------------------------------------------------
-    const stageActivate = () => stage(TASKS.activate.build);
-    stageActivate();
+    // 7 ---- YOU carry it home -------------------------------------------------
+    const stageHome = () => stage(TASKS.home.build);
+    stageHome();
     await wait(700);
     await playerTask(
-      stageActivate,
+      stageHome,
       {
-        id: 'task-activate',
-        title: 'Activate it',
-        body: 'Stones only count once activated on your base, and they power up your Mage. Click your Mage, then press ACTIVATE.',
+        id: 'task-home',
+        title: 'Take it home',
+        body: 'Stones count once your Mage brings them to your base. Move your Mage home and they activate by themselves.',
         placement: 'bottom',
       },
-      () => TASKS.activate.done(g().game),
-      () =>
-        S(() => {
-          g().selectUnit('red-m');
-          g().activateStones();
-        }),
-      { restrict: TASKS.activate.restrict },
+      () => TASKS.home.done(g().game),
+      () => scriptMove('red-m', { r: 0, c: 8 }),
+      { restrict: TASKS.home.restrict },
     );
     await wait(1200);
 
-    // 7 ---- YOU cast Bolt -----------------------------------------------------
+    // 8 ---- YOU cast Bolt -----------------------------------------------------
     const stageBolt = () => stage(TASKS.bolt.build);
     stageBolt();
     await wait(700);
@@ -328,7 +343,7 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-bolt',
         title: 'Cast Bolt',
-        body: 'Spend one activated stone to kill at range. Click your Mage, press BOLT, then click the Blue Warrior.',
+        body: 'Spend 1 activated stone to hit the first unit in a straight line. Click your Mage, press BOLT, then click the Blue Warrior.',
         placement: 'bottom',
       },
       () => TASKS.bolt.done(g().game),
@@ -341,7 +356,32 @@ export async function runTutorial(onDone: () => void) {
     );
     await wait(1500);
 
-    // 8 ---- YOU win: MageStone ------------------------------------------------
+    // 9 ---- YOU cast Nova -----------------------------------------------------
+    const stageNova = () => stage(TASKS.nova.build);
+    stageNova();
+    await wait(700);
+    await playerTask(
+      stageNova,
+      {
+        id: 'task-nova',
+        title: 'Cast Nova',
+        body: 'Spend 4 stones to destroy every enemy around your Mage, diagonals too. Click your Mage, then press NOVA.',
+        placement: 'bottom',
+      },
+      () => TASKS.nova.done(g().game),
+      () => {
+        const novaRig = [0.15, 0.5, 0.85];
+        let ni = 0;
+        S(() => {
+          g().selectUnit('red-m');
+          g().castNova(() => novaRig[Math.min(ni++, novaRig.length - 1)]);
+        });
+      },
+      { restrict: TASKS.nova.restrict },
+    );
+    await wait(1800);
+
+    // 10 ---- YOU win: MageStone -----------------------------------------------
     const stageWin1 = () => stage(TASKS.win1.build);
     stageWin1();
     await wait(700);
@@ -350,23 +390,16 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-win1',
         title: 'Win with MageStones',
-        body: 'Six activated stones on your base wins. Your Mage carries six: step onto your base, then press ACTIVATE.',
+        body: 'Six activated stones on your base wins. Your Mage carries six: move it home.',
         placement: 'bottom',
       },
       () => TASKS.win1.done(g().game),
-      async () => {
-        scriptMove('red-m', { r: 0, c: 8 });
-        await wait(700);
-        S(() => {
-          g().selectUnit('red-m');
-          g().activateStones();
-        });
-      },
+      () => scriptMove('red-m', { r: 0, c: 8 }),
       { timeoutMs: 120000, restrict: TASKS.win1.restrict },
     );
     await wait(2500); // let the victory land
 
-    // 9 ---- YOU win: Ritual ---------------------------------------------------
+    // 11 ---- YOU win: Ritual --------------------------------------------------
     const stageWin2 = () => stage(TASKS.win2.build);
     stageWin2();
     await wait(700);
@@ -375,7 +408,7 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-win2',
         title: 'Win with a Ritual',
-        body: 'Move your Priest into the glowing Nexus and press BEGIN RITUAL. If Blue can’t reach it or kill the Priest in two goes, you win.',
+        body: 'Move your Priest into the glowing Nexus and press BEGIN RITUAL. If Blue can’t break it in two goes, you win.',
         placement: 'bottom',
       },
       () => TASKS.win2.done(g().game),
@@ -397,7 +430,7 @@ export async function runTutorial(onDone: () => void) {
       await wait(650);
     }
 
-    // 10 ---- Conquest + wrap up ----------------------------------------------
+    // 12 ---- Conquest + wrap up ----------------------------------------------
     await note({
       id: 'wrap',
       title: 'One more way to win',

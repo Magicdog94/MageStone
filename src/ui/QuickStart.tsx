@@ -8,7 +8,7 @@ import { QUICK_START_KEY, alphaWelcomeSeen, markSeen, quickStartSeen } from './o
 /**
  * The four things a new player needs, at most 40 words each. Written from a
  * playtester's notes: they skipped the tutorial, sandboxed for ten minutes,
- * guessed the goal was wiping out the other side, and never found the squares
+ * guessed the goal was wiping out the other side, and never found the moves
  * readout — so the MageStone race leads, and the allowance comes straight after.
  */
 const CARDS: { title: string; icon: ReactNode; body: string }[] = [
@@ -16,17 +16,17 @@ const CARDS: { title: string; icon: ReactNode; body: string }[] = [
     title: 'Win the MageStone race',
     icon: <StoneIcon size={30} />,
     body:
-      'Walk your Mage onto a MageStone to pick it up, then carry it home to your base and ' +
-      'Activate it. Bring six Activated stones home to win. Holding the centre with your ' +
+      'Move your Mage onto a MageStone to pick it up, then carry it home to your base, where ' +
+      'it activates by itself. Six Activated stones on your base wins. Holding the centre with your ' +
       'Priest, or wiping out your rival, also wins.',
   },
   {
-    title: 'Six squares a turn',
-    icon: <span className="qs-glyph">6</span>,
+    title: 'Three pieces a turn',
+    icon: <span className="qs-glyph">3</span>,
     body:
-      'On your go you have 6 squares to share between up to 3 pieces — one piece six ' +
-      'squares, or three pieces two each. Unused squares are lost when you press End Turn. ' +
-      'The top banner shows whose go it is.',
+      'On your go you move up to 3 pieces. Each moves like a chess rook: any distance up, ' +
+      'down, left or right, in one straight line. Other pieces block the way. Acting ends ' +
+      'that piece’s go.',
   },
   {
     title: 'Every piece is different',

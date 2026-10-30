@@ -9,7 +9,7 @@
 import { createGame } from '../../game/setup';
 import { NEXUS_CELLS } from '../../game/board';
 import { endActivation, syncStones, unitById, warriorCount } from '../../game/rules';
-import type { GameState, Unit } from '../../game/types';
+import type { Cell, GameState, Unit } from '../../game/types';
 import type { TutRestrict } from './restrict';
 
 /** Hand `unitId` real MageStone tokens for a staged lesson. Activation lives on
@@ -52,6 +52,9 @@ export interface TaskSpec {
  *  actions and no passing. */
 export const MOVE_RESTRICT: TutRestrict = { actions: [] };
 
+/** Red's home base row. */
+const RED_BASE: Cell[] = Array.from({ length: 8 }, (_, i) => ({ r: 0, c: 4 + i }));
+
 export const TASKS = {
   attack: {
     build: (st) => {
@@ -93,13 +96,13 @@ export const TASKS = {
     done: (st) => (unitById(st, 'red-m')?.carried ?? 0) > 0,
   },
 
-  activate: {
+  home: {
     build: (st) => {
-      at(st, 'red-m').cell = { r: 0, c: 8 }; // standing on its own base
+      at(st, 'red-m').cell = { r: 6, c: 8 }; // a straight run from its base
       giveStones(st, 'red-m', 1, 0);
     },
-    // The Mage stays home: no movement, just Activate.
-    restrict: { units: ['red-m'], dests: [], actions: ['activate'] },
+    // Only the Mage, only onto its base — the stone activates on arrival.
+    restrict: { units: ['red-m'], dests: RED_BASE, actions: [] },
     done: (st) => (unitById(st, 'red-m')?.activated ?? 0) > 0,
   },
 
@@ -114,18 +117,28 @@ export const TASKS = {
     done: (st) => !unitById(st, 'blue-w1'),
   },
 
+  nova: {
+    build: (st) => {
+      at(st, 'red-m').cell = { r: 5, c: 5 };
+      giveStones(st, 'red-m', 0, 4);
+      at(st, 'blue-w1').cell = { r: 4, c: 5 };
+      at(st, 'blue-w2').cell = { r: 6, c: 6 }; // diagonal!
+      at(st, 'blue-w3').cell = { r: 5, c: 6 };
+      at(st, 'red-w1').cell = { r: 5, c: 4 }; // friendly — unharmed
+    },
+    // Only the Mage, standing its ground, only Nova.
+    restrict: { units: ['red-m'], dests: [], actions: ['nova'] },
+    done: (st) => !unitById(st, 'blue-w2'),
+  },
+
   win1: {
     build: (st) => {
-      at(st, 'red-m').cell = { r: 1, c: 8 };
+      at(st, 'red-m').cell = { r: 5, c: 8 };
       giveStones(st, 'red-m', 6, 0);
     },
-    // Only the Mage, only home-base squares, only Activate. (Occupied base
-    // squares never glow — legalMoves filters them before this list does.)
-    restrict: {
-      units: ['red-m'],
-      dests: Array.from({ length: 8 }, (_, i) => ({ r: 0, c: 4 + i })),
-      actions: ['activate'],
-    },
+    // Only the Mage, only home-base squares; the six activate on arrival and
+    // win. (Occupied base squares never glow — legalMoves filters them first.)
+    restrict: { units: ['red-m'], dests: RED_BASE, actions: [] },
     done: (st) => st.winner === 'red',
   },
 

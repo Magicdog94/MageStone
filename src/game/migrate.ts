@@ -25,7 +25,7 @@ export function isCurrentStateShape(s: unknown): s is GameState {
   // The finite Gravestone bank must be present — a derived-bank state predates it.
   if (typeof g.graveBank !== 'number') return false;
   if (!Array.isArray(g.resurrectedThisTurn)) return false;
-  // The game now runs on the movement allowance (6 squares across 3 units).
+  // The game now runs on the budget variant (3 units a go, no dice to move).
   // A save from the dice era has no record of it and cannot be converted.
   if (g.variant !== 'budget' || typeof g.moveSpent !== 'object' || g.moveSpent === null) return false;
   // Dice are one SHARED pool of five now, and `usedBy` is a per-player map.

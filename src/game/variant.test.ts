@@ -1,14 +1,14 @@
 // The shipped rules (GameState.variant === 'budget'): a go is one CONTINUOUS
-// stretch in which a player activates at most three units, each moving like a
-// chess rook — any distance in one straight line — and dice are rolled for
-// combat only. A Mage on its own base activates its stones automatically.
+// stretch in which a player activates at most three units and moves eight
+// squares in total between them, each move one straight line, and dice are
+// rolled for combat only. Unused squares are lost at End Turn. A Mage on its own base activates its stones automatically.
 // These tests also pin that the dice variant — kept behind the flag — is
 // untouched.
 
 import { describe, expect, it } from 'vitest';
 import { createGame } from './setup';
 import {
-  MOVE_REACH,
+  MOVE_BUDGET,
   NOVA_COST,
   beginRitual,
   boltTargets,
@@ -60,24 +60,33 @@ describe('Movement-budget variant', () => {
     expect(isBudget(g)).toBe(true);
     expect(g.dice).toEqual([]);
     expect(g.turnPhase).toBe('act');
-    expect(movesLeft(g, 'red')).toBe(MOVE_REACH);
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET);
   });
 
-  it('moves like a rook: any distance in one line, and nothing is used up', () => {
+  it('spends exactly the squares walked, and refuses a move it cannot pay for', () => {
     let g = place(budgetGame(), 'red-w1', { r: 5, c: 5 });
-    g = moveUnit(g, 'red-w1', '', { r: 9, c: 5 }); // four squares
-    expect(cellOf(g, 'red-w1')).toEqual({ r: 9, c: 5 });
-    expect(movesLeft(g, 'red')).toBe(MOVE_REACH);
-    // a second unit can still go a long way, straight through the Nexus
+    g = moveUnit(g, 'red-w1', '', { r: 10, c: 5 }); // five squares
+    expect(cellOf(g, 'red-w1')).toEqual({ r: 10, c: 5 });
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET - 5);
+    // a four-square move with three left is refused outright
     g = place(g, 'red-w2', { r: 5, c: 7 });
-    g = moveUnit(g, 'red-w2', '', { r: 11, c: 7 });
-    expect(cellOf(g, 'red-w2')).toEqual({ r: 11, c: 7 });
-    // but no turning, and a unit in the line blocks it
-    g = place(g, 'red-w3', { r: 5, c: 9 });
+    expect(moveUnit(g, 'red-w2', '', { r: 9, c: 7 })).toBe(g);
+    // …but three squares is fine, and empties the allowance
+    g = moveUnit(g, 'red-w2', '', { r: 8, c: 7 });
+    expect(movesLeft(g, 'red')).toBe(0);
+  });
+
+  it('moves in one straight line only, blocked by units', () => {
+    let g = place(budgetGame(), 'red-w3', { r: 5, c: 9 });
     g = place(g, 'blue-w1', { r: 7, c: 9 });
-    expect(moveUnit(g, 'red-w3', '', { r: 9, c: 9 })).toBe(g);
-    expect(moveUnit(g, 'red-w3', '', { r: 6, c: 10 })).toBe(g);
-    expect(legalMoves(g, unitById(g, 'red-w3')!, MOVE_REACH)).toContainEqual({ r: 6, c: 9 });
+    expect(moveUnit(g, 'red-w3', '', { r: 9, c: 9 })).toBe(g); // through a unit
+    expect(moveUnit(g, 'red-w3', '', { r: 6, c: 10 })).toBe(g); // diagonal
+    expect(legalMoves(g, unitById(g, 'red-w3')!, MOVE_BUDGET)).toContainEqual({ r: 6, c: 9 });
+    // a single unit may walk the whole eight
+    g = place(g, 'red-w4', { r: 4, c: 4 });
+    g = moveUnit(g, 'red-w4', '', { r: 12, c: 4 });
+    expect(cellOf(g, 'red-w4')).toEqual({ r: 12, c: 4 });
+    expect(movesLeft(g, 'red')).toBe(0);
   });
 
   // ---- landing on something picks it up (v0.11) --------------------------
@@ -92,7 +101,7 @@ describe('Movement-budget variant', () => {
     // Picked up with no second click…
     expect(carriedStones(g, 'red-m')).toHaveLength(1);
     expect(unitById(g, 'red-m')!.carried).toBe(1);
-    expect(movesLeft(g, 'red')).toBe(MOVE_REACH); // the walk, nothing more
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET - 2); // the walk, nothing more
     // …and the pickup WAS the Mage's action, so it cannot also attack.
     expect(g.unitsActedThisTurn).toContain('red-m');
     expect(canAct(g, 'red-m')).toBe(false);
@@ -125,7 +134,7 @@ describe('Movement-budget variant', () => {
     // …the token has left the game, and this was the Priest's action.
     expect(g.gravestones).toHaveLength(0);
     expect(canAct(g, 'red-p')).toBe(false);
-    expect(movesLeft(g, 'red')).toBe(MOVE_REACH); // the step back is free
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET - 2); // the step back is free
   });
 
   it('does not auto-raise when the player has already resurrected this go', () => {
@@ -162,7 +171,7 @@ describe('Movement-budget variant', () => {
     // Acting from where it stands: no squares spent, one slot gone.
     g = { ...g, unitsActedThisTurn: ['red-m'], unitsMovedThisTurn: [] };
     expect(slotsLeft(g, 'red')).toBe(2);
-    expect(movesLeft(g, 'red')).toBe(MOVE_REACH);
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET);
   });
 
   it('rations the FREE kills: no fourth attacker once the slots are gone', () => {
@@ -187,10 +196,10 @@ describe('Movement-budget variant', () => {
     expect(canAct(g, 'red-w4')).toBe(false);
     expect(attackTargets(g, 'red-w4')).toEqual([]);
     expect(resolveAttack(g, ['red-w4'], 'blue-w2', () => 0.99)).toBe(g);
-    expect(movesLeft(g, 'red')).toBe(MOVE_REACH); // and no squares were spent
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET); // and no squares were spent
   });
 
-  it('flies a Bolt along a straight line, any distance, at the first unit in it', () => {
+  it('flies a Bolt along a straight line at the first unit in it — and spends the squares', () => {
     let g = place(budgetGame(), 'red-m', { r: 8, c: 5 });
     g = place(g, 'blue-w1', { r: 8, c: 12 }); // seven squares away, in line
     g = place(g, 'blue-w2', { r: 9, c: 6 }); // diagonal — never in a line
@@ -200,7 +209,18 @@ describe('Movement-budget variant', () => {
     expect(ids).not.toContain('blue-w2');
     g = resolveBolt(g, 'red-m', 'blue-w1');
     expect(unitById(g, 'blue-w1')).toBeUndefined();
-    expect(movesLeft(g, 'red')).toBe(MOVE_REACH); // nothing is spent but the stone
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET - 7); // the flight cost seven
+  });
+
+  it('puts a Bolt out of reach once the squares are gone', () => {
+    let g = place(budgetGame(), 'red-m', { r: 4, c: 8 });
+    g = place(g, 'blue-w1', { r: 12, c: 8 });
+    g = stones(g, 'red-m', 2);
+    g = moveUnit(g, 'red-m', '', { r: 8, c: 8 }); // four walked, four left
+    expect(boltTargets(g, 'red-m').map((u) => u.id)).toContain('blue-w1'); // four away
+    g = place(g, 'blue-w1', { r: 13, c: 8 }); // now five away
+    expect(boltTargets(g, 'red-m').map((u) => u.id)).not.toContain('blue-w1');
+    expect(resolveBolt(g, 'red-m', 'blue-w1')).toBe(g);
   });
 
   it('stops a Bolt at the first unit in the way', () => {
@@ -244,24 +264,25 @@ describe('Movement-budget variant', () => {
     g = place(g, 'red-w2', { r: 5, c: 7 });
     g = moveUnit(g, 'red-w1', '', { r: 7, c: 5 }); // two squares
     expect(g.current).toBe('red'); // still Red's go
-    expect(movesLeft(g, 'red')).toBe(MOVE_REACH);
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET - 2);
     g = moveUnit(g, 'red-w2', '', { r: 7, c: 7 }); // two more, same go
     expect(g.current).toBe('red');
-    expect(movesLeft(g, 'red')).toBe(MOVE_REACH);
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET - 4);
     expect(unitsActivated(g, 'red')).toBe(2);
     g = endActivation(g); // only THIS hands over
     expect(g.current).toBe('blue');
   });
 
-  it('loses unused units — every go opens on three fresh ones', () => {
+  it('loses whatever is unused — every go opens on a full allowance', () => {
     let g = place(budgetGame(), 'red-w1', { r: 5, c: 5 });
-    g = moveUnit(g, 'red-w1', '', { r: 6, c: 5 });
-    expect(movesLeft(g, 'red')).toBe(MOVE_REACH);
-    g = endActivation(g); // the other two units are thrown away, not banked
+    g = moveUnit(g, 'red-w1', '', { r: 6, c: 5 }); // one square of the eight
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET - 1);
+    g = endActivation(g); // the other seven are thrown away, not banked
     expect(g.current).toBe('blue');
-    expect(movesLeft(g, 'blue')).toBe(MOVE_REACH);
+    expect(movesLeft(g, 'blue')).toBe(MOVE_BUDGET);
     g = endActivation(g); // Blue does nothing at all
     expect(g.current).toBe('red');
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET); // a full eight again, not seven
     expect(unitsActivated(g, 'red')).toBe(0);
     expect(g.unitsMovedThisTurn).toEqual([]); // and red-w1 may march again
   });
@@ -315,7 +336,7 @@ describe('Movement-budget variant', () => {
     expect(g.ritual).not.toBeNull();
     g = endActivation(g);
     expect(g.current).toBe('blue');
-    expect(movesLeft(g, 'blue')).toBe(MOVE_REACH);
+    expect(movesLeft(g, 'blue')).toBe(MOVE_BUDGET);
     // Blue spends a unit on something else FIRST and still gets to the Nexus —
     // under a one-unit activation that first move would have handed Red the win.
     g = moveUnit(g, 'blue-w2', '', { r: 6, c: 6 }); // two squares
@@ -360,7 +381,7 @@ describe('Movement-budget variant', () => {
     // recover — the next go is a clean six.
     expect(g.current).toBe('red');
     expect(g.turn).toBe(2);
-    expect(movesLeft(g, 'red')).toBe(MOVE_REACH);
+    expect(movesLeft(g, 'red')).toBe(MOVE_BUDGET);
     expect(unitsActivated(g, 'red')).toBe(0);
     expect(g.passed).toEqual([]);
   });

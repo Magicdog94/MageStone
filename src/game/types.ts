@@ -172,14 +172,13 @@ export interface GameState {
   resurrectedThisTurn: PlayerColor[];
   /** Rules VARIANT. Absent or 'dice' is the shipped game: five shared dice,
    *  three spent each per round. 'budget' is the movement-allowance test —
-   *  each go a player activates at most three units, each moving like a rook,
-   *  and dice are rolled for combat only. */
+   *  each go a player activates at most three units and moves eight squares
+   *  in total between them, and dice are rolled for combat only. */
   variant?: 'dice' | 'budget';
-  /** Legacy: squares moved this go under the old six-square allowance. Rook
-   *  moves (v0.13.0) no longer spend squares, so this stays empty. */
+  /** Squares each player has already moved this go (budget variant only). */
   moveSpent?: Partial<Record<PlayerColor, number>>;
-  /** Max length of one straight-line move in the budget variant (default
-   *  MOVE_REACH, the whole board). */
+  /** Squares a player may move per go in the budget variant (default
+   *  MOVE_BUDGET) — the dial that sets the game's pace. */
   moveBudget?: number;
   /** Overrides how many times play must RETURN to the ritualist before a Rite
    *  pays out. Normally UNSET, and `ritualHoldOf` then derives it from the

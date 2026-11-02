@@ -48,6 +48,7 @@ import {
   gravestoneCapacity,
   isBudget,
   legalMoves,
+  moveDistance,
   movesLeft,
   magePowerDie,
   moveUnit,
@@ -401,7 +402,8 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
 
     // ---- moves (a die of the unit's kind must be free, unit not yet used) ----
     if (state.unitsMovedThisTurn.includes(u.id) || state.unitsActedThisTurn.includes(u.id)) continue;
-    // BUDGET variant: no dice — one "virtual die" carries the rook reach.
+    // BUDGET variant: no dice — one "virtual die" carries how far this unit may
+    // still walk out of the go's shared allowance.
     const onBudget = isBudget(state);
     const reach = onBudget ? movesLeft(state, me) : 0;
     if (onBudget && (reach <= 0 || slotsLeft(state, me) <= 0)) continue;
@@ -523,8 +525,10 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
         if (score > 0)
           cands.push({
             a: { type: 'move', unitId: u.id, dieId: die.id, dest },
-            // Dice: what the die burnt was worth. Rook moves cost nothing.
-            score: onBudget ? score : score - dieWorth(die) * 0.5,
+            // Dice: what the die burnt was worth. Budget: the squares it costs.
+            score: onBudget
+              ? score - (moveDistance(state, u, dest, reach) ?? 0) * 1.2
+              : score - dieWorth(die) * 0.5,
           });
       }
     }
@@ -731,7 +735,7 @@ function routeDist(occ: Uint8Array, from: Cell, max: number): Uint8Array {
   return dist;
 }
 
-/** Could a rook-line Bolt from `from` hit `to`: same row or column, with
+/** Could a straight-line Bolt from `from` hit `to`: same row or column, with
  *  nothing standing between them? */
 function boltLine(occ: Uint8Array, from: Cell, to: Cell): boolean {
   if (from.r !== to.r && from.c !== to.c) return false;
@@ -947,11 +951,18 @@ function budgetThreat(
     const defFaces = v.kind === 'mage' ? magePowerDie(v.activated) : 6;
     const val = worth(v, scarcity);
 
-    // Warrior gang: every Warrior that can get beside it, up to the units left.
+    // Warrior gang: cheapest walks first until the squares (or units) run out.
     const walks = gang
       .map((g) => (g.fresh ? stepsBeside(g.dist, occ, g.w.cell, v.cell) : manhattan(g.w.cell, v.cell) === 1 ? 0 : 255))
-      .filter((s) => s <= reach);
-    const n = Math.min(walks.length, 3, slots);
+      .filter((s) => s <= reach)
+      .sort((a, b) => a - b);
+    let spent = 0;
+    let n = 0;
+    for (const s of walks) {
+      if (n >= Math.min(3, slots) || spent + s > reach) break;
+      spent += s;
+      n++;
+    }
     if (n > 0) {
       const odds = quickOdds(n, defFaces);
       options.push(odds * val - (1 - odds) * warriorLoss);
@@ -965,8 +976,8 @@ function budgetThreat(
         const odds = faceOdds(magePowerDie(mage.activated), defFaces);
         options.push(odds * val - (1 - odds) * worth(mage, scarcity));
       }
-      // A Bolt flies along a clear straight line.
-      if (mage.activated >= 1 && boltLine(occ, mage.cell, v.cell)) {
+      // A Bolt flies along a clear straight line, as far as the squares left.
+      if (mage.activated >= 1 && manhattan(mage.cell, v.cell) <= reach && boltLine(occ, mage.cell, v.cell)) {
         if (v.kind === 'mage') {
           const hit = faceOdds(magePowerDie(mage.activated), defFaces);
           options.push(hit * val - 8 - (1 - hit) * 15);
@@ -1049,8 +1060,14 @@ function budgetBreakChance(
     const dist = fresh && reach > 0 ? routeDist(occ, u.cell, reach) : null;
     if (dist && open.some((c) => dist[c.r * N + c.c] <= reach)) return 1;
     if (u.kind === 'priest') continue;
-    // a Bolt down a clear line needs no walk at all
-    if (u.kind === 'mage' && u.activated >= 1 && boltLine(occ, u.cell, priest.cell)) return 1;
+    // a Bolt down a clear line within their squares needs no walk at all
+    if (
+      u.kind === 'mage' &&
+      u.activated >= 1 &&
+      manhattan(u.cell, priest.cell) <= reach &&
+      boltLine(occ, u.cell, priest.cell)
+    )
+      return 1;
     const beside = dist
       ? stepsBeside(dist, occ, u.cell, priest.cell) <= reach
       : manhattan(u.cell, priest.cell) === 1;

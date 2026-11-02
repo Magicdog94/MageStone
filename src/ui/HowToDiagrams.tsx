@@ -159,7 +159,7 @@ export function SetupDiagram() {
   );
 }
 
-/** A rook move: any distance along one straight orthogonal line. */
+/** A straight-line orthogonal move, paid for out of the go's squares. */
 export function MoveDiagram() {
   const n = 6;
   const cell = 30;
@@ -170,7 +170,7 @@ export function MoveDiagram() {
   return (
     <Figure
       label="Straight-line movement path"
-      caption="Units move like a chess rook: any distance in one straight line, up, down, left or right, until another unit blocks the way. No diagonals and no turning corners. Up to three units move each go."
+      caption="Spend squares from your go's eight to move a unit — in one straight line, up, down, left or right, until another unit blocks the way. No diagonals and no turning corners. Up to three units may share the eight."
       height={oy + n * cell + 8}
     >
       {checker(n, n, ox, oy, cell)}

@@ -197,7 +197,7 @@ export async function runTutorial(onDone: () => void) {
     await note({
       id: 'welcome',
       title: 'Welcome to MageStone',
-      body: 'You are Red. Each go you can use up to 3 units, then press End Turn.',
+      body: 'You are Red. Each go you get 8 squares of movement, shared by up to 3 units. Press End Turn when done.',
       anchor: '.budget-tray',
       placement: 'bottom',
     });
@@ -207,8 +207,8 @@ export async function runTutorial(onDone: () => void) {
       null,
       {
         id: 'task-move',
-        title: 'Move like a rook',
-        body: 'Units move any distance up, down, left or right, in one straight line. Units block the way. Click a unit, then a glowing square.',
+        title: 'Move a unit',
+        body: 'Units move in one straight line: up, down, left or right. Units block the way. Click a unit, then a glowing square.',
         placement: 'bottom',
       },
       () => g().game.unitsMovedThisTurn.length >= 1,
@@ -343,7 +343,7 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-bolt',
         title: 'Cast Bolt',
-        body: 'Spend 1 activated stone to hit the first unit in a straight line. Click your Mage, press BOLT, then click the Blue Warrior.',
+        body: 'Spend 1 activated stone to hit the first unit in a straight line, using your squares. Click your Mage, press BOLT, then the Blue Warrior.',
         placement: 'bottom',
       },
       () => TASKS.bolt.done(g().game),

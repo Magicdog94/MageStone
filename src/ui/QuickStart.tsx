@@ -21,12 +21,12 @@ const CARDS: { title: string; icon: ReactNode; body: string }[] = [
       'Priest, or wiping out your rival, also wins.',
   },
   {
-    title: 'Three pieces a turn',
-    icon: <span className="qs-glyph">3</span>,
+    title: 'Eight squares a turn',
+    icon: <span className="qs-glyph">8</span>,
     body:
-      'On your go you move up to 3 pieces. Each moves like a chess rook: any distance up, ' +
-      'down, left or right, in one straight line. Other pieces block the way. Acting ends ' +
-      'that piece’s go.',
+      'On your go you have 8 squares to share between up to 3 pieces, each moving in one ' +
+      'straight line. Other pieces block the way. Acting ends that piece’s go, and unused ' +
+      'squares are lost when you press End Turn.',
   },
   {
     title: 'Every piece is different',

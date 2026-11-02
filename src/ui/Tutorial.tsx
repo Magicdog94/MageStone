@@ -303,16 +303,20 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p className="htp-p">
-          On your go you may use <span className="htp-em">at most three units</span>, and you take
-          the whole go <span className="htp-em">in one continuous stretch</span> before play passes.
-          Every unit moves like a chess <span className="htp-em">rook</span>.
+          On your go you have <span className="htp-em">eight squares of movement</span> to spend
+          across <span className="htp-em">at most three units</span>, and you take the whole go{' '}
+          <span className="htp-em">in one continuous stretch</span> before play passes.
         </p>
         <ol className="htp-ol">
+          <li>
+            Divide your eight squares however you like: one unit marching all{' '}
+            <span className="htp-em">8</span>, two units on 4 and 4, or three units on 3, 3 and 2.
+          </li>
           <li>
             For each unit you use:
             <ul className="htp-list htp-list--sub">
               <li>Choose one of your units — any kind.</li>
-              <li>Move it any distance in one straight line — up, down, left or right, through empty squares. No diagonals and no turning. Units block the line; MageStones and gravestones do not.</li>
+              <li>Move it in one straight line — up, down, left or right, through empty squares — as far as your remaining squares allow. No diagonals and no turning. Units block the line; MageStones and gravestones do not. Whatever it walks comes off your eight.</li>
               <li>
                 Then, if you like, resolve that unit’s action: attack (Warrior: Single, Double,
                 Triple; Mage), collect a MageStone, resurrect a Warrior, cast, or start a Nexus
@@ -329,8 +333,8 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <span className="htp-em">Use it or lose it.</span> Press End Turn when you are done;
-            unused units never carry over. Play then passes — you, your opponent, you — and your
-            next go opens on three fresh units, however this one went.
+            unused squares and units never carry over. Play then passes — you, your opponent, you
+            — and your next go opens on a full eight squares and three fresh units.
           </li>
         </ol>
         <h4 className="htp-sub">Ganging up</h4>
@@ -473,9 +477,11 @@ const SECTIONS: Section[] = [
         <h4 className="htp-sub htp-sub--m">Bolt — 1 Activated stone</h4>
         <ul className="htp-list">
           <li>
-            A ranged strike that flies like a rook: any distance in a straight line, up, down,
-            left or right. It hits the <span className="htp-em">first unit</span> in that line, so
-            any unit in the way blocks it. Casting it is the Mage’s action.
+            A ranged strike in a straight line, up, down, left or right, as far as the squares you
+            have left this go — and the flight <span className="htp-em">spends</span> them: a target
+            three squares away costs three. It hits the{' '}
+            <span className="htp-em">first unit</span> in that line, so any unit in the way blocks
+            it. Casting it is the Mage’s action.
           </li>
           <li>
             <span className="htp-em">Only a Mage can block a Bolt.</span> Anything else gets no
@@ -578,12 +584,12 @@ const SECTIONS: Section[] = [
     icon: 'scroll',
     body: (
       <ol className="htp-ol">
-        <li>On your go you use at most 3 units, each moving like a rook: any distance in one straight line.</li>
+        <li>On your go you have 8 squares of movement, across at most 3 units, each move one straight line.</li>
         <li>Take them in one stretch: pick a unit → move it → resolve its action → next unit.</li>
         <li>A unit goes once a turn, and acting ends its go.</li>
         <li>Two or three Warriors beside the same enemy can attack together (2d6 / 3d6).</li>
         <li>Fight, collect stones (they activate on your base), resurrect Warriors, or attempt the Nexus Ritual.</li>
-        <li>End your turn when you are done — unused units are lost, and play alternates.</li>
+        <li>End your turn when you are done — leftover squares are lost, and play alternates.</li>
         <li>Win by MageStone Victory, Priest Ritual Victory, or Conquest Victory.</li>
       </ol>
     ),

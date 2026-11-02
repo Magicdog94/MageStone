@@ -1,8 +1,9 @@
 // Bumped with each notable alpha update — shown in the landing footer.
-export const VERSION = 'v0.13.0-alpha';
-export const UPDATED = '30 October 2026';
+export const VERSION = 'v0.14.0-alpha';
+export const UPDATED = '2 November 2026';
 
 export const PATCH_NOTES = [
+  'v0.14.0 — EIGHT SQUARES A TURN. Movement has an allowance again: on your go you have 8 squares to share between up to 3 units, each move still one straight line, up, down, left or right, with other units blocking the way. Unused squares are lost when you end your turn. Bolt flies in a straight line at the first unit in its path, as far as your squares left, and spends them. Everything else from v0.13.0 stays: acting ends a unit’s go, and stones activate by themselves when your Mage gets home.',
   'v0.13.0 — ROOK MOVES AND AUTOMATIC ACTIVATION. (1) Every unit now moves like a chess rook: any distance up, down, left or right in one straight line, until another unit blocks the way. There is no six-square allowance any more; you still use at most three units a go. (2) Acting ends a unit’s go: once it attacks, picks up a MageStone, raises a Warrior or casts, it cannot move again that turn. (3) Stones activate by themselves the moment your Mage stands on your base, so there is no Activate button to press, and six stones carried home win on the spot. (4) Bolt now flies like a rook too, any distance in a straight line, and hits the first unit in its path. The AI, the rules pages and a new 12-step tutorial all teach the new rules.',
   'v0.12.1 — A SHORTER TUTORIAL. The guided tutorial is now 10 short steps instead of 44: move (in a straight line), attack, resurrect, collect, activate, cast Bolt, then win by MageStone and by Ritual. Conquest, sieges, Nova and the finer details are left to the Rule Book.',
   'v0.12.0 — STRAIGHT-LINE MOVEMENT. Units now move in ONE straight line: up, down, left or right, as far as your squares allow, and they can no longer turn a corner mid-move. Diagonals are still out. A unit in the way stops the line, so the square behind it can no longer be reached by walking around; stones and gravestones still never block. Only the squares in a straight line from the unit glow when you select it, and the AI, the tutorial and the rules pages have all been updated to match.',

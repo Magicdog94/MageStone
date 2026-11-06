@@ -583,8 +583,8 @@ export function HUD() {
 
         {game.ritual &&
           (() => {
-            // How many more times play has to come back round to the ritualist:
-            // two in a heads-up game, one with four players.
+            // How many more times play has to come back round to the ritualist
+            // (one: the Rite must survive a single full round).
             const left = ritualHoldOf(game) - (game.ritual.returns ?? 0);
             return (
               <span
@@ -592,7 +592,7 @@ export function HUD() {
                 title={
                   `${label(game.ritual.player)}'s Rite of the Nexus completes when play has come ` +
                   `back round to them ${left === 1 ? 'once more' : `${left} more times`}. ` +
-                  `Reach any Nexus square, or kill the Priest, before then.`
+                  `Land a unit on any Nexus square, or kill the Priest, before then.`
                 }
               >
                 Ritual · {label(game.ritual.player)} ·{' '}

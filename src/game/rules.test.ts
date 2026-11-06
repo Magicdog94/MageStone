@@ -999,33 +999,28 @@ describe('TEST 11 — Ritual', () => {
     return g;
   };
 
-  it('pays out on the SECOND return in a heads-up game', () => {
+  it('pays out the moment play first returns to the ritualist (heads-up)', () => {
     let g = rolled(acting(['red', 'blue']), 2);
     g = place(g, 'red-p', { r: 7, c: 7 });
     g = beginRitual(g, 'red-p'); // a real declaration, so Red has not passed
     expect(g.ritual).not.toBeNull();
-    expect(ritualHoldOf(g)).toBe(2);
-    // Blue's first go…
+    expect(ritualHoldOf(g)).toBe(1);
+    // Blue gets its go…
     g = endActivation(g);
     expect(g.current).toBe('blue');
     expect(g.winner).toBeNull();
-    // …play comes back to Red once, and the Rite is still only HALF held.
-    g = endActivation(g);
-    expect(g.current).toBe('red');
-    expect(g.winner).toBeNull();
-    expect(g.ritual?.returns).toBe(1);
-    // Blue's second go, and then it pays out.
+    // …and once it is over without a break, Red wins.
     g = playOn(g, 4);
     expect(g.winner).toBe('red');
     expect(g.winMethod).toBe('Ritual');
   });
 
-  it('wins two rounds after it was declared', () => {
+  it('wins one round after it was declared', () => {
     const start = startRitual(['red', 'blue']);
     const g = playOn(start, 12);
     expect(g.winner).toBe('red');
-    // Declared in round N, won in round N+2 — the doubled heads-up hold.
-    expect(g.turn).toBe(start.turn + 2);
+    // Declared in round N, won as round N+1 comes back round to Red.
+    expect(g.turn).toBe(start.turn + 1);
   });
 
   it('gives every rival exactly ONE activation first (4 players)', () => {
@@ -1082,9 +1077,9 @@ describe('TEST 11 — Ritual', () => {
     expect(playOn(g).winner).toBe('red');
   });
 
-  it('two goes is ALL the opponent gets — a Rite out of reach simply lands', () => {
+  it('one go is ALL the opponent gets — a Rite out of reach simply lands', () => {
     // Blue's nearest Warrior is far from the Nexus and the dice are all 3s: it
-    // cannot arrive in the two goes it has before the Rite pays out.
+    // cannot arrive in the one go it has before the Rite pays out.
     let g = rolled(acting(['red', 'blue']), 3);
     g = place(g, 'red-p', { r: 7, c: 7 });
     g = place(g, 'blue-w1', { r: 12, c: 8 });
@@ -1128,10 +1123,22 @@ describe('TEST 11 — Ritual', () => {
     expect(moved.ritual).toBeNull();
   });
 
-  it('tolerates a friendly unit on another Nexus square', () => {
+  it('a friendly unit on another Nexus square blocks the Rite from starting', () => {
+    for (const spot of NEXUS_CELLS.filter((c) => !(c.r === 7 && c.c === 7))) {
+      let g = withDice(acting(['red', 'blue']), ['priest'], [2]);
+      g = place(g, 'red-p', { r: 7, c: 7 });
+      g = place(g, 'red-w1', spot);
+      expect(canRitual(g, 'red-p')).toBe(false);
+    }
+  });
+
+  it('breaks when a friendly unit lands on another Nexus square', () => {
     let g = startRitual(['red', 'blue']);
     g = place(g, 'red-w1', { r: 8, c: 8 });
-    expect(playOn(g).winner).toBe('red');
+    expect(ritualIntact(g)).toBe(false);
+    g = playOn(g);
+    expect(g.winner).toBeNull();
+    expect(g.ritual).toBeNull();
   });
 });
 

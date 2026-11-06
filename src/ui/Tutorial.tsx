@@ -226,9 +226,9 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <span className="htp-win-title">Priest Ritual Victory</span>
-            Move your Priest onto the central Nexus and declare a ritual. If it is still holding
-            the Nexus when play has come back round to you — twice in a two-player game, once
-            with four — you win.
+            Move your Priest onto an empty central Nexus and declare a ritual. If nobody but the
+            Priest is in the Nexus when play comes back round to you, one full round later, you
+            win.
           </li>
           <li>
             <span className="htp-win-title">Conquest Victory</span>
@@ -561,18 +561,16 @@ const SECTIONS: Section[] = [
         <p className="htp-p">
           The Nexus is the 2×2 heart of the board. A Priest standing on it may declare the{' '}
           <span className="htp-em">Rite of the Nexus</span>, and declaring it is that Priest’s
-          action. To begin it — and to keep it — <span className="htp-em">all four Nexus squares</span>{' '}
-          must be free of enemies; friendly units are welcome on the other three, and screening
-          them is the usual way to hold one. While a Rite is running the Nexus glows in that
-          player’s colour.
+          action. To begin it, the other three Nexus squares must be{' '}
+          <span className="htp-em">empty of all units, your own included</span>, and they must
+          stay empty while it runs. While a Rite is running the Nexus glows in that player’s
+          colour.
         </p>
         <p className="htp-p">
-          The Rite needs play to come back round to you — <span className="htp-em">twice</span>{' '}
-          in a two-player game, <span className="htp-em">once</span> with four. So your lone
-          opponent gets two full goes to reach the Nexus or kill the Priest, and in a four-player
-          game each of your three rivals gets one. A single enemy stepping onto any Nexus square
-          is enough, and it also breaks if the Priest is killed or leaves the Nexus. Declaring it
-          where the enemy can reach you simply loses the Priest.
+          The Rite must survive <span className="htp-em">one full round</span>: every opponent
+          gets one go (their eight squares) to land a unit on any Nexus square or kill the
+          Priest. If nobody does, you win when play comes back to you. Any unit landing on the
+          Nexus breaks it, even one of yours, and so does the Priest being killed or leaving.
         </p>
         <NexusDiagram />
       </>

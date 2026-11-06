@@ -408,7 +408,7 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-win2',
         title: 'Win with a Ritual',
-        body: 'Move your Priest into the glowing Nexus and press BEGIN RITUAL. If Blue can’t break it in two goes, you win.',
+        body: 'Move your Priest into the glowing Nexus and press BEGIN RITUAL. If Blue can’t reach the Nexus or kill your Priest in its next go, you win.',
         placement: 'bottom',
       },
       () => TASKS.win2.done(g().game),

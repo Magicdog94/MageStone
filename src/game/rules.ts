@@ -1416,23 +1416,23 @@ export function resurrect(state: GameState, unitId: string): GameState {
 }
 
 /** The area a Rite of the Nexus needs held: the central 2x2 Nexus, and only
- *  that. Every one of its four squares must be free of enemies — friendly units
- *  are welcome to stand on the other three. */
+ *  that. The Priest stands on one of its four squares and NOBODY else may stand
+ *  on any of them — not an enemy, and not a friendly unit either. */
 export const RITUAL_AREA: Cell[] = NEXUS_CELLS;
 
-/** Enemy units standing anywhere in the Nexus. */
-export function ritualIntruders(state: GameState, owner: PlayerColor): Unit[] {
+/** Every unit in the Nexus apart from the given Priest — enemies AND allies. */
+export function ritualIntruders(state: GameState, priestId: string): Unit[] {
   return state.units.filter(
-    (u) => u.owner !== owner && RITUAL_AREA.some((c) => sameCell(c, u.cell)),
+    (u) => u.id !== priestId && RITUAL_AREA.some((c) => sameCell(c, u.cell)),
   );
 }
 
-function ritualAreaClear(state: GameState, owner: PlayerColor): boolean {
-  return ritualIntruders(state, owner).length === 0;
+function ritualAreaClear(state: GameState, priestId: string): boolean {
+  return ritualIntruders(state, priestId).length === 0;
 }
 
 /** Is a declared ritual still standing — Priest alive, still in the Nexus, and
- *  no enemy on any Nexus square? */
+ *  nobody else (friend or foe) on any Nexus square? */
 export function ritualIntact(state: GameState): boolean {
   const rit = state.ritual;
   if (!rit) return false;
@@ -1440,14 +1440,14 @@ export function ritualIntact(state: GameState): boolean {
   return (
     !!priest &&
     inNexus(priest.cell.r, priest.cell.c) &&
-    ritualAreaClear(state, rit.player)
+    ritualAreaClear(state, rit.priestId)
   );
 }
 
 /** Drop a ritual the moment one of its stop conditions fires (the Priest dies,
- *  leaves or flees out of the Nexus, or an enemy occupies a Nexus square) so
- *  the HUD's ritual flag never lingers on a broken ritual. `endTurn` still does
- *  the authoritative check when play comes back round. */
+ *  leaves or flees out of the Nexus, or any other unit lands on a Nexus square)
+ *  so the HUD's ritual flag never lingers on a broken ritual. `endTurn` still
+ *  does the authoritative check when play comes back round. */
 function pruneRitual(state: GameState): GameState {
   if (!state.ritual || ritualIntact(state)) return state;
   return { ...state, ritual: null, log: [...state.log, `The Ritual was broken.`] };
@@ -1458,8 +1458,8 @@ export function canRitual(state: GameState, unitId: string): boolean {
   if (!u || u.kind !== 'priest' || !canAct(state, unitId)) return false;
   if (!inNexus(u.cell.r, u.cell.c)) return false;
   if (state.ritual) return false;
-  // All four Nexus squares must be free of enemies to begin.
-  return ritualAreaClear(state, u.owner);
+  // The other Nexus squares must be empty to begin — allies included.
+  return ritualAreaClear(state, unitId);
 }
 
 export function beginRitual(state: GameState, unitId: string): GameState {
@@ -1628,28 +1628,17 @@ function nextInOrder(state: GameState, from: PlayerColor): PlayerColor | null {
 }
 
 /**
- * A Rite pays out the moment play RETURNS to the player who began it: they
- * declare it on one activation, every rival gets exactly one activation to
- * break it, and if it is still standing when their next go comes round, they
- * win. Called wherever `current` changes hands.
- */
-/**
  * How many times play must RETURN to the ritualist before the Rite pays out.
  *
- * TWO in a heads-up game, ONE with four players — because a "return" is worth
- * wildly different amounts at the two counts. With two players it hands your
- * opponent a SINGLE go to reach the Nexus or kill the Priest; with four it
- * hands your three rivals a go each. One return in a 4-player game is already
- * three times the defence, and measurement bears it out: at one return apiece
- * the Rite took 64% of 2-player games but only 9% of 4-player ones. Doubling
- * it heads-up brings that to 32% and leaves all three victories live; doubling
- * it at four players killed the Rite outright (4%) and handed the game to the
- * stone race. So the hold is set per player count, not globally.
+ * ONE, at every player count: the Rite must survive one full round. Declare it
+ * on your go, every rival then gets one whole go (eight squares) to land a unit
+ * on any Nexus square or kill the Priest, and if it is still standing when play
+ * comes back to you, you win.
  *
  * `state.ritualHold` overrides it for arena work.
  */
 export function ritualHoldOf(state: GameState): number {
-  return Math.max(1, state.ritualHold ?? (state.players.length <= 2 ? 2 : 1));
+  return Math.max(1, state.ritualHold ?? 1);
 }
 
 function claimRitual(state: GameState): GameState {

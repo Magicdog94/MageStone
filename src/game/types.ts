@@ -108,8 +108,8 @@ export interface Ritual {
    *  which may be several activations into that round. */
   round: number;
   /** How many times play has already come back to the ritualist with the Rite
-   *  still standing. It pays out on the `ritualHoldOf(state)`-th return — TWO
-   *  in a 2-player game, one with 4 players. */
+   *  still standing. It pays out on the `ritualHoldOf(state)`-th return — the
+   *  first one, unless the arena overrides it. */
   returns?: number;
 }
 
@@ -181,10 +181,8 @@ export interface GameState {
    *  MOVE_BUDGET) — the dial that sets the game's pace. */
   moveBudget?: number;
   /** Overrides how many times play must RETURN to the ritualist before a Rite
-   *  pays out. Normally UNSET, and `ritualHoldOf` then derives it from the
-   *  player count: 2 in a heads-up game, 1 with four players — see the note
-   *  there for why the two counts need different numbers. A balance dial for
-   *  the arena. */
+   *  pays out. Normally UNSET, and `ritualHoldOf` then uses 1 (one full
+   *  round) at every player count. A balance dial for the arena. */
   ritualHold?: number;
   /** Players knocked out of the game: reduced to zero units on the board while
    *  their base was besieged. They take no turns and never respawn. */

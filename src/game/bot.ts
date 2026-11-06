@@ -491,7 +491,10 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
             }
             // BODYGUARDS: while our own ritual burns, warriors ring the Nexus.
             if (state.ritual && state.ritual.player === me) {
-              const nearNexus = NEXUS_CELLS.some((c) => manhattan(c, dest) === 1);
+              // (beside the Nexus, never on it — a friendly unit there breaks it)
+              const nearNexus =
+                !NEXUS_CELLS.some((c) => sameCell(c, dest)) &&
+                NEXUS_CELLS.some((c) => manhattan(c, dest) === 1);
               if (nearNexus) score += 14;
             }
             // (a stronger "guard the Nexus pre-ritual" MOVE bonus was arena
@@ -519,6 +522,9 @@ function candidateActions(state: GameState, level: BotLevel): Cand[] {
               : 24 + (manhattan(u.cell, raceMage.cell) - manhattan(dest, raceMage.cell)) * 7;
           score = Math.max(score, closeIn);
         }
+        // Our own Rite needs the Nexus empty but for the Priest: one of our own
+        // units stepping onto it would break it, so never offer that move.
+        if (state.ritual?.player === me && NEXUS_CELLS.some((c) => sameCell(c, dest))) score = 0;
         // Die ECONOMY now matters: only three of the five dice get spent all
         // round, so reaching the same square on a cheaper die is strictly better.
         // Charge each candidate what the die it burns was worth.
@@ -1032,7 +1038,7 @@ function mageGetsHome(state: GameState, mage: Unit, hand: Hand, occ: Uint8Array)
 }
 
 /** Is the ritual (if any) currently intact — Priest alive, in the Nexus, and
- *  no enemy on a Nexus square? */
+ *  nobody else on a Nexus square? */
 function ritualStands(state: GameState): boolean {
   return ritualIntact(state);
 }
@@ -1149,7 +1155,7 @@ function breakersBefore(state: GameState, ritualist: PlayerColor): PlayerColor[]
     if (p === ritualist) break;
     out.push(p);
   }
-  // A hold above 1 (every heads-up game) makes the Rite come round the table
+  // A hold above 1 (only ever set by the arena) makes the Rite come round the table
   // more than once, so every rival gets that many goes at it. (The ritualist's
   // own goes in between are not modelled — this deliberately under-rates the
   // defence it can mount, which keeps the estimate on the safe side.)
@@ -1164,9 +1170,9 @@ function breakersBefore(state: GameState, ritualist: PlayerColor): PlayerColor[]
  * Chance a standing Rite survives to pay out — that is, that none of the
  * players still to act before play returns to the ritualist can break it. Each
  * of them gets exactly ONE activation. (A sure break is discounted a touch: the
- * ritualist may still screen the square or kill the breaker first.) Open
- * squares matter: a Nexus packed with the ritualist's own units can only be
- * broken by killing the Priest.
+ * ritualist may still kill the breaker first.) A standing Rite always has
+ * its other three Nexus squares open — nobody, not even the ritualist's own
+ * units, may screen them.
  */
 function ritualSurvival(state: GameState, occ: Uint8Array = occupancyOf(state)): number {
   const rit = state.ritual;

@@ -88,7 +88,7 @@ export function PlayerStrip() {
               </span>
             )}
             {ritual && (
-              <span className="pstat-flag ritual tip" data-tip="Ritual in progress — wins as the round after next starts, unless someone reaches the Nexus or kills the Priest">
+              <span className="pstat-flag ritual tip" data-tip="Ritual in progress — wins when play comes back to them a second time, unless someone reaches the Nexus or kills the Priest">
                 RITUAL
               </span>
             )}

@@ -103,10 +103,12 @@ export interface CombatResult {
 export interface Ritual {
   player: PlayerColor;
   priestId: string;
-  /** The round it was declared in. That round does not count; the next one must
-   *  play out in full, and the Rite pays out as the round after that starts
-   *  (see `ritualPayoutRound`). */
+  /** The round it was declared in (for the log and the HUD). */
   round: number;
+  /** How many times play has already come back to the ritualist with the Rite
+   *  still standing. It pays out on the `ritualHoldOf(state)`-th return (two,
+   *  unless the arena overrides it). */
+  returns?: number;
 }
 
 /** A Mage/Priest awaiting respawn because an enemy is holding its base. */
@@ -176,9 +178,9 @@ export interface GameState {
   /** Squares a player may move per go in the budget variant (default
    *  MOVE_BUDGET) — the dial that sets the game's pace. */
   moveBudget?: number;
-  /** Overrides how many FULL rounds a Rite must survive after the round it was
-   *  declared in. Normally UNSET, and `ritualHoldOf` then uses 1 at every
-   *  player count. A balance dial for the arena. */
+  /** Overrides how many times play must RETURN to the ritualist before a Rite
+   *  pays out. Normally UNSET, and `ritualHoldOf` then uses 2 at every player
+   *  count. A balance dial for the arena. */
   ritualHold?: number;
   /** Players knocked out of the game: reduced to zero units on the board while
    *  their base was besieged. They take no turns and never respawn. */

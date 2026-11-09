@@ -226,9 +226,9 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <span className="htp-win-title">Priest Ritual Victory</span>
-            Move your Priest onto an empty central Nexus and declare a ritual. If it survives the whole
-            of the next round, with nobody but the Priest on the Nexus, you win as the round after
-            that starts.
+            Move your Priest onto an empty central Nexus and declare a ritual. If it is still standing,
+            with nobody but the Priest on the Nexus, when play comes back to you for the second
+            time, you win.
           </li>
           <li>
             <span className="htp-win-title">Conquest Victory</span>
@@ -567,11 +567,11 @@ const SECTIONS: Section[] = [
           colour.
         </p>
         <p className="htp-p">
-          The round you declare it in does not count. The Rite must then survive{' '}
-          <span className="htp-em">one full round</span>, and it wins the moment the round after
-          that starts. Declare in round 5: round 6 plays out, and you win as round 7 starts.
-          Until then opponents can break it by landing a unit on any Nexus square or killing the
-          Priest. Any unit landing on the
+          The Rite wins when play comes back to you for the{' '}
+          <span className="htp-em">second time</span>, so every opponent gets two goes to break
+          it by landing a unit on any Nexus square or killing the Priest. Red declares in round
+          3, Green goes, Red’s round 4 go passes with the Rite still burning, Green goes again,
+          and Red wins as their round 5 go starts. Any unit landing on the
           Nexus breaks it, even one of yours, and so does the Priest being killed or leaving.
         </p>
         <NexusDiagram />

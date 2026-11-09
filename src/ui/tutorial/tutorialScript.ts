@@ -408,7 +408,7 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-win2',
         title: 'Win with a Ritual',
-        body: 'Move your Priest into the glowing Nexus and press BEGIN RITUAL. If it survives the whole next round, you win as the round after starts.',
+        body: 'Move your Priest into the glowing Nexus and press BEGIN RITUAL. If Blue can’t break it in its next two goes, you win.',
         placement: 'bottom',
       },
       () => TASKS.win2.done(g().game),
@@ -423,8 +423,8 @@ export async function runTutorial(onDone: () => void) {
       { restrict: TASKS.win2.restrict },
     );
     await wait(600);
-    // Play the hold out: Blue's army is home, and the Rite pays out as the
-    // round after next starts.
+    // Play the hold out: Blue's army is home, and the Rite pays out the second
+    // time play comes back to Red.
     for (let i = 0; i < 12 && !g().game.winner; i++) {
       beat(ritualBeat);
       await wait(650);

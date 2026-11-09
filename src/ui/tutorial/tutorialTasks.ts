@@ -157,9 +157,8 @@ export const TASKS = {
 
 /**
  * One beat of the Ritual lesson's hold: end the activation in progress (with
- * nothing committed, that is a pass). Repeated, it carries the Rite through the
- * rest of its round and the full round after, until it pays out as the round
- * after that starts.
+ * nothing committed, that is a pass). Repeated, it carries the Rite through
+ * Blue's two goes until play comes back to Red a second time and it pays out.
  */
 export function ritualBeat(st: GameState): GameState {
   return endActivation(st);

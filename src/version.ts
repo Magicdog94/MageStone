@@ -1,8 +1,9 @@
 // Bumped with each notable alpha update — shown in the landing footer.
-export const VERSION = 'v0.15.0-alpha';
-export const UPDATED = '6 November 2026';
+export const VERSION = 'v0.15.1-alpha';
+export const UPDATED = '9 November 2026';
 
 export const PATCH_NOTES = [
+  'v0.15.1 — THE RITE TAKES A FULL ROUND AGAIN. The round you declare the Rite of the Nexus in no longer counts. The next round must play out in full, and the Rite wins the moment the round after that starts: declare in round 5, round 6 plays out, and you win as round 7 starts. The empty-Nexus rules from v0.15.0 stay.',
   'v0.15.0 — A NEW RITE OF THE NEXUS. (1) Your Priest can only begin the Ritual when the other three Nexus squares are empty: no enemies, and none of your own units either. (2) The Rite now needs one full round, at every player count: each opponent gets one go (their eight squares) to land a unit on any Nexus square or kill the Priest. If nobody does, you win when play comes back to you. Any unit landing on the Nexus breaks it, yours included.',
   'v0.14.0 — EIGHT SQUARES A TURN. Movement has an allowance again: on your go you have 8 squares to share between up to 3 units, each move still one straight line, up, down, left or right, with other units blocking the way. Unused squares are lost when you end your turn. Bolt flies in a straight line at the first unit in its path, as far as your squares left, and spends them. Everything else from v0.13.0 stays: acting ends a unit’s go, and stones activate by themselves when your Mage gets home.',
   'v0.13.0 — ROOK MOVES AND AUTOMATIC ACTIVATION. (1) Every unit now moves like a chess rook: any distance up, down, left or right in one straight line, until another unit blocks the way. There is no six-square allowance any more; you still use at most three units a go. (2) Acting ends a unit’s go: once it attacks, picks up a MageStone, raises a Warrior or casts, it cannot move again that turn. (3) Stones activate by themselves the moment your Mage stands on your base, so there is no Activate button to press, and six stones carried home win on the spot. (4) Bolt now flies like a rook too, any distance in a straight line, and hits the first unit in its path. The AI, the rules pages and a new 12-step tutorial all teach the new rules.',

@@ -245,7 +245,7 @@ export function NexusDiagram() {
   return (
     <Figure
       label="A Priest holding the Nexus"
-      caption="Move your Priest onto an empty Nexus and declare the Rite; if nobody else is on the Nexus when play comes back round to you, one full round later, you win by Ritual."
+      caption="Move your Priest onto an empty Nexus and declare the Rite; if it survives the whole next round, you win by Ritual as the round after that starts."
       height={oy + n * cell + 8}
     >
       {rects}

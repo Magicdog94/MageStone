@@ -298,27 +298,47 @@ describe('Movement-budget variant', () => {
     expect(g.turn).toBe(2); // back to the opener — the round ticks over
   });
 
-  it('holds a Rite for one full round at every player count', () => {
-    // Heads-up: Blue gets ONE go at it.
+  it('pays a Rite out as the round after next starts, at every player count', () => {
+    // Heads-up, declared by Red (the opener) in round N.
     let g = place(budgetGame(), 'red-p', { r: 7, c: 7 });
     g = beginRitual(g, 'red-p');
-    g = endActivation(g); // Blue's go
+    const n = g.turn;
+    g = endActivation(g); // Blue, rest of round N
     expect(g.current).toBe('blue');
+    g = endActivation(g); // round N+1 opens on Red: no win yet
+    expect(g.turn).toBe(n + 1);
     expect(g.winner).toBeNull();
-    g = endActivation(g); // back to Red — it pays out
+    g = endActivation(g); // Blue's go in round N+1
+    expect(g.winner).toBeNull();
+    g = endActivation(g); // round N+2 starts — it pays out
+    expect(g.turn).toBe(n + 2);
     expect(g.winner).toBe('red');
     expect(g.winMethod).toBe('Ritual');
 
-    // Four players: one lap of the table, so each rival gets a go.
+    // Declared by Blue (second to act): still wins as round N+2 starts, before
+    // Red's go in it.
+    let b = endActivation(budgetGame()); // Blue's go
+    b = place(b, 'blue-p', { r: 8, c: 8 });
+    b = beginRitual(b, 'blue-p');
+    expect(b.ritual).not.toBeNull();
+    const m = b.turn;
+    b = endActivation(b); // round m+1, Red
+    b = endActivation(b); // Blue
+    expect(b.winner).toBeNull();
+    b = endActivation(b); // round m+2 starts
+    expect(b.turn).toBe(m + 2);
+    expect(b.winner).toBe('blue');
+
+    // Four players: the rest of the round plus one full lap.
     let h = createGame(['red', 'blue', 'green', 'yellow'], 'diamond');
     h = place(h, 'red-p', { r: 7, c: 7 });
     h = beginRitual(h, 'red-p');
     const seats: string[] = [];
-    for (let i = 0; i < 4 && !h.winner; i++) {
+    for (let i = 0; i < 12 && !h.winner; i++) {
       h = endActivation(h);
       if (!h.winner) seats.push(h.current);
     }
-    expect(seats).toEqual(['blue', 'green', 'yellow']); // one go each
+    expect(seats).toEqual(['blue', 'green', 'yellow', 'red', 'blue', 'green', 'yellow']);
     expect(h.winner).toBe('red');
   });
 

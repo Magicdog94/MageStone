@@ -59,7 +59,7 @@ import {
   resolveAttack,
   resolveBolt,
   resolveNova,
-  ritualHoldOf,
+  ritualPayoutRound,
   ritualIntact,
   slotsLeft,
   UNITS_PER_GO,
@@ -1044,8 +1044,7 @@ function ritualStands(state: GameState): boolean {
 }
 
 /**
- * Chance `p` breaks a standing Rite with its ONE upcoming activation — all it
- * gets, since the Rite pays out the moment play returns to the ritualist.
+ * Chance `p` breaks a standing Rite with ONE upcoming go.
  * Walking any unit onto an open Nexus square or Bolting the Priest is certain;
  * a melee on the Priest is a fight. Movement-allowance rules: the reach is the
  * squares they have left, or a full allowance once the round turns over.
@@ -1139,31 +1138,30 @@ function breakChanceNow(state: GameState, p: PlayerColor, hand: Hand, occ: Uint8
 }
 
 /**
- * Who actually gets to act before a standing Rite pays out: everyone from the
- * player due next, up to (but not including) the ritualist. A Rite wins the
- * moment play RETURNS to the player who began it — so in a two-player game,
- * judging a position where the ENEMY holds the Rite and I have just used my
- * activation, this list is EMPTY and the Rite is already won.
+ * Who actually gets to act before a standing Rite pays out, one entry per go:
+ * every rival still due in the CURRENT round, then every rival once more for
+ * each full round still to come. The Rite wins the moment the payout round
+ * starts, so a rival who has already had their go in the last full round gets
+ * no further chance. (The ritualist's own goes are not modelled — this
+ * deliberately under-rates the defence it can mount, keeping the estimate on
+ * the safe side.)
  */
 function breakersBefore(state: GameState, ritualist: PlayerColor): PlayerColor[] {
   const order = state.players.filter((p) => !state.eliminated.includes(p));
-  if (!order.length) return [];
-  const start = (order.indexOf(state.current) + 1) % order.length;
+  const due = ritualPayoutRound(state);
+  if (!order.length || due === null) return [];
+  const rivals = order.filter((p) => p !== ritualist);
   const out: PlayerColor[] = [];
+  // the rest of this round: from the player due next until play wraps to the opener
+  const start = (order.indexOf(state.current) + 1) % order.length;
   for (let i = 0; i < order.length; i++) {
     const p = order[(start + i) % order.length];
-    if (p === ritualist) break;
-    out.push(p);
+    if (p === state.roundStarter) break;
+    if (p !== ritualist) out.push(p);
   }
-  // A hold above 1 (only ever set by the arena) makes the Rite come round the table
-  // more than once, so every rival gets that many goes at it. (The ritualist's
-  // own goes in between are not modelled — this deliberately under-rates the
-  // defence it can mount, which keeps the estimate on the safe side.)
-  const left = ritualHoldOf(state) - (state.ritual?.returns ?? 0);
-  if (left <= 1) return out;
-  const many: PlayerColor[] = [];
-  for (let i = 0; i < left; i++) many.push(...out);
-  return many;
+  // …then one go each for every full round before the payout round
+  for (let r = state.turn + 1; r < due; r++) out.push(...rivals);
+  return out;
 }
 
 /**

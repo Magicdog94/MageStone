@@ -1628,12 +1628,12 @@ function nextInOrder(state: GameState, from: PlayerColor): PlayerColor | null {
 }
 
 /**
- * How many times play must RETURN to the ritualist before the Rite pays out.
+ * How many FULL rounds a Rite must survive after the round it was declared in.
  *
- * ONE, at every player count: the Rite must survive one full round. Declare it
- * on your go, every rival then gets one whole go (eight squares) to land a unit
- * on any Nexus square or kill the Priest, and if it is still standing when play
- * comes back to you, you win.
+ * ONE, at every player count. The round it is declared in is already part-spent
+ * and does not count; the next round must then play out in full, and the Rite
+ * pays out the moment the round after THAT starts, before anybody acts in it.
+ * Declare in round 5: round 6 plays out, and it wins as round 7 starts.
  *
  * `state.ritualHold` overrides it for arena work.
  */
@@ -1641,23 +1641,15 @@ export function ritualHoldOf(state: GameState): number {
   return Math.max(1, state.ritualHold ?? 1);
 }
 
+/** The round whose START pays the Rite out: declared round + 1 + the hold. */
+export function ritualPayoutRound(state: GameState): number | null {
+  return state.ritual ? state.ritual.round + 1 + ritualHoldOf(state) : null;
+}
+
 function claimRitual(state: GameState): GameState {
   const rit = state.ritual;
-  if (!rit || state.current !== rit.player || !ritualIntact(state)) return state;
-  // Each pass through here banks one return; until the hold is met the Rite
-  // simply keeps burning.
-  const need = ritualHoldOf(state);
-  const seen = (rit.returns ?? 0) + 1;
-  if (seen < need) {
-    return {
-      ...state,
-      ritual: { ...rit, returns: seen },
-      log: [
-        ...state.log,
-        `The Rite burns on — ${need - seen} more time${need - seen === 1 ? '' : 's'} round the table.`,
-      ],
-    };
-  }
+  const due = ritualPayoutRound(state);
+  if (!rit || due === null || state.turn < due || !ritualIntact(state)) return state;
   return {
     ...state,
     winner: rit.player,

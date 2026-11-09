@@ -13,7 +13,7 @@ import {
   hasPlayLeft,
   magePowerDie,
   novaVictims,
-  ritualPayoutRound,
+  ritualReturnsLeft,
   movesLeft,
   budgetOf,
   mageActionDieValue,
@@ -583,18 +583,19 @@ export function HUD() {
 
         {game.ritual &&
           (() => {
-            // The Rite pays out the moment its payout round starts.
-            const due = ritualPayoutRound(game) ?? game.turn + 1;
+            // How many more times play has to come back to the ritualist.
+            const left = ritualReturnsLeft(game);
             return (
               <span
                 className="ritual-flag"
                 title={
-                  `${label(game.ritual.player)}'s Rite of the Nexus completes as round ${due} starts. ` +
+                  `${label(game.ritual.player)}'s Rite of the Nexus completes when play comes back to them ` +
+                  `${left === 1 ? 'once more' : `${left} more times`}. ` +
                   `Land a unit on any Nexus square, or kill the Priest, before then.`
                 }
               >
                 Ritual · {label(game.ritual.player)} ·{' '}
-                wins as round {due} starts
+                {left === 1 ? 'wins on their next go' : 'wins on their go after next'}
               </span>
             );
           })()}

@@ -1472,9 +1472,8 @@ export function beginRitual(state: GameState, unitId: string): GameState {
     ...state,
     dice,
     activationDice,
-    // Stamped with the round it began in. That round is already part-spent, so
-    // it does not count: the Rite must then survive one FULL round, and pays out
-    // as the round after that opens (see RITUAL_HOLD_ROUNDS).
+    // Stamped with the round it began in (for the log). It pays out on the
+    // second time play comes back to the ritualist (see ritualHoldOf).
     ritual: { player: priest.owner, priestId: unitId, round: state.turn },
     unitsActedThisTurn: markActed(state, unitId),
     log: [...state.log, `${priest.owner}'s Priest begins the Ritual in the Nexus!`],
@@ -1628,28 +1627,44 @@ function nextInOrder(state: GameState, from: PlayerColor): PlayerColor | null {
 }
 
 /**
- * How many FULL rounds a Rite must survive after the round it was declared in.
+ * How many times play must RETURN to the ritualist before the Rite pays out.
  *
- * ONE, at every player count. The round it is declared in is already part-spent
- * and does not count; the next round must then play out in full, and the Rite
- * pays out the moment the round after THAT starts, before anybody acts in it.
- * Declare in round 5: round 6 plays out, and it wins as round 7 starts.
+ * TWO, at every player count. Declare it on your go; every opponent then has a
+ * go, play comes back to you (the Rite keeps burning), every opponent has a
+ * second go, and the moment play comes back to you again, you win. So each
+ * opponent gets two goes to land a unit on the Nexus or kill the Priest.
+ * Red declares in round 3 → Green → Red's round-4 go (still burning) → Green
+ * → Red wins as their round-5 go opens. It works the same whoever declares.
  *
  * `state.ritualHold` overrides it for arena work.
  */
 export function ritualHoldOf(state: GameState): number {
-  return Math.max(1, state.ritualHold ?? 1);
+  return Math.max(1, state.ritualHold ?? 2);
 }
 
-/** The round whose START pays the Rite out: declared round + 1 + the hold. */
-export function ritualPayoutRound(state: GameState): number | null {
-  return state.ritual ? state.ritual.round + 1 + ritualHoldOf(state) : null;
+/** Returns to the ritualist still needed before the Rite pays out. */
+export function ritualReturnsLeft(state: GameState): number {
+  if (!state.ritual) return 0;
+  return Math.max(0, ritualHoldOf(state) - (state.ritual.returns ?? 0));
 }
 
 function claimRitual(state: GameState): GameState {
   const rit = state.ritual;
-  const due = ritualPayoutRound(state);
-  if (!rit || due === null || state.turn < due || !ritualIntact(state)) return state;
+  if (!rit || state.current !== rit.player || !ritualIntact(state)) return state;
+  // Each time play lands back on the ritualist banks one return; until the
+  // hold is met the Rite simply keeps burning.
+  const seen = (rit.returns ?? 0) + 1;
+  const need = ritualHoldOf(state);
+  if (seen < need) {
+    return {
+      ...state,
+      ritual: { ...rit, returns: seen },
+      log: [
+        ...state.log,
+        `The Rite burns on — it completes when play comes back to ${rit.player} ${need - seen === 1 ? 'once more' : `${need - seen} more times`}.`,
+      ],
+    };
+  }
   return {
     ...state,
     winner: rit.player,

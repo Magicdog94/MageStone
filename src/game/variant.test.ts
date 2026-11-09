@@ -298,38 +298,42 @@ describe('Movement-budget variant', () => {
     expect(g.turn).toBe(2); // back to the opener — the round ticks over
   });
 
-  it('pays a Rite out as the round after next starts, at every player count', () => {
-    // Heads-up, declared by Red (the opener) in round N.
+  it('pays a Rite out on the second return to whoever declared it', () => {
+    // Red declares in round N: Blue, Red (burning), Blue, then Red wins.
     let g = place(budgetGame(), 'red-p', { r: 7, c: 7 });
     g = beginRitual(g, 'red-p');
     const n = g.turn;
-    g = endActivation(g); // Blue, rest of round N
+    g = endActivation(g); // Blue's first go
     expect(g.current).toBe('blue');
-    g = endActivation(g); // round N+1 opens on Red: no win yet
-    expect(g.turn).toBe(n + 1);
+    g = endActivation(g); // back to Red — still burning
+    expect(g.current).toBe('red');
     expect(g.winner).toBeNull();
-    g = endActivation(g); // Blue's go in round N+1
+    expect(g.ritual?.returns).toBe(1);
+    g = endActivation(g); // Blue's second go
     expect(g.winner).toBeNull();
-    g = endActivation(g); // round N+2 starts — it pays out
-    expect(g.turn).toBe(n + 2);
+    g = endActivation(g); // back to Red again — it pays out
     expect(g.winner).toBe('red');
     expect(g.winMethod).toBe('Ritual');
+    expect(g.turn).toBe(n + 2);
 
-    // Declared by Blue (second to act): still wins as round N+2 starts, before
-    // Red's go in it.
+    // Vice versa: Blue declares, and Red also gets two full goes.
     let b = endActivation(budgetGame()); // Blue's go
     b = place(b, 'blue-p', { r: 8, c: 8 });
     b = beginRitual(b, 'blue-p');
     expect(b.ritual).not.toBeNull();
     const m = b.turn;
-    b = endActivation(b); // round m+1, Red
-    b = endActivation(b); // Blue
+    b = endActivation(b); // Red's first go
+    expect(b.current).toBe('red');
+    b = endActivation(b); // Blue — still burning
     expect(b.winner).toBeNull();
-    b = endActivation(b); // round m+2 starts
-    expect(b.turn).toBe(m + 2);
+    b = endActivation(b); // Red's second go
+    expect(b.current).toBe('red');
+    expect(b.winner).toBeNull();
+    b = endActivation(b); // back to Blue again — it pays out
     expect(b.winner).toBe('blue');
+    expect(b.turn).toBe(m + 2);
 
-    // Four players: the rest of the round plus one full lap.
+    // Four players: two laps, so each rival gets two goes.
     let h = createGame(['red', 'blue', 'green', 'yellow'], 'diamond');
     h = place(h, 'red-p', { r: 7, c: 7 });
     h = beginRitual(h, 'red-p');

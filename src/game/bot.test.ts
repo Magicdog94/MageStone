@@ -75,7 +75,7 @@ describe('AI brain — reading the dice on the table', () => {
       (s) => {
         let t = place(s, 'blue-p', { r: 8, c: 8 });
         t = place(t, 'red-w1', { r: 5, c: 7 });
-        return { ...t, turn: 5, ritual: { player: 'blue', priestId: 'blue-p', round: 4 } };
+        return { ...t, turn: 5, ritual: { player: 'blue', priestId: 'blue-p', round: 4, returns: 1 } };
       },
       { mage: 1, priest: 1, warrior: [3, 1, 1] },
     );

@@ -999,49 +999,45 @@ describe('TEST 11 — Ritual', () => {
     return g;
   };
 
-  it('pays out as the round after the next one starts (heads-up)', () => {
+  it('pays out on the SECOND return to the declarer (heads-up)', () => {
     let g = rolled(acting(['red', 'blue']), 2);
     g = place(g, 'red-p', { r: 7, c: 7 });
     g = beginRitual(g, 'red-p'); // a real declaration, so Red has not passed
-    const declared = g.turn;
     expect(g.ritual).not.toBeNull();
-    expect(ritualHoldOf(g)).toBe(1);
-    // The next round opens, and Red does NOT win yet: that round must play out.
-    for (let i = 0; i < 12 && g.turn === declared; i++) {
-      g = g.turnPhase === 'roll' ? rollDice(g, () => 0.34) : endActivation(g);
-    }
-    expect(g.turn).toBe(declared + 1);
+    expect(ritualHoldOf(g)).toBe(2);
+    // Blue's first go…
+    g = endActivation(g);
+    expect(g.current).toBe('blue');
     expect(g.winner).toBeNull();
-    // …then it pays out the moment the round after that starts.
-    g = playOn(g, 24);
+    // …back to Red once: the Rite keeps burning.
+    g = endActivation(g);
+    expect(g.current).toBe('red');
+    expect(g.winner).toBeNull();
+    expect(g.ritual?.returns).toBe(1);
+    // Blue's second go, then it pays out the moment play is back on Red.
+    g = playOn(g, 4);
     expect(g.winner).toBe('red');
     expect(g.winMethod).toBe('Ritual');
-    expect(g.turn).toBe(declared + 2);
   });
 
-  it('declared in round N, wins as round N+2 starts', () => {
+  it('declared in round N by the opener, wins as their round N+2 go opens', () => {
     const start = startRitual(['red', 'blue']);
     const g = playOn(start, 12);
     expect(g.winner).toBe('red');
     expect(g.turn).toBe(start.turn + 2);
   });
 
-  it('every rival gets the rest of the round AND a full round (4 players)', () => {
+  it('every rival gets two goes first (4 players)', () => {
     let g = rolled(acting(['red', 'blue', 'green', 'yellow']), 2);
     g = place(g, 'red-p', { r: 7, c: 7 });
     g = beginRitual(g, 'red-p');
-    const start = g.turn;
     const goes: PlayerColor[] = [];
     for (let i = 0; i < 40 && !g.winner; i++) {
       g = g.turnPhase === 'roll' ? rollDice(g, () => 0.34) : endActivation(g);
-      if (!g.winner && g.turnPhase !== 'roll') goes.push(g.current);
+      if (!g.winner && g.turnPhase !== 'roll' && goes[goes.length - 1] !== g.current) goes.push(g.current);
     }
     expect(g.winner).toBe('red');
-    expect(g.turn).toBe(start + 2);
-    // each rival had goes in both the declaring round and the full round after
-    for (const p of ['blue', 'green', 'yellow'] as PlayerColor[]) {
-      expect(goes.filter((x) => x === p).length).toBeGreaterThanOrEqual(2);
-    }
+    expect(goes).toEqual(['blue', 'green', 'yellow', 'red', 'blue', 'green', 'yellow']);
   });
 
   it('is broken by a rival who reaches the Nexus on that one activation', () => {
@@ -1085,9 +1081,9 @@ describe('TEST 11 — Ritual', () => {
     expect(playOn(g).winner).toBe('red');
   });
 
-  it('a Rite out of reach simply lands', () => {
+  it('two goes is ALL the opponent gets — a Rite out of reach simply lands', () => {
     // Blue's nearest Warrior is far from the Nexus and the dice are all 3s: it
-    // cannot arrive in the goes it has before the Rite pays out.
+    // cannot arrive in the two goes it has before the Rite pays out.
     let g = rolled(acting(['red', 'blue']), 3);
     g = place(g, 'red-p', { r: 7, c: 7 });
     g = place(g, 'blue-w1', { r: 12, c: 8 });

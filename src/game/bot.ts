@@ -59,7 +59,7 @@ import {
   resolveAttack,
   resolveBolt,
   resolveNova,
-  ritualPayoutRound,
+  ritualReturnsLeft,
   ritualIntact,
   slotsLeft,
   UNITS_PER_GO,
@@ -1139,28 +1139,27 @@ function breakChanceNow(state: GameState, p: PlayerColor, hand: Hand, occ: Uint8
 
 /**
  * Who actually gets to act before a standing Rite pays out, one entry per go:
- * every rival still due in the CURRENT round, then every rival once more for
- * each full round still to come. The Rite wins the moment the payout round
- * starts, so a rival who has already had their go in the last full round gets
- * no further chance. (The ritualist's own goes are not modelled — this
- * deliberately under-rates the defence it can mount, keeping the estimate on
- * the safe side.)
+ * every rival from the player due next up to (not including) the ritualist,
+ * once for each return the Rite still needs. (The ritualist's own goes in
+ * between are not modelled — this deliberately under-rates the defence it can
+ * mount, keeping the estimate on the safe side.)
  */
 function breakersBefore(state: GameState, ritualist: PlayerColor): PlayerColor[] {
   const order = state.players.filter((p) => !state.eliminated.includes(p));
-  const due = ritualPayoutRound(state);
-  if (!order.length || due === null) return [];
-  const rivals = order.filter((p) => p !== ritualist);
-  const out: PlayerColor[] = [];
-  // the rest of this round: from the player due next until play wraps to the opener
+  if (!order.length) return [];
   const start = (order.indexOf(state.current) + 1) % order.length;
+  const lap: PlayerColor[] = [];
   for (let i = 0; i < order.length; i++) {
     const p = order[(start + i) % order.length];
-    if (p === state.roundStarter) break;
-    if (p !== ritualist) out.push(p);
+    if (p === ritualist) break;
+    lap.push(p);
   }
-  // …then one go each for every full round before the payout round
-  for (let r = state.turn + 1; r < due; r++) out.push(...rivals);
+  const left = ritualReturnsLeft(state);
+  if (left <= 1) return lap;
+  // after this lap, each further return hands every rival another go
+  const rivals = order.filter((p) => p !== ritualist);
+  const out = [...lap];
+  for (let i = 1; i < left; i++) out.push(...rivals);
   return out;
 }
 

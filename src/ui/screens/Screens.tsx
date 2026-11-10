@@ -9,6 +9,8 @@ import { Tutorial } from '../Tutorial';
 import { Modals } from '../Modals';
 import { FeedbackModal } from '../FeedbackModal';
 import { Modal } from '../controls';
+import { cleanName, NAME_MAX, readHotseatName, saveHotseatName } from '../../net/hotseatResults';
+import { GameResults } from './GameResults';
 
 /** A hooded mage casting toward the centre. Rendered as a glowing silhouette so
  *  it reads at any size; `flip` mirrors it for the opposing (right-hand) side. */
@@ -192,6 +194,7 @@ function Shell({ children, bare = false }: { children: React.ReactNode; bare?: b
       <EntryPhoto />
       <div className="entry-bg" />
       <EntryModals />
+      {bare && <GameResults />}
       {bare ? (
         // Cover mode (landing): the box-front art *is* the page — the title and
         // emblem come from the artwork, so we only float the controls onto it.
@@ -401,6 +404,17 @@ function Landing() {
   const [playOpen, setPlayOpen] = useState(false);
   // Hotseat first nudges newcomers toward the guided tutorial.
   const [confirmHotseat, setConfirmHotseat] = useState(false);
+  // …then asks the player's name, which their results are recorded under.
+  const [askName, setAskName] = useState(false);
+  const [hotseatName, setHotseatName] = useState(() => readHotseatName());
+  const startHotseat = (e?: FormEvent) => {
+    e?.preventDefault();
+    const name = cleanName(hotseatName);
+    if (!name) return;
+    saveHotseatName(name);
+    setAskName(false);
+    playLocal();
+  };
   const playOnline = () => {
     // Signed in (or already playing as a guest) → straight to the lobby;
     // otherwise just ask for a name — no account needed in the alpha.
@@ -438,6 +452,12 @@ function Landing() {
           </div>
         )}
         <button className="menu-item" onClick={() => openSettings('settings')}>Settings</button>
+        <button
+          className="menu-item"
+          onClick={() => document.getElementById('game-results')?.scrollIntoView({ behavior: 'smooth' })}
+        >
+          Game Results
+        </button>
       </nav>
       {confirmHotseat && (
         <Modal
@@ -458,7 +478,7 @@ function Landing() {
                 className="primary"
                 onClick={() => {
                   setConfirmHotseat(false);
-                  playLocal();
+                  setAskName(true);
                 }}
               >
                 Continue to Game
@@ -469,6 +489,34 @@ function Landing() {
           <p className="hotseat-confirm">
             It is recommended to play the tutorial first, do you wish to continue?
           </p>
+        </Modal>
+      )}
+      {askName && (
+        <Modal
+          title="What is your name?"
+          onClose={() => setAskName(false)}
+          footer={
+            <button className="primary" disabled={!cleanName(hotseatName)} onClick={() => startHotseat()}>
+              Start Game
+            </button>
+          }
+        >
+          <form className="pnp-form" onSubmit={startHotseat}>
+            <label className="entry-field">
+              <span>Name</span>
+              <input
+                autoFocus
+                value={hotseatName}
+                maxLength={NAME_MAX}
+                onChange={(e) => setHotseatName(e.target.value)}
+                placeholder="Your name"
+              />
+            </label>
+            <p className="footer-prose">
+              Your result (as the first human player) is saved under this name and shown in Game
+              Results on the main page.
+            </p>
+          </form>
         </Modal>
       )}
       {showTutorial && <Tutorial onClose={() => setShowTutorial(false)} />}
@@ -561,8 +609,9 @@ function LandingFooter() {
           <div className="footer-prose">
             <p>
               MageStone stores the minimum needed to run the alpha: account usernames with salted,
-              hashed passwords; win/loss and ELO records; feedback you submit; and an email address
-              only if you join the print-and-play list.
+              hashed passwords; win/loss and ELO records; the name you enter for a hotseat game and
+              that game's result (shown publicly under Game Results); feedback you submit; and an
+              email address only if you join the print-and-play list.
             </p>
             <p>
               No ads, no trackers, no analytics cookies — the only browser storage used is for your

@@ -4131,3 +4131,50 @@ body.ui-mobile .hint-note {
   bottom: auto;
   font-size: var(--text-sm);
 }
+/* ---------------- main page: hotseat Game Results ---------------- */
+/* The cover fills the first screen; Game Results sits below it, reached by
+   scrolling (or the "Game Results" menu item). */
+.entry--cover {
+  grid-template-rows: 100% auto;
+}
+.game-results {
+  grid-row: 2;
+  position: relative;
+  z-index: 0; /* under the cover's overlays (rule book, modals) */
+  justify-self: center;
+  width: min(900px, calc(100% - 32px));
+  margin: var(--space-4) 0 calc(env(safe-area-inset-bottom, 0px) + 96px);
+  padding: var(--space-3) var(--space-4);
+  background: linear-gradient(180deg, var(--panel-1), var(--panel-2));
+  border: 1px solid var(--gold-line);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+}
+.game-results-title {
+  margin: 0 0 var(--space-2);
+  font-family: var(--display);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: #e9cf86;
+  letter-spacing: 0.02em;
+}
+.gr-table {
+  font-size: var(--text-sm);
+}
+.gr-outcome {
+  font-weight: 600;
+}
+.gr-victory {
+  color: #9fd88a;
+}
+.gr-defeat {
+  color: #e08a7a;
+}
+.gr-draw {
+  color: var(--ink-dim);
+}
+@media (max-width: 640px) {
+  .gr-hide-narrow {
+    display: none;
+  }
+}

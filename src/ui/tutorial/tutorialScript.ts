@@ -6,6 +6,7 @@ import { useTutorial } from './useTutorial';
 import {
   MOVE_RESTRICT,
   TASKS,
+  freshGo,
   ritualBeat,
   stagedGame,
 } from './tutorialTasks';
@@ -33,6 +34,14 @@ function guard() {
 
 /** Total coached steps (one per note or task below). */
 const TOTAL_STEPS = 12;
+
+// Pacing. A playtester found the run "too fast": pieces were re-laid before
+// they had taken in what just happened. So every lesson now lingers on its
+// result, and a fresh board sits still for a moment before the next note.
+/** After a task is done: time to see what it did. */
+const SEE_RESULT_MS = 2400;
+/** After a new lesson board appears: time to look at it before the note. */
+const SEE_BOARD_MS = 1400;
 let stepNo = 0;
 /** Stamp "step n of m" onto a callout (shown as the box's progress counter). */
 function stamp(c: Callout): Callout {
@@ -182,9 +191,10 @@ function scriptMove(unitId: string, dest: Cell): void {
  * MageStone and by Ritual; Conquest and the deeper rules are left to the Rule
  * Book.
  */
-export async function runTutorial(onDone: () => void) {
+export async function runTutorial(onDone: (completed: boolean) => void) {
   const myEpoch = ++epoch; // cancels any still-unwinding previous run
   stepNo = 0;
+  let completed = false;
   try {
     // Wait for the 3D board to finish loading so the spotlights have something
     // to point at — then give the first frame a real beat to render (the note
@@ -208,30 +218,34 @@ export async function runTutorial(onDone: () => void) {
       {
         id: 'task-move',
         title: 'Move a unit',
-        body: 'Units move in one straight line: up, down, left or right. Units block the way. Click a unit, then a glowing square.',
+        body: 'Units move in one straight line: up, down, left or right, and other units block the way. Click any unit except the three Warriors around Blue (they are for the next step), then a glowing square.',
         placement: 'bottom',
       },
       () => g().game.unitsMovedThisTurn.length >= 1,
       () => {
-        const st = g().game;
-        const w = st.units.find((u) => u.owner === st.current);
-        if (w) stepToward(w.id, { r: 8, c: 8 });
+        // The Warrior from the back row nearest the middle walks forward.
+        if (!stepToward('red-w4', { r: 8, c: 8 })) stepToward('red-m', { r: 8, c: 8 });
       },
-      // Any unit, any legal square — but not ending the go yet.
+      // The units outside the attack ring, any legal square bar Blue's open
+      // side — but not ending the go yet.
       { restrict: MOVE_RESTRICT },
     );
-    await wait(1200);
+    await wait(SEE_RESULT_MS);
 
     // 3 ---- YOU attack --------------------------------------------------------
+    // Same board, nothing re-laid: Red's go ends, Blue passes, and Red starts
+    // a fresh go with the ring already standing. (Only a retry re-stages it.)
+    beat(freshGo);
     const stageFight = () => stage(TASKS.attack.build);
-    stageFight();
-    await wait(700);
+    await wait(600);
+    // Keep the dice and their result on screen until the result note is read.
+    g().setHoldCombat(true);
     await playerTask(
       stageFight,
       {
         id: 'task-attack',
         title: 'Attack',
-        body: 'Each Warrior beside an enemy adds a die. Click one of your three Warriors next to Blue, then press TRIPLE ATTACK.',
+        body: 'Blue passed, so it is your go again. Each Warrior beside an enemy adds a die to the attack: click one of your three Warriors next to Blue, then press TRIPLE ATTACK.',
         placement: 'bottom',
       },
       () => TASKS.attack.done(g().game),
@@ -260,16 +274,18 @@ export async function runTutorial(onDone: () => void) {
       await note({
         id: 'fight-result',
         title: won ? 'Down he goes' : 'Unlucky!',
-        body: `${a} against ${d}. Higher roll wins and ties re-roll. Attacking ends a unit’s go.`,
+        body: `Your three dice made ${a} against Blue’s ${d}. The higher total wins (a tie is rolled again) and the loser is removed. Attacking also ends that unit’s go.`,
         anchor: '.combat-announce',
         placement: 'bottom',
       });
+      g().setHoldCombat(false);
     }
+    await wait(900);
 
     // 5 ---- YOU resurrect -----------------------------------------------------
     const stageRes = () => stage(TASKS.resurrect.build);
     stageRes();
-    await wait(700);
+    await wait(SEE_BOARD_MS);
     await playerTask(
       stageRes,
       {
@@ -289,12 +305,12 @@ export async function runTutorial(onDone: () => void) {
       },
       { restrict: TASKS.resurrect.restrict },
     );
-    await wait(1200);
+    await wait(SEE_RESULT_MS);
 
     // 6 ---- YOU collect -------------------------------------------------------
     const stageCollect = () => stage(TASKS.collect.build);
     stageCollect();
-    await wait(700);
+    await wait(SEE_BOARD_MS);
     await playerTask(
       stageCollect,
       {
@@ -314,12 +330,12 @@ export async function runTutorial(onDone: () => void) {
       },
       { restrict: TASKS.collect.restrict },
     );
-    await wait(900);
+    await wait(SEE_RESULT_MS);
 
     // 7 ---- YOU carry it home -------------------------------------------------
     const stageHome = () => stage(TASKS.home.build);
     stageHome();
-    await wait(700);
+    await wait(SEE_BOARD_MS);
     await playerTask(
       stageHome,
       {
@@ -332,12 +348,12 @@ export async function runTutorial(onDone: () => void) {
       () => scriptMove('red-m', { r: 0, c: 8 }),
       { restrict: TASKS.home.restrict },
     );
-    await wait(1200);
+    await wait(SEE_RESULT_MS);
 
     // 8 ---- YOU cast Bolt -----------------------------------------------------
     const stageBolt = () => stage(TASKS.bolt.build);
     stageBolt();
-    await wait(700);
+    await wait(SEE_BOARD_MS);
     await playerTask(
       stageBolt,
       {
@@ -354,18 +370,18 @@ export async function runTutorial(onDone: () => void) {
         }),
       { timeoutMs: 120000, restrict: TASKS.bolt.restrict },
     );
-    await wait(1500);
+    await wait(SEE_RESULT_MS);
 
     // 9 ---- YOU cast Nova -----------------------------------------------------
     const stageNova = () => stage(TASKS.nova.build);
     stageNova();
-    await wait(700);
+    await wait(SEE_BOARD_MS);
     await playerTask(
       stageNova,
       {
         id: 'task-nova',
         title: 'Cast Nova',
-        body: 'Spend 4 stones to destroy every enemy around your Mage, diagonals too. Click your Mage, then press NOVA.',
+        body: 'Spend 4 stones to destroy every enemy on the 8 squares around your Mage, diagonals too: they glow when your Mage is selected. Click your Mage, then press NOVA. The 4 spent stones then drop on the diagonal squares.',
         placement: 'bottom',
       },
       () => TASKS.nova.done(g().game),
@@ -379,12 +395,12 @@ export async function runTutorial(onDone: () => void) {
       },
       { restrict: TASKS.nova.restrict },
     );
-    await wait(1800);
+    await wait(SEE_RESULT_MS + 600);
 
     // 10 ---- YOU win: MageStone -----------------------------------------------
     const stageWin1 = () => stage(TASKS.win1.build);
     stageWin1();
-    await wait(700);
+    await wait(SEE_BOARD_MS);
     await playerTask(
       stageWin1,
       {
@@ -397,12 +413,12 @@ export async function runTutorial(onDone: () => void) {
       () => scriptMove('red-m', { r: 0, c: 8 }),
       { timeoutMs: 120000, restrict: TASKS.win1.restrict },
     );
-    await wait(2500); // let the victory land
+    await wait(3000); // let the victory land
 
     // 11 ---- YOU win: Ritual --------------------------------------------------
     const stageWin2 = () => stage(TASKS.win2.build);
     stageWin2();
-    await wait(700);
+    await wait(SEE_BOARD_MS);
     await playerTask(
       stageWin2,
       {
@@ -427,25 +443,27 @@ export async function runTutorial(onDone: () => void) {
     // time play comes back to Red.
     for (let i = 0; i < 12 && !g().game.winner; i++) {
       beat(ritualBeat);
-      await wait(650);
+      await wait(1000);
     }
 
     // 12 ---- Conquest + wrap up ----------------------------------------------
     await note({
       id: 'wrap',
       title: 'One more way to win',
-      body: 'Conquest: destroy every enemy unit. Fallen Mages and Priests respawn on their base, unless an enemy stands on it. The Rule Book has the rest. Go play!',
+      body: 'Conquest: destroy every enemy unit. Fallen Mages and Priests respawn on their base, unless an enemy stands on it. Next, a practice game against the Easy bot: press Hint any time you are stuck.',
       anchor: '.winner',
       placement: 'left',
-      gotItLabel: 'Finish',
+      gotItLabel: 'Play practice game',
     });
+    completed = true;
   } catch (e) {
     if (e !== CANCELLED) throw e;
   } finally {
     // A cancelled run must not tear down the NEWER run that replaced it.
     if (epoch === myEpoch) {
       useGame.getState().setTutRestrict(null); // never leak guardrails into real play
-      onDone();
+      useGame.getState().setHoldCombat(false);
+      onDone(completed);
     }
   }
 }

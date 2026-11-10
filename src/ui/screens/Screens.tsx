@@ -914,7 +914,7 @@ function Room() {
                     <span className="room-addbot-label">Add bot</span>
                     {BOT_LEVELS.map((l) => (
                       <button key={l} className="room-bot-btn" onClick={() => addBot(l)}>
-                        {BOT_LABEL[l]}
+                        {BOT_LABEL[l].replace(" Bot", "")}
                       </button>
                     ))}
                   </span>

@@ -4073,6 +4073,64 @@ body.ui-mobile .elim-toasts {
   top: 150px;
 }
 
+/* ---------------- hints (vs Easy / Medium bots) ----------------
+   Sits where the combat banner does, just above the action bar; a hint is
+   dropped the moment the board changes, so the two never show together. */
+.hint-note {
+  position: absolute;
+  /* under the whose-turn banner, clear of the action bar (which grows tall
+     when a unit is selected, and the hint selects one) */
+  top: calc(var(--space-4) + var(--control-md) + var(--space-6) + 96px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: max-content;
+  max-width: min(560px, 92vw);
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid #6fd3ff;
+  background: linear-gradient(180deg, var(--panel-1), var(--panel-2));
+  box-shadow: var(--shadow-panel), 0 0 16px rgba(111, 211, 255, 0.25);
+  font-family: var(--serif);
+  font-size: var(--text-md);
+  line-height: 1.35;
+  color: var(--ink);
+  animation: ca-in 0.3s ease-out;
+}
+.hint-tag {
+  flex: none;
+  font-family: var(--display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6fd3ff;
+}
+.hint-text {
+  flex: 1 1 auto;
+}
+.hint-close {
+  flex: none;
+  min-height: 0;
+  height: auto;
+  padding: 0 6px;
+  border: none;
+  background: none;
+  color: var(--ink-dim);
+  font-size: 1.2em;
+  line-height: 1;
+  cursor: pointer;
+}
+.hint-btn {
+  border-color: #6fd3ff;
+  color: #bfeaff;
+}
+body.ui-mobile .hint-note {
+  top: 92px;
+  bottom: auto;
+  font-size: var(--text-sm);
+}
 /* ---------------- main page: hotseat Game Results ---------------- */
 /* The cover fills the first screen; Game Results sits below it, reached by
    scrolling (or the "Game Results" menu item). */

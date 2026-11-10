@@ -165,14 +165,21 @@ export function TutorialCoach() {
   useEffect(() => {
     if (tutorial && !started.current) {
       started.current = true;
-      runTutorial(() => {
+      runTutorial((completed) => {
         // Only navigate when the RUNNER is ending the session (skip already
         // navigated itself; an external cancel — e.g. New Game flipping
         // `tutorial` off — must NOT yank the player back to the landing page).
         const wasTutorial = useGame.getState().tutorial;
         useGame.setState({ tutorial: false });
         useTutorial.getState().finish();
-        if (wasTutorial) useNet.getState().setScreen('landing');
+        if (!wasTutorial) return;
+        if (completed) {
+          // Straight into a real match against the gentlest bot, hints on,
+          // so the first proper game is one a newcomer can win (playtest).
+          useGame.getState().newGame(['red', 'blue'], undefined, { blue: 'easy' });
+        } else {
+          useNet.getState().setScreen('landing');
+        }
       });
     }
     if (!tutorial) started.current = false;

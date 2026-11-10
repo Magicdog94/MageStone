@@ -689,7 +689,9 @@ interface CombatDieSpec {
 
 // How long the settled result stays on the table (players who fight a lot can
 // shorten it via Settings → Fast dice).
-const combatLingerMs = () => (useGame.getState().settings.fastDice ? 1000 : 2400);
+// Long enough to read every die and the verdict (a playtester saw the result
+// vanish before they had taken it in at 2.4s).
+const combatLingerMs = () => (useGame.getState().settings.fastDice ? 1500 : 4500);
 
 interface CombatRun {
   id: number;
@@ -985,7 +987,13 @@ function CombatDice() {
       });
       // The dice are now face-up on the table — NOW announce the numbers.
       showCombatRoll(run.roll);
-      hideTimer.current = window.setTimeout(() => setRun(null), combatLingerMs());
+      // Linger, then sweep — unless something (the tutorial explaining this
+      // fight) is holding the result on screen, in which case wait it out.
+      const sweep = () => {
+        if (useGame.getState().holdCombat) hideTimer.current = window.setTimeout(sweep, 300);
+        else setRun(null);
+      };
+      hideTimer.current = window.setTimeout(sweep, combatLingerMs());
     }
     } catch (err) {
       // Poisoned physics world: skip the cosmetic throw, announce, move on.

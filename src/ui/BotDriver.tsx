@@ -13,11 +13,17 @@
 // rejected simply ends the turn.
 import { useEffect, useRef } from 'react';
 import { useGame } from '../store';
-import { chooseAction, type BotAction } from '../game/bot';
+import { chooseAction, type BotAction, type BotLevel } from '../game/bot';
 import { gameOver } from '../game/rules';
 
-/** Pause between bot steps, ms (a touch quicker between discards). */
-const stepDelay = (phase: string) => (phase === 'discard' ? 550 : 800);
+/** Pause between bot steps, ms (a touch quicker between discards). Playtesters
+ *  found the bot "too fast and reactive" to follow, so every level now takes a
+ *  visible beat per play, and the gentler levels take longer still, giving a
+ *  newer player time to see each move land. */
+const STEP_MS: Record<BotLevel, number> = { easy: 1500, medium: 1250, hard: 1000 };
+const stepDelay = (phase: string, level: BotLevel) => (phase === 'discard' ? 550 : STEP_MS[level] ?? 1000);
+/** Extra "weighing it up" hold before an attack, sorcery or Ritual. */
+const BIG_HOLD_MS: Record<BotLevel, number> = { easy: 1600, medium: 1400, hard: 1100 };
 
 function executeAction(a: BotAction): void {
   const s = useGame.getState();
@@ -84,7 +90,7 @@ export function BotDriver() {
         return;
       }
       const now = performance.now();
-      if (now - lastStep.current < stepDelay(g.turnPhase) + Math.random() * 300) return;
+      if (now - lastStep.current < stepDelay(g.turnPhase, lvl) + Math.random() * 300) return;
       lastStep.current = now;
       dbg.__botLast = `step:${g.turnPhase}:${g.current}:${Date.now()}`;
       try {
@@ -123,7 +129,7 @@ export function BotDriver() {
           action.type === 'nova' ||
           action.type === 'ritual';
         if (big) {
-          pending.current = { action, at: now + 900 + Math.random() * 900, sig };
+          pending.current = { action, at: now + (BIG_HOLD_MS[lvl] ?? 1100) + Math.random() * 900, sig };
           return;
         }
         executeAction(action);

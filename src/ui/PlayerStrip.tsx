@@ -3,6 +3,7 @@ import { useGame } from '../store';
 import { COLORS } from '../three/coords';
 import { useTokenUrl } from '../three/tokens';
 import { usePlayerLabel } from './playerNames';
+import { BOT_LABEL } from '../game/bot';
 import { magePowerDie, siegedPlayers, warriorCount } from '../game/rules';
 import { StoneIcon, SwordIcon } from './Icons';
 
@@ -47,8 +48,8 @@ export function PlayerStrip() {
               </span>
             ) : (
               bots[p] && (
-                <span className="pstat-badge tip" data-tip="AI bot">
-                  BOT
+                <span className="pstat-badge tip" data-tip={BOT_LABEL[bots[p]!]}>
+                  {bots[p]!.toUpperCase()}
                 </span>
               )
             )}

@@ -1,8 +1,9 @@
 // Bumped with each notable alpha update — shown in the landing footer.
-export const VERSION = 'v0.15.2-alpha';
-export const UPDATED = '9 November 2026';
+export const VERSION = 'v0.15.3-alpha';
+export const UPDATED = '10 November 2026';
 
 export const PATCH_NOTES = [
+  'v0.15.3 — GAME RESULTS. Hotseat games now ask “What is your name?” before they start. When the game ends, the result is saved under that name: Victory, Defeat or Draw, how it was won (MageStone, Ritual or Conquest), the round it ended in, your kills and who you played against. The latest results are listed under Game Results at the bottom of the main page (scroll down, or pick Game Results in the menu).',
   'v0.15.2 — THE RITE GIVES EVERY OPPONENT TWO GOES. The Rite of the Nexus now wins when play comes back to whoever declared it for the second time, whoever that is. Red declares in round 3, Green goes, Red’s round 4 go passes with the Rite still burning, Green goes again, and Red wins as their round 5 go starts. The same goes for Green, and for four-player games. This fixes v0.15.1, where a Rite declared by the second player could win before the first player’s second go.',
   'v0.15.1 — THE RITE TAKES A FULL ROUND AGAIN. The round you declare the Rite of the Nexus in no longer counts. The next round must play out in full, and the Rite wins the moment the round after that starts: declare in round 5, round 6 plays out, and you win as round 7 starts. The empty-Nexus rules from v0.15.0 stay.',
   'v0.15.0 — A NEW RITE OF THE NEXUS. (1) Your Priest can only begin the Ritual when the other three Nexus squares are empty: no enemies, and none of your own units either. (2) The Rite now needs one full round, at every player count: each opponent gets one go (their eight squares) to land a unit on any Nexus square or kill the Priest. If nobody does, you win when play comes back to you. Any unit landing on the Nexus breaks it, yours included.',

@@ -8,6 +8,14 @@ import { acceptState } from '../game/migrate';
 import { gameOver } from '../game/rules';
 import { useGame } from '../store';
 import { GUEST_KEY, RESUME_KEY, RESUME_MAX_AGE_MS, TAB_SAVE_KEY } from './saveKeys';
+import {
+  addPending,
+  buildResult,
+  clearPending,
+  readHotseatName,
+  readPending,
+  type HotseatResult,
+} from './hotseatResults';
 
 export type Screen = 'landing' | 'auth' | 'guest' | 'lobby' | 'game';
 
@@ -124,6 +132,11 @@ interface NetState {
   /** Owner-only: the stored print-and-play signup emails, viewable in-app. */
   pnpRows: PnpRow[] | null;
   fetchPnpList: () => void;
+  /** Main-page "Game Results": the latest finished hotseat matches. */
+  hotseatResults: HotseatResult[] | null;
+  fetchHotseatResults: () => void;
+  /** Store a finished hotseat match (kept locally until the server confirms). */
+  sendHotseatResult: (r: HotseatResult) => void;
 }
 
 /** One stored print-and-play signup (owner viewer). */
@@ -235,6 +248,22 @@ useGame.subscribe((state, prev) => {
   if (state.game !== prev.game && state.online && !applyingRemote) {
     sendWs({ t: 'state', state: state.game });
   }
+});
+
+// Hotseat results: record a local match the moment it ends, under the name
+// asked for before it started. `armed` stops a match being recorded twice; it
+// re-arms when a fresh game (round 1, not over) is on the board.
+let hotseatArmed = true;
+useGame.subscribe((state, prev) => {
+  if (state.game === prev.game) return;
+  const over = gameOver(state.game);
+  if (!over && state.game.turn === 1) hotseatArmed = true;
+  if (!over || gameOver(prev.game) || !hotseatArmed) return;
+  if (state.online || state.tutorial || !state.started) return;
+  const result = buildResult(state.game, state.bots, readHotseatName());
+  if (!result) return;
+  hotseatArmed = false;
+  useNet.getState().sendHotseatResult(result);
 });
 
 export const useNet = create<NetState>((set, get) => {
@@ -486,6 +515,12 @@ export const useNet = create<NetState>((set, get) => {
       case 'pnpOk':
         set({ pnpDone: true });
         break;
+      case 'hotseatResults':
+        set({ hotseatResults: (m.rows as HotseatResult[]) ?? [] });
+        break;
+      case 'hotseatResultOk':
+        if (typeof m.rid === 'string') clearPending(m.rid);
+        break;
       case 'error':
         set({ notice: m.message as string });
         break;
@@ -511,6 +546,7 @@ export const useNet = create<NetState>((set, get) => {
     feedbackRows: null,
     pnpDone: false,
     pnpRows: null,
+    hotseatResults: null,
 
     init: () => {
       // Page wake-ups: a player returning from another app or window gets their
@@ -588,6 +624,18 @@ export const useNet = create<NetState>((set, get) => {
     },
     fetchPnpList: () => {
       ensureSocket(() => sendWs({ t: 'pnpList' }));
+    },
+    fetchHotseatResults: () => {
+      // Anything that didn't reach the server last time goes first, so the
+      // list that comes back already includes it.
+      ensureSocket(() => {
+        for (const r of readPending()) sendWs({ t: 'hotseatResult', ...r });
+        sendWs({ t: 'hotseatResults' });
+      });
+    },
+    sendHotseatResult: (r) => {
+      addPending(r);
+      ensureSocket(() => sendWs({ t: 'hotseatResult', ...r }));
     },
     pnpSignup: (email) => {
       set({ pnpDone: false });

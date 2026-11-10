@@ -74,6 +74,13 @@ async function initStore() {
   await pool.query(
     'CREATE TABLE IF NOT EXISTS pnp (email text PRIMARY KEY, created timestamptz DEFAULT now())',
   );
+  // Hotseat "Game Results": one row per finished local match, under the name
+  // the player typed before it started.
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS hotseat_results (id serial PRIMARY KEY, created timestamptz DEFAULT now(),
+     rid text UNIQUE, name text NOT NULL, outcome text NOT NULL, color text, winner text, method text,
+     rounds int, kills int, opponents text)`,
+  );
   console.log('Using Postgres for accounts.');
 }
 
@@ -183,6 +190,7 @@ async function flushFeedbackEmails() {
 // Feedback + PnP signups fall back to local JSON files in dev.
 const FEEDBACK_FILE = join(DATA_DIR, 'feedback.json');
 const PNP_FILE = join(DATA_DIR, 'pnp.json');
+const HOTSEAT_FILE = join(DATA_DIR, 'hotseat-results.json');
 const appendJson = (file, entry) => {
   let list = [];
   try {
@@ -209,6 +217,74 @@ async function savePnp(email) {
     await pool.query('INSERT INTO pnp(email) VALUES($1) ON CONFLICT (email) DO NOTHING', [email]);
   } else {
     appendJson(PNP_FILE, { email, created: new Date().toISOString() });
+  }
+}
+
+// ---- Hotseat Game Results ---------------------------------------------------
+const COLORS_OK = new Set(['red', 'blue', 'green', 'yellow']);
+const OUTCOMES = new Set(['Victory', 'Defeat', 'Draw']);
+const METHODS = new Set(['MageStone', 'Ritual', 'Conquest', 'Draw']);
+/** Validate a client-sent hotseat result; null when it doesn't look right. */
+function cleanHotseat(m) {
+  const str = (v, n) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, n) : '');
+  const int = (v) => (Number.isInteger(v) && v >= 0 && v < 10000 ? v : 0);
+  const r = {
+    rid: str(m.rid, 40),
+    name: str(m.name, 24),
+    outcome: OUTCOMES.has(m.outcome) ? m.outcome : null,
+    color: COLORS_OK.has(m.color) ? m.color : null,
+    winner: COLORS_OK.has(m.winner) ? m.winner : null,
+    method: METHODS.has(m.method) ? m.method : null,
+    rounds: int(m.rounds),
+    kills: int(m.kills),
+    opponents: Array.isArray(m.opponents)
+      ? m.opponents.slice(0, 3).map((o) => str(o, 24)).filter(Boolean)
+      : [],
+  };
+  if (!r.rid || !r.name || !r.outcome || !r.color || !r.method) return null;
+  return r;
+}
+async function saveHotseat(r) {
+  if (pool) {
+    await pool.query(
+      `INSERT INTO hotseat_results(rid, name, outcome, color, winner, method, rounds, kills, opponents)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (rid) DO NOTHING`,
+      [r.rid, r.name, r.outcome, r.color, r.winner, r.method, r.rounds, r.kills, JSON.stringify(r.opponents)],
+    );
+    return;
+  }
+  let list = [];
+  try {
+    if (existsSync(HOTSEAT_FILE)) list = JSON.parse(readFileSync(HOTSEAT_FILE, 'utf8'));
+  } catch {
+    list = [];
+  }
+  if (list.some((x) => x.rid === r.rid)) return;
+  list.push({ ...r, created: new Date().toISOString() });
+  writeFileSync(HOTSEAT_FILE, JSON.stringify(list, null, 2));
+}
+async function listHotseat(limit) {
+  if (pool) {
+    const q = await pool.query(
+      `SELECT rid, created, name, outcome, color, winner, method, rounds, kills, opponents
+       FROM hotseat_results ORDER BY created DESC LIMIT $1`,
+      [limit],
+    );
+    return q.rows.map((r) => {
+      let opponents = [];
+      try {
+        opponents = JSON.parse(r.opponents || '[]');
+      } catch {
+        opponents = [];
+      }
+      return { ...r, opponents };
+    });
+  }
+  try {
+    if (!existsSync(HOTSEAT_FILE)) return [];
+    return JSON.parse(readFileSync(HOTSEAT_FILE, 'utf8')).slice().reverse().slice(0, limit);
+  } catch {
+    return [];
   }
 }
 
@@ -769,6 +845,21 @@ async function handle(ws, s, m) {
         }
       }
       return send(ws, { t: 'pnpList', rows });
+    }
+    case 'hotseatResult': {
+      // Public, account-free: a finished hotseat match. A few per minute per
+      // connection is plenty for real games and stops a script flooding it.
+      const now = Date.now();
+      s.hotseatTimes = (s.hotseatTimes || []).filter((t) => now - t < 60_000);
+      if (s.hotseatTimes.length >= 5) return;
+      const r = cleanHotseat(m);
+      if (!r) return;
+      s.hotseatTimes.push(now);
+      await saveHotseat(r);
+      return send(ws, { t: 'hotseatResultOk', rid: r.rid });
+    }
+    case 'hotseatResults': {
+      return send(ws, { t: 'hotseatResults', rows: await listHotseat(50) });
     }
     case 'leaveGame':
       return leaveRoom(ws, s);

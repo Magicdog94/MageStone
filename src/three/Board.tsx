@@ -2,9 +2,10 @@ import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useTexture } from '@react-three/drei';
-import { NEXUS_CELLS, allCells, cellKey, edgeRotation, N } from '../game/board';
+import { NEXUS_CELLS, allCells, cellKey, edgeRotation, exists, N } from '../game/board';
 import type { Cell } from '../game/types';
-import { besiegersOf, siegedPlayers } from '../game/rules';
+import { besiegersOf, canNova, novaVictims, siegedPlayers, unitById } from '../game/rules';
+import { tutAllows } from '../ui/tutorial/restrict';
 import { BOARD, CELL, COLORS, FLOOR_Y, TABLE_HALF, TILE_SURFACE, cellToWorld } from './coords';
 import { emeraldBoardTexture, groundBumpTexture, planksBumpTexture, woodBumpTexture } from './textures';
 import { activeRestrict, attackTargetIds, moveDestinations, useGame } from '../store';
@@ -269,10 +270,30 @@ function RitualGlow({ color }: { color: string }) {
   );
 }
 
+/** A pulsing ring on the square a hint points at. */
+function HintRing() {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame(({ clock }) => {
+    const m = ref.current;
+    if (!m) return;
+    const k = 1 + 0.12 * Math.sin(clock.elapsedTime * 5);
+    m.scale.set(k, k, 1);
+  });
+  return (
+    // Drawn over any stone or gravestone stacked on the square.
+    <mesh ref={ref} position={[0, TILE_TOP + 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={12}>
+      <ringGeometry args={[0.36, 0.5, 32]} />
+      <meshBasicMaterial color={BOARD.hint} transparent opacity={0.95} depthTest={false} />
+    </mesh>
+  );
+}
+
 function Tile({
   cell,
   legal,
   target,
+  nova,
+  hint,
   baseColor,
   siege,
   ritual,
@@ -282,6 +303,11 @@ function Tile({
   cell: Cell;
   legal: boolean;
   target: boolean;
+  /** Inside the selected Mage's Nova blast: 'area' (empty or friendly — safe)
+   *  or 'victim' (an enemy Nova would destroy). */
+  nova: 'area' | 'victim' | null;
+  /** The square a requested hint points at. */
+  hint: boolean;
   /** Team colour for a home-base tile, or null for ordinary tiles. */
   baseColor: string | null;
   /** Besieging team's colour when this base tile's owner is under siege, else null. */
@@ -374,6 +400,26 @@ function Tile({
           <meshBasicMaterial color={BOARD.target} transparent opacity={0.95} />
         </mesh>
       )}
+      {/* Nova's reach: all 8 squares round the Mage wash amber, and every enemy
+          it will destroy, diagonals included, gets the red "will be hit" ring. */}
+      {nova && (
+        <mesh position={[0, TILE_TOP + 0.016, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={2}>
+          <planeGeometry args={[CELL * TILE_INSET, CELL * TILE_INSET]} />
+          <meshBasicMaterial
+            color={BOARD.nova}
+            transparent
+            opacity={nova === 'victim' ? 0.75 : 0.55}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+      {nova === 'victim' && !target && (
+        <mesh position={[0, TILE_TOP + 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.3, 0.46, 28]} />
+          <meshBasicMaterial color={BOARD.target} transparent opacity={0.95} />
+        </mesh>
+      )}
+      {hint && <HintRing />}
     </group>
   );
 }
@@ -445,6 +491,30 @@ export function Board() {
     const ids = attackTargetIds(game, selUnit, tutRestrict);
     return new Set(game.units.filter((u) => ids.has(u.id)).map((u) => cellKey(u.cell)));
   }, [game, selUnit, tutRestrict]);
+  // Nova's blast, shown whenever the selected Mage could cast it right now.
+  const myTurnHere = useGame(
+    (s) => !s.bots[s.game.current] && (!s.online || s.game.current === s.myColor),
+  );
+  const novaCells = useMemo(() => {
+    const m = new Map<string, 'area' | 'victim'>();
+    if (!myTurnHere || !selUnit || game.turnPhase !== 'act') return m;
+    const mage = unitById(game, selUnit);
+    if (!mage || mage.kind !== 'mage' || !canNova(game, mage.id) || !tutAllows(tutRestrict, 'nova')) return m;
+    const victims = new Set(novaVictims(game, mage.id).map((u) => cellKey(u.cell)));
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const r = mage.cell.r + dr;
+        const c = mage.cell.c + dc;
+        if (!exists(r, c)) continue;
+        const k = cellKey({ r, c });
+        m.set(k, victims.has(k) ? 'victim' : 'area');
+      }
+    }
+    return m;
+  }, [game, selUnit, tutRestrict, myTurnHere]);
+  // A live hint lights its square (dropped as soon as the board changes).
+  const hintKey = useGame((s) => (s.hint && s.hint.forGame === s.game && s.hint.cell ? cellKey(s.hint.cell) : null));
 
   // Home-base tiles get their seated team's colour. Seats are decoupled from
   // colour, so look up which playing colour occupies each edge this game.
@@ -488,6 +558,8 @@ export function Board() {
             bump={bump}
             legal={legalKeys.has(k)}
             target={targetKeys.has(k)}
+            nova={novaCells.get(k) ?? null}
+            hint={hintKey === k}
             baseColor={baseColor}
             siege={rot !== null ? siegeGlowBySeat.get(rot) ?? null : null}
             ritual={ritualColor && ritualKeys.has(k) ? ritualColor : null}

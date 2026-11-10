@@ -29,12 +29,16 @@ import {
 import type { GameState } from '../../game/types';
 import { TUT_LOCK, tutAllows, type TutRestrict } from './restrict';
 import {
+  ATTACK_TRIO,
   MOVE_RESTRICT,
+  OPENING,
   TASKS,
+  freshGo,
   ritualBeat,
   stagedGame,
   type TaskSpec,
 } from './tutorialTasks';
+import { createTutorialGame } from '../../game/tutorialSetup';
 
 const HI = 0.999999; // a die's top face
 const LO = 0; //         …and a 1
@@ -143,7 +147,7 @@ describe('Tutorial sweep — no allowed move can strand the player', () => {
   });
 
   it('opening: the first free move is always available', () => {
-    const start = stagedGame(() => {});
+    const start = createTutorialGame();
     const moves = gestures(start, MOVE_RESTRICT);
     expect(moves.length).toBeGreaterThan(0);
     expect(moves.every((m) => m.unitsMovedThisTurn.length >= 1)).toBe(true);
@@ -166,5 +170,31 @@ describe('Tutorial sweep — no allowed move can strand the player', () => {
     const won = reachable(stagedGame(TASKS.win1.build), TASKS.win1.restrict).filter(TASKS.win1.done);
     expect(won.length).toBeGreaterThan(0);
     for (const s of won) expect(s.winMethod).toBe('MageStone');
+  });
+});
+
+describe('Tutorial opening — no pieces jump between the move and attack lessons', () => {
+  it('the tutorial board starts with the attack ring already in place', () => {
+    const st = createTutorialGame();
+    for (const [id, cell] of Object.entries(OPENING)) {
+      expect(st.units.find((u) => u.id === id)?.cell).toEqual(cell);
+    }
+  });
+
+  it('after ANY first move, a fresh go makes the TRIPLE attack finishable on the same board', () => {
+    const start = createTutorialGame();
+    const moves = gestures(start, MOVE_RESTRICT);
+    expect(moves.length).toBeGreaterThan(0);
+    for (const m of moves) {
+      // the ring itself never moved
+      for (const id of ATTACK_TRIO) {
+        expect(m.units.find((u) => u.id === id)?.cell).toEqual(OPENING[id]);
+      }
+      const next = freshGo(m);
+      expect(next.current).toBe('red');
+      expect(slotsLeft(next, 'red')).toBe(slotsLeft(start, 'red'));
+      expect(TASKS.attack.done(next)).toBe(false);
+      expectNoDeadEnds(next, TASKS.attack);
+    }
   });
 });

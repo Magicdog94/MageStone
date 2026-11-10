@@ -37,6 +37,8 @@ export const BOARD = {
   // framed by the raised gold lattice.
   highlight: '#56e0a8', // legal-move tile tint
   target: '#ff5a4d', // attack-target ring
+  nova: '#ff9a1f', // Nova blast-area wash
+  hint: '#6fd3ff', // hint ring
   gold: '#cba65a', // gold lattice + nexus tiles
   stone: '#dfeae2', // neutral tile multiplier — lets the emerald marble show
   nexus: '#e2cb9c', // light gilded multiplier — lets the drawn Nexus emblem read

@@ -74,14 +74,15 @@ import { N, NEXUS_CELLS, allCells, edgeRotation, exists, sameCell } from './boar
 import type { Cell, Die, GameState, PlayerColor, Unit, UnitKind } from './types';
 
 export type BotLevel = 'easy' | 'medium' | 'hard';
-/** The ONE difficulty offered in the UI — every AI seat runs the full search
- *  brain. ('easy'/'medium' remain as internal levels: the greedy fallback,
- *  legacy saved games and old online clients still resolve.) */
-export const BOT_LEVELS: BotLevel[] = ['hard'];
+/** The difficulties offered in the UI, easiest first. Easy and Medium are the
+ *  greedy one-ply brains (Easy also plays a random move half the time); Hard
+ *  runs the full search. New players start on Easy (playtest, v0.16.0). */
+export const BOT_LEVELS: BotLevel[] = ['easy', 'medium', 'hard'];
+export const DEFAULT_BOT_LEVEL: BotLevel = 'easy';
 export const BOT_LABEL: Record<BotLevel, string> = {
-  easy: 'AI Bot',
-  medium: 'AI Bot',
-  hard: 'AI Bot',
+  easy: 'Easy Bot',
+  medium: 'Medium Bot',
+  hard: 'Hard Bot',
 };
 
 /** One step of a bot's act phase. `null` = nothing worth doing → end the turn. */

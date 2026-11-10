@@ -7,7 +7,7 @@
 // (and any task that carries on from its board) can still be finished — so no
 // allowed move can ever strand a player.
 import { createGame } from '../../game/setup';
-import { NEXUS_CELLS } from '../../game/board';
+import { NEXUS_CELLS, allCells } from '../../game/board';
 import { endActivation, syncStones, unitById, warriorCount } from '../../game/rules';
 import type { Cell, GameState, Unit } from '../../game/types';
 import type { TutRestrict } from './restrict';
@@ -48,9 +48,41 @@ export interface TaskSpec {
   done: (st: GameState) => boolean;
 }
 
-/** The first move: any unit, any square its allowance reaches — just no
+/** The three Red Warriors already standing round Blue's lone Warrior from the
+ *  very first frame, ready for the attack lesson. */
+export const ATTACK_TRIO = ['red-w1', 'red-w2', 'red-w3'];
+/** The opening board (also createTutorialGame's): Blue's Warrior in the middle
+ *  with Red's three Warriors on three sides of it. The board is NOT re-staged
+ *  between the move and attack lessons (a playtester saw pieces jump about and
+ *  lost track), so the attack lesson starts from exactly what the player sees. */
+export const OPENING: Record<string, Cell> = {
+  'blue-w1': { r: 6, c: 7 },
+  'red-w1': { r: 5, c: 7 },
+  'red-w2': { r: 7, c: 7 },
+  'red-w3': { r: 6, c: 6 },
+};
+/** Blue's one open side: kept clear in the move lesson so the attack lesson
+ *  is still a plain TRIPLE attack. */
+const OPEN_SIDE: Cell = { r: 6, c: 8 };
+
+/** The first move: any unit except the attack trio (they wait for the next
+ *  lesson), any square its allowance reaches except Blue's open side, no
  *  actions and no passing. */
-export const MOVE_RESTRICT: TutRestrict = { actions: [] };
+export const MOVE_RESTRICT: TutRestrict = {
+  units: ['red-w4', 'red-w5', 'red-w6', 'red-p', 'red-m'],
+  dests: allCells().filter((c) => !(c.r === OPEN_SIDE.r && c.c === OPEN_SIDE.c)),
+  actions: [],
+};
+
+/**
+ * Between the move and attack lessons: Red's go ends and Blue passes, so Red
+ * starts a fresh go (all eight squares and three units) on the same board.
+ */
+export function freshGo(st: GameState): GameState {
+  let t = endActivation(st);
+  for (let i = 0; i < 4 && t.current !== 'red'; i++) t = endActivation(t);
+  return t;
+}
 
 /** Red's home base row. */
 const RED_BASE: Cell[] = Array.from({ length: 8 }, (_, i) => ({ r: 0, c: 4 + i }));
@@ -58,15 +90,12 @@ const RED_BASE: Cell[] = Array.from({ length: 8 }, (_, i) => ({ r: 0, c: 4 + i }
 export const TASKS = {
   attack: {
     build: (st) => {
-      at(st, 'blue-w1').cell = { r: 6, c: 7 };
-      at(st, 'red-w1').cell = { r: 5, c: 7 };
-      at(st, 'red-w2').cell = { r: 7, c: 7 };
-      at(st, 'red-w3').cell = { r: 6, c: 6 };
+      for (const [id, cell] of Object.entries(OPENING)) at(st, id).cell = { ...cell };
     },
     // The three surrounding Warriors, the one enemy, TRIPLE only — no wandering
     // off and breaking the ring.
     restrict: {
-      units: ['red-w1', 'red-w2', 'red-w3'],
+      units: ATTACK_TRIO,
       dests: [],
       actions: ['attack'],
       targets: ['blue-w1'],

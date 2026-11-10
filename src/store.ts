@@ -15,6 +15,7 @@ import {
   collect,
   combatOdds,
   endActivation,
+  gameOver,
   isBudget,
   legalMoves,
   magePowerDie,
@@ -34,6 +35,7 @@ import {
 import { sameCell } from './game/board';
 import type { Cell, GameState, PlayerColor, UnitKind } from './game/types';
 import type { BotLevel } from './game/bot';
+import { suggestHint, type Hint } from './game/hint';
 import { TUT_LOCK, tutAllows, type TutRestrict } from './ui/tutorial/restrict';
 
 export type HealthBarMode = 'off' | 'always' | 'hover';
@@ -207,6 +209,15 @@ interface UIState {
   showCombatRoll: (info: Omit<CombatRollInfo, 'nonce'> | null) => void;
   /** The "X attacks Y — 3d6 vs d6" banner, shown while the dice tumble. */
   combatIntro: CombatIntro | null;
+  /** Keep the landed combat dice (and their result banner) on screen until
+   *  this is cleared. The tutorial holds them while it talks about the fight. */
+  holdCombat: boolean;
+  setHoldCombat: (hold: boolean) => void;
+  /** The hint on screen, valid only while `game` is still `hint.forGame`. */
+  hint: (Hint & { forGame: GameState }) | null;
+  /** Ask the Hard brain what the current (human) player should do. */
+  showHint: () => void;
+  clearHint: () => void;
 
   playerCount: number;
   /** Team colours selected for the local game, in clockwise turn order. Each
@@ -344,6 +355,22 @@ export const useGame = create<UIState>((set, get) => ({
   combatNonce: 0,
   combatRoll: null,
   combatIntro: null,
+  holdCombat: false,
+  setHoldCombat: (hold) => set({ holdCombat: hold }),
+  hint: null,
+  showHint: () => {
+    const s = get();
+    if (s.game.turnPhase !== 'act' || gameOver(s.game)) return;
+    const h = suggestHint(s.game);
+    const unitId = h.action?.unitId ?? null;
+    set({
+      hint: { ...h, forGame: s.game },
+      // Select the unit the hint is about so its moves and buttons show.
+      selectedUnitId: unitId,
+      boltMode: false,
+    });
+  },
+  clearHint: () => set({ hint: null }),
   playerCount: 2,
   playerColors: playerSet(2),
   stoneLayoutId: 'diamond',

@@ -1,8 +1,7 @@
 // A hand-arranged starting position for the interactive Tutorial mode. It's a
-// normal 2-player game (red = the learner, blue = the opponent) but with a few
-// units pre-placed around the centre so the guided script can demonstrate
-// movement and a coordinated Warrior attack within the very first turn, instead
-// of the many turns it would take from the default home formations.
+// normal 2-player game (red = the learner, blue = the opponent) with three Red
+// Warriors already ringing a Blue Warrior near the centre, ready for the attack
+// lesson; the move lesson uses the rest of Red's army.
 
 import { createGame } from './setup';
 import { syncStones } from './rules';
@@ -15,14 +14,14 @@ export function createTutorialGame(): GameState {
     if (u) u.cell = { ...cell };
   };
 
-  // Blue lone Warrior in the middle — the target of the demo attack.
+  // Blue's lone Warrior in the middle with three Red Warriors already on three
+  // sides of it — the attack lesson's ring, in place from the first frame so
+  // nothing is moved about between lessons. Must match tutorialTasks.ts
+  // OPENING (a test checks).
   place('blue-w1', { r: 6, c: 7 });
-  // Two red Warriors already flanking it (top and right), plus a third a couple
-  // of squares to the west that the script walks in to complete the encirclement
-  // and demonstrate a full Triple Attack (mover re-uses its move die).
   place('red-w1', { r: 5, c: 7 }); // above the target
-  place('red-w2', { r: 6, c: 8 }); // right of the target
-  place('red-w3', { r: 6, c: 4 }); // the mover → steps to (6,6), west of target
+  place('red-w2', { r: 7, c: 7 }); // below the target
+  place('red-w3', { r: 6, c: 6 }); // left of the target
 
   // Give the red Mage a couple of carried stones so the "activated MageStones"
   // metric has something to point at during the UI tour. Carrying is a property

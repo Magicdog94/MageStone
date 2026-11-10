@@ -30,6 +30,7 @@ import { TurnTimer } from './TurnTimer';
 import { Modals } from './Modals';
 import { Tutorial } from './Tutorial';
 import { FeedbackModal } from './FeedbackModal';
+import { HINT_LEVELS } from '../game/hint';
 import { BookIcon, CameraLockIcon, CogIcon, GraveIcon } from './Icons';
 
 const KIND_LABEL = { warrior: 'Warrior', mage: 'Mage', priest: 'Priest' } as const;
@@ -290,6 +291,18 @@ export function HUD() {
   const label = usePlayerLabel();
   // A bot's turn is never "my turn" — the BotDriver plays it; humans watch.
   const myTurn = !bots[game.current] && (!online || game.current === myColor);
+  // Hints: offered to the humans playing an Easy or Medium bot.
+  const showHint = useGame((s) => s.showHint);
+  const clearHint = useGame((s) => s.clearHint);
+  const hint = useGame((s) => (s.hint && s.hint.forGame === s.game ? s.hint : null));
+  const inTutorial = useGame((s) => s.tutorial);
+  const hintsOn =
+    !online &&
+    !inTutorial &&
+    myTurn &&
+    game.turnPhase === 'act' &&
+    !gameOver(game) &&
+    Object.values(bots).some((l) => !!l && HINT_LEVELS.includes(l));
   const netStatus = useNet((s) => s.status);
   const netRoom = useNet((s) => s.room);
   const netDown = netStatus !== 'online' || !netRoom;
@@ -464,6 +477,15 @@ export function HUD() {
           </div>
         ))}
 
+      {hintsOn && hint && (
+        <div className="hint-note" role="status">
+          <span className="hint-tag">Hint</span>
+          <span className="hint-text">{hint.text}</span>
+          <button className="hint-close" onClick={clearHint} aria-label="Close hint">
+            ×
+          </button>
+        </div>
+      )}
       <SiegeBanner />
       <EliminationToast />
       {/* no Settings during the guided tutorial — its Main Menu / New Game
@@ -624,6 +646,15 @@ export function HUD() {
                       }
                     >
                       Undo
+                    </button>
+                  )}
+                  {hintsOn && (
+                    <button
+                      className="ghost hint-btn"
+                      onClick={showHint}
+                      title="Suggest a good play for this go, and say why"
+                    >
+                      Hint
                     </button>
                   )}
                   <button

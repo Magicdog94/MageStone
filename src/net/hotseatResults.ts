@@ -93,7 +93,7 @@ export function readPending(): HotseatResult[] {
 }
 function writePending(list: HotseatResult[]): void {
   try {
-    localStorage.setItem(PENDING_KEY, JSON.stringify(list.slice(-20)));
+    localStorage.setItem(PENDING_KEY, JSON.stringify(list));
   } catch {
     /* storage blocked */
   }

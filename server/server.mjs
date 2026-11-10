@@ -263,12 +263,13 @@ async function saveHotseat(r) {
   list.push({ ...r, created: new Date().toISOString() });
   writeFileSync(HOTSEAT_FILE, JSON.stringify(list, null, 2));
 }
-async function listHotseat(limit) {
+/** EVERY stored hotseat result, newest first. Rows are never deleted and the
+ *  list is never cut short: Game Results shows them all. */
+async function listHotseat() {
   if (pool) {
     const q = await pool.query(
       `SELECT rid, created, name, outcome, color, winner, method, rounds, kills, opponents
-       FROM hotseat_results ORDER BY created DESC LIMIT $1`,
-      [limit],
+       FROM hotseat_results ORDER BY created DESC, id DESC`,
     );
     return q.rows.map((r) => {
       let opponents = [];
@@ -282,7 +283,7 @@ async function listHotseat(limit) {
   }
   try {
     if (!existsSync(HOTSEAT_FILE)) return [];
-    return JSON.parse(readFileSync(HOTSEAT_FILE, 'utf8')).slice().reverse().slice(0, limit);
+    return JSON.parse(readFileSync(HOTSEAT_FILE, 'utf8')).slice().reverse();
   } catch {
     return [];
   }
@@ -847,11 +848,13 @@ async function handle(ws, s, m) {
       return send(ws, { t: 'pnpList', rows });
     }
     case 'hotseatResult': {
-      // Public, account-free: a finished hotseat match. A few per minute per
-      // connection is plenty for real games and stops a script flooding it.
+      // Public, account-free: a finished hotseat match. 30 a minute per
+      // connection is far more than real games need and stops a script
+      // flooding it. A result over the limit gets no ack, so the client keeps
+      // it and sends it again later: nothing is lost.
       const now = Date.now();
       s.hotseatTimes = (s.hotseatTimes || []).filter((t) => now - t < 60_000);
-      if (s.hotseatTimes.length >= 5) return;
+      if (s.hotseatTimes.length >= 30) return;
       const r = cleanHotseat(m);
       if (!r) return;
       s.hotseatTimes.push(now);
@@ -859,7 +862,7 @@ async function handle(ws, s, m) {
       return send(ws, { t: 'hotseatResultOk', rid: r.rid });
     }
     case 'hotseatResults': {
-      return send(ws, { t: 'hotseatResults', rows: await listHotseat(50) });
+      return send(ws, { t: 'hotseatResults', rows: await listHotseat() });
     }
     case 'leaveGame':
       return leaveRoom(ws, s);

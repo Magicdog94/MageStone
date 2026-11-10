@@ -2,8 +2,6 @@ import { useEffect } from 'react';
 import { useNet } from '../../net/useNet';
 import type { HotseatResult } from '../../net/hotseatResults';
 
-const SHOWN = 25;
-
 function when(iso?: string): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -41,8 +39,9 @@ function ResultsTable({ rows }: { rows: HotseatResult[] }) {
   );
 }
 
-/** Bottom of the main page: the latest finished hotseat games, by the name
- *  each player gave before starting. */
+/** Bottom of the main page: EVERY finished hotseat game, newest first, by the
+ *  name each player gave before starting. Never trimmed: the list grows as
+ *  long as it needs to. */
 export function GameResults() {
   const rows = useNet((s) => s.hotseatResults);
   const fetchHotseatResults = useNet((s) => s.fetchHotseatResults);
@@ -51,13 +50,15 @@ export function GameResults() {
   }, [fetchHotseatResults]);
   return (
     <section className="game-results" id="game-results" aria-label="Game Results">
-      <h2 className="game-results-title">Game Results</h2>
+      <h2 className="game-results-title">
+        Game Results{rows && rows.length > 0 ? ` (${rows.length})` : ''}
+      </h2>
       {!rows ? (
         <div className="lb-empty">Loading…</div>
       ) : rows.length === 0 ? (
         <div className="lb-empty">No hotseat games recorded yet.</div>
       ) : (
-        <ResultsTable rows={rows.slice(0, SHOWN)} />
+        <ResultsTable rows={rows} />
       )}
     </section>
   );

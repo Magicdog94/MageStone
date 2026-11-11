@@ -1,8 +1,9 @@
 // Bumped with each notable alpha update — shown in the landing footer.
-export const VERSION = 'v0.16.0-alpha';
-export const UPDATED = '10 November 2026';
+export const VERSION = 'v0.16.1-alpha';
+export const UPDATED = '11 November 2026';
 
 export const PATCH_NOTES = [
+  'v0.16.1 — GAME RESULTS SHOW THE BOSS. The Game Results table has a new Boss column saying who you played: an Easy, Medium or Hard bot, or a human. Results saved before this update did not record the bot’s level, so they show just “Bot”. No result has been removed.',
   'v0.16.0 — EASIER TO LEARN, FROM A PLAYTESTER’S REPORT. A tester lost nine games in a row to the AI and could not tell what to do or why, so: (1) EASY, MEDIUM AND HARD BOTS. Every AI seat now has a difficulty. Easy and Medium also take their time over each play, and Hard is the bot you knew before. (2) HINTS. Against an Easy or Medium bot a Hint button sits by End Turn: it lights up a good play and says why in plain words. (3) A PRACTICE GAME AFTER THE TUTORIAL. Finishing the tutorial now drops you straight into a game against the Easy bot. (4) A CALMER TUTORIAL. The three Warriors for the attack lesson are in place from the start, so nothing jumps about after your first move; the fight result stays up until you have read it; every lesson pauses on its result before the next board appears; and a few notes explain a little more. (5) NOVA SHOWS WHAT IT HITS. Select a Mage that can cast Nova and its 8 surrounding squares glow, with a red ring on every enemy it will destroy, diagonals included. The tutorial also explains that the 4 spent stones then land on the diagonals. (6) Combat results now stay on screen for 4.5 seconds instead of 2.4.',
   'v0.15.4 — EVERY GAME RESULT STAYS. Game Results on the main page now lists every hotseat game ever recorded, newest first, instead of only the latest 25. Results are never deleted or hidden, however long the list gets.',
   'v0.15.3 — GAME RESULTS. Hotseat games now ask “What is your name?” before they start. When the game ends, the result is saved under that name: Victory, Defeat or Draw, how it was won (MageStone, Ritual or Conquest), the round it ended in, your kills and who you played against. The latest results are listed under Game Results at the bottom of the main page (scroll down, or pick Game Results in the menu).',

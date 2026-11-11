@@ -26,7 +26,8 @@ export interface HotseatResult {
   rounds: number;
   /** Enemy units the named player defeated. */
   kills: number;
-  /** Everyone else at the table, e.g. "Blue (AI)", "Green". */
+  /** Everyone else at the table, e.g. "Blue (Hard AI)", "Green". Results saved
+   *  before v0.16.1 say just "(AI)", without the bot's difficulty. */
   opponents: string[];
   created?: string;
 }
@@ -76,8 +77,29 @@ export function buildResult(
     kills: game.kills?.[color] ?? 0,
     opponents: game.players
       .filter((p) => p !== color)
-      .map((p) => (bots[p] ? `${cap(p)} (AI)` : cap(p))),
+      .map((p) => {
+        const lvl = bots[p];
+        return lvl ? `${cap(p)} (${cap(lvl)} AI)` : cap(p);
+      }),
   };
+}
+
+/** The "Boss" column: what kind of opponent the player faced, read from the
+ *  saved opponent list. "Easy" / "Medium" / "Hard" for a bot (several bots of
+ *  different levels are listed hardest last), "Human" when every opponent was a
+ *  person, and "Bot" for results saved before the level was recorded. */
+export function bossOf(opponents: string[]): string {
+  const levels = ['Easy', 'Medium', 'Hard'];
+  const found = new Set<string>();
+  let unknownBot = false;
+  for (const o of opponents) {
+    const m = /\((Easy|Medium|Hard) AI\)$/.exec(o);
+    if (m) found.add(m[1]);
+    else if (/\(AI\)$/.test(o)) unknownBot = true;
+  }
+  if (found.size) return levels.filter((l) => found.has(l)).join(', ');
+  if (unknownBot) return 'Bot';
+  return 'Human';
 }
 
 // ---- results waiting to reach the server -----------------------------------

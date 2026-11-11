@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useNet } from '../../net/useNet';
-import type { HotseatResult } from '../../net/hotseatResults';
+import { bossOf, type HotseatResult } from '../../net/hotseatResults';
 
 function when(iso?: string): string {
   if (!iso) return '';
@@ -15,6 +15,7 @@ function ResultsTable({ rows }: { rows: HotseatResult[] }) {
         <tr>
           <th className="lb-col-name">Player</th>
           <th>Result</th>
+          <th title="The opponent you played: an Easy, Medium or Hard bot, or a human">Boss</th>
           <th>Won by</th>
           <th>Round</th>
           <th className="gr-hide-narrow">Kills</th>
@@ -27,6 +28,7 @@ function ResultsTable({ rows }: { rows: HotseatResult[] }) {
           <tr key={r.rid ?? i}>
             <td className="lb-col-name">{r.name}</td>
             <td className={`gr-outcome gr-${r.outcome.toLowerCase()}`}>{r.outcome}</td>
+            <td>{bossOf(r.opponents)}</td>
             <td>{r.method === 'Draw' ? '—' : r.method}</td>
             <td>{r.rounds}</td>
             <td className="gr-hide-narrow">{r.kills}</td>

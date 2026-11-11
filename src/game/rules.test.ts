@@ -1178,6 +1178,64 @@ describe('TEST 12 — Conquest', () => {
     expect(g.eliminated).toContain('blue'); // no units left on the board
     expect(g.winner).toBe('red');
   });
+
+  it('a player with no live Warriors is out, even with a Mage and Priest standing', () => {
+    let g = acting(['red', 'blue']);
+    g = { ...g, units: g.units.filter((u) => u.owner !== 'blue' || u.kind !== 'warrior' || u.id === 'blue-w1') };
+    g = place(g, 'blue-m', { r: 8, c: 8 });
+    g = give(g, 'blue-m', 1, 2);
+    expect(checkVictory(g).winner).toBeNull(); // one Warrior left — still in
+    g = checkVictory(defeatUnit(g, 'blue-w1'));
+    expect(g.eliminated).toEqual(['blue']);
+    expect(g.winner).toBe('red');
+    expect(g.winMethod).toBe('Conquest');
+    expect(g.units.some((u) => u.owner === 'blue')).toBe(false);
+    // The Mage's stones stay on the board where it stood, still Activated.
+    const left = g.stones.filter((st) => st.cell.r === 8 && st.cell.c === 8 && !st.carrier);
+    expect(left.length).toBe(3);
+    expect(left.filter((st) => st.activated).length).toBe(2);
+  });
+
+  it('in a 4-player game the player is knocked out and the game carries on', () => {
+    let g: GameState = { ...buildGame(['red', 'blue', 'green', 'yellow'], 'diamond'), turnPhase: 'act' };
+    const order = g.players;
+    const victim = order[1];
+    g = { ...g, units: g.units.filter((u) => u.owner !== victim || u.kind !== 'warrior') };
+    g = checkVictory(g);
+    expect(g.eliminated).toEqual([victim]);
+    expect(g.winner).toBeNull();
+    expect(g.units.some((u) => u.owner === victim)).toBe(false);
+    // Their turns are skipped: play goes from the first seat straight to the third.
+    expect(g.current).toBe(order[0]);
+    g = endActivation(g);
+    expect(g.current).toBe(order[2]);
+  });
+
+  it('a player who loses their own last Warrior mid-go hands play on', () => {
+    let g: GameState = { ...buildGame(['red', 'blue', 'green', 'yellow'], 'diamond'), turnPhase: 'act' };
+    const [first, second] = g.players;
+    g = { ...g, units: g.units.filter((u) => u.owner !== first || u.kind !== 'warrior' || u.id === `${first}-w1`) };
+    g = checkVictory(defeatUnit(g, `${first}-w1`));
+    expect(g.eliminated).toEqual([first]);
+    expect(g.current).toBe(second);
+    expect(g.winner).toBeNull();
+  });
+
+  it('ends a Rite run by a player who is eliminated', () => {
+    let g: GameState = { ...buildGame(['red', 'blue', 'green', 'yellow'], 'diamond'), turnPhase: 'act' };
+    const victim = g.players[2];
+    g = { ...g, ritual: { player: victim, priestId: `${victim}-p`, round: 1 } };
+    g = checkVictory({ ...g, units: g.units.filter((u) => u.owner !== victim || u.kind !== 'warrior') });
+    expect(g.ritual).toBeNull();
+  });
+
+  it('wins by Conquest in a 4-player game once only one player has Warriors', () => {
+    let g: GameState = { ...buildGame(['red', 'blue', 'green', 'yellow'], 'diamond'), turnPhase: 'act' };
+    const keep = g.players[3];
+    g = checkVictory({ ...g, units: g.units.filter((u) => u.owner === keep || u.kind !== 'warrior') });
+    expect(g.winner).toBe(keep);
+    expect(g.winMethod).toBe('Conquest');
+  });
 });
 
 // ---- Combat: no attacker advantage, an even fight is 50:50 ----------------
@@ -1364,11 +1422,10 @@ describe('Stalemate — mutual siege', () => {
     // Same shape, but red's "Warrior" is really a Mage holding six Activated
     // stones on its OWN base — that is a MageStone win, not a stalemate.
     let g = mutualSiege();
+    const mage = { ...at(g, 'red-w1'), id: 'red-m', kind: 'mage' as const, cell: { r: 0, c: 9 } };
     g = {
       ...g,
-      units: g.units.map((u) =>
-        u.id === 'red-w1' ? { ...u, id: 'red-m', kind: 'mage' as const, cell: { r: 0, c: 9 } } : u,
-      ),
+      units: [...g.units, mage],
       pendingRespawns: g.pendingRespawns.filter((pr) => pr.id !== 'red-m'),
     };
     g = checkVictory(give(g, 'red-m', 0, 6));

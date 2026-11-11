@@ -1270,8 +1270,12 @@ function sideScore(state: GameState, p: PlayerColor): number {
     }
   }
 
-  // fragility: a nearly-eliminated player lives one bad round from conquest
-  if (units.length <= 2) s -= (3 - units.length) * 45;
+  // fragility: losing your LAST Warrior eliminates you on the spot (and hands a
+  // 2-player game to the opponent by Conquest), so the last two are precious —
+  // and an enemy down to one or two is a target worth chasing (this term is
+  // subtracted for rivals, so it pulls the bot onto them as hard as it guards).
+  const wN = units.filter((u) => u.kind === 'warrior').length;
+  if (wN <= 2) s -= (3 - wN) * 70;
   const pending = state.pendingRespawns.filter((pr) => pr.owner === p).length;
   if (pending) {
     // A queued respawn whose base an enemy is HOLDING may never come back —

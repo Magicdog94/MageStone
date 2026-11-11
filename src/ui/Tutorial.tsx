@@ -232,12 +232,14 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <span className="htp-win-title">Conquest Victory</span>
-            Be the last player standing. A fallen Mage or Priest normally respawns on its home
-            square — if something stands there, it appears on the closest free square of the base
-            instead. But while an <em>enemy</em> stands on any base square (a <em>siege</em>) they
-            wait in a queue and only return once the base is clear again. A besieged player who
-            runs out of units on the board is <em>eliminated</em>: they take no more turns and
-            never respawn.
+            Be the last player standing. A player with <em>no live Warriors</em> on the board is{' '}
+            <em>eliminated</em> at once, even if their Mage and Priest are still standing: their
+            pieces leave the board (the Mage’s stones stay where it stood) and they take no more
+            turns. In a 2-player game that is an instant Conquest Victory; in a 4-player game the
+            rest play on, skipping that player, until one is left. A fallen Mage or Priest normally
+            respawns on its home square — if something stands there, it appears on the closest
+            free square of the base instead — but while an <em>enemy</em> stands on any base square
+            (a <em>siege</em>) they wait in a queue and only return once the base is clear again.
           </li>
         </ol>
         <h4 className="htp-sub">Stalemate — the one draw</h4>

@@ -43,7 +43,7 @@ export function PlayerStrip() {
           >
             <span className="pstat-name">{label(p)}</span>
             {out ? (
-              <span className="pstat-badge tip" data-tip="Eliminated — no units left">
+              <span className="pstat-badge tip" data-tip="Eliminated — no Warriors left">
                 OUT
               </span>
             ) : (

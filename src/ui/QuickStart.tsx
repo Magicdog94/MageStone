@@ -18,7 +18,7 @@ const CARDS: { title: string; icon: ReactNode; body: string }[] = [
     body:
       'Move your Mage onto a MageStone to pick it up, then carry it home to your base, where ' +
       'it activates by itself. Six Activated stones on your base wins. Holding the centre with your ' +
-      'Priest, or wiping out your rival, also wins.',
+      'Priest, or killing all your rival\u2019s Warriors, also wins.',
   },
   {
     title: 'Eight squares a turn',

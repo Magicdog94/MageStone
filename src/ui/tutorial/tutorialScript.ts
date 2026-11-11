@@ -450,7 +450,7 @@ export async function runTutorial(onDone: (completed: boolean) => void) {
     await note({
       id: 'wrap',
       title: 'One more way to win',
-      body: 'Conquest: destroy every enemy unit. Fallen Mages and Priests respawn on their base, unless an enemy stands on it. Next, a practice game against the Easy bot: press Hint any time you are stuck.',
+      body: 'Conquest: kill every enemy Warrior. A player with no Warriors left is out at once, even with a Mage and Priest alive. Next, a practice game against the Easy bot: press Hint any time you are stuck.',
       anchor: '.winner',
       placement: 'left',
       gotItLabel: 'Play practice game',

@@ -1537,19 +1537,33 @@ export function checkVictory(state: GameState): GameState {
   // so the derived mirrors are guaranteed fresh before victory is judged.
   state = syncStones(state);
 
-  // Eliminations first: a player reduced to ZERO units on the board (their
-  // Mage/Priest respawns locked out by a siege) is out of the game entirely —
-  // queued respawns are voided, and endTurn skips them from here on.
+  // Eliminations first. CONQUEST RULE: a player with ZERO live Warriors on the
+  // board is out of the game on the spot, whatever else they still have — a
+  // Mage or Priest cannot carry on alone. Their remaining units leave the board,
+  // every stone their Mage held (on the board or queued to respawn) is left
+  // where it stood, queued respawns are voided, and turns skip them from here on.
   let s = state;
   for (const p of s.players) {
     if (s.eliminated.includes(p)) continue;
-    if (s.units.some((u) => u.owner === p)) continue;
-    s = {
+    if (warriorCount(s, p) > 0) continue;
+    s = eliminatePlayer(s, p);
+  }
+
+  // Conquest: only one player left standing. In a 2-player game that is
+  // straight away, the moment the other side's last Warrior falls.
+  const standing = s.players.filter((p) => !s.eliminated.includes(p));
+  if (standing.length === 1 && s.players.length > 1) {
+    return {
       ...s,
-      eliminated: [...s.eliminated, p],
-      pendingRespawns: s.pendingRespawns.filter((pr) => pr.owner !== p),
-      log: [...s.log, `${p} is eliminated!`],
+      winner: standing[0],
+      winMethod: 'Conquest',
+      log: [...s.log, `${standing[0]} wins by conquest!`],
     };
+  }
+  if (standing.length === 0) {
+    // Cannot happen in normal play (one fight kills one unit), but never leave
+    // a game with nobody to move.
+    return { ...s, winner: null, winMethod: 'Draw', log: [...s.log, 'Nobody is left standing. The game is a draw.'] };
   }
 
   // MageStone victory: a Mage back on any cell of its own base carrying 6 OR
@@ -1566,17 +1580,6 @@ export function checkVictory(state: GameState): GameState {
     }
   }
 
-  // Conquest: only one player left standing.
-  const alive = activePlayers(s);
-  if (alive.length === 1 && s.players.length > 1) {
-    return {
-      ...s,
-      winner: alive[0],
-      winMethod: 'Conquest',
-      log: [...s.log, `${alive[0]} wins by conquest!`],
-    };
-  }
-
   // Stalemate: everyone left is besieging and besieged at once, with nothing
   // on the board but the Warriors holding each other's bases down. Checked
   // LAST, so a real victory always takes precedence over a draw.
@@ -1591,7 +1594,43 @@ export function checkVictory(state: GameState): GameState {
       ],
     };
   }
+  // Knocked out on their own go (their last Warrior lost a fight it started):
+  // the go ends there and play passes to the next player still in.
+  if (s.eliminated.includes(s.current)) return endActivation({ ...s, activationDice: [] });
   return s;
+}
+
+/**
+ * Knock `p` out of the game. Every unit they still have leaves the board; the
+ * MageStones their Mage was holding are left behind (on the Mage's square, or
+ * on their home square if the Mage was waiting to respawn) and keep their
+ * Activated state; queued respawns are voided; a Rite they had running ends.
+ */
+function eliminatePlayer(state: GameState, p: PlayerColor): GameState {
+  const mine = state.units.filter((u) => u.owner === p);
+  const queued = state.pendingRespawns.filter((pr) => pr.owner === p);
+  let s: GameState = state;
+  for (const u of mine) {
+    const ids = new Set(carriedStones(s, u.id).map((st) => st.id));
+    s = dropStones(s, ids, u.cell);
+  }
+  for (const pr of queued) {
+    const ids = new Set(carriedStones(s, pr.id).map((st) => st.id));
+    s = dropStones(s, ids, homeCell(s, p, pr.kind === 'mage' ? 8 : 7));
+  }
+  const ritualEnds = s.ritual?.player === p;
+  return syncStones({
+    ...s,
+    units: s.units.filter((u) => u.owner !== p),
+    pendingRespawns: s.pendingRespawns.filter((pr) => pr.owner !== p),
+    ritual: ritualEnds ? null : s.ritual,
+    eliminated: [...s.eliminated, p],
+    log: [
+      ...s.log,
+      `${p} has no Warriors left and is eliminated!`,
+      ...(ritualEnds ? ['The Ritual was broken.'] : []),
+    ],
+  });
 }
 
 // ---- Phase 5: end of turn ------------------------------------------------

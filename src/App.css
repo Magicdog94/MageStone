@@ -4170,6 +4170,9 @@ body.ui-mobile .hint-note {
 .gr-defeat {
   color: #e08a7a;
 }
+.gr-ragequit {
+  white-space: nowrap;
+}
 .gr-draw {
   color: var(--ink-dim);
 }

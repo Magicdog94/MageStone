@@ -230,6 +230,9 @@ interface UIState {
   /** False until the first game is started — the opening New Game modal is then
    *  mandatory (no Cancel/close) so the player must pick before the timer runs. */
   started: boolean;
+  /** A fresh id for each match started. Game Results use it as the result's id,
+   *  so one match can only ever be recorded once (finished or rage-quit). */
+  matchId: string;
   /** True while the guided Tutorial mode is running (TutorialCoach drives play). */
   tutorial: boolean;
   /** Live task guardrails (hands-on tutorial only) — see TutRestrict above. */
@@ -336,6 +339,11 @@ export function asTutorialScript<T>(fn: () => T): T {
 }
 const rx = (s: UIState): TutRestrict | null => (scriptDepth > 0 ? null : activeRestrict(s));
 
+/** A new id for a match: also the id its Game Results row is stored under. */
+export function newMatchId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export const useGame = create<UIState>((set, get) => ({
   game: createGame(2),
   selectedUnitId: null,
@@ -396,6 +404,7 @@ export const useGame = create<UIState>((set, get) => ({
   // before the turn timer starts (the timer pauses while any modal is open).
   modal: 'newGame',
   started: false,
+  matchId: newMatchId(),
   tutorial: false,
   tutRestrict: null,
   online: false,
@@ -486,6 +495,7 @@ export const useGame = create<UIState>((set, get) => ({
         rolling: false,
         modal: null,
         started: true,
+        matchId: newMatchId(),
         tutorial: false,
         tutRestrict: null,
       };

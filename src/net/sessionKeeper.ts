@@ -15,8 +15,12 @@ import { useGame } from '../store';
 import { gameOver } from '../game/rules';
 import { useNet } from './useNet';
 import { RESUME_KEY, TAB_SAVE_KEY } from './saveKeys';
+import { initMatchRecorder } from './matchRecorder';
 
 let unloadAllowed = false;
+/** Set once the match on screen was recorded as a rage quit as the page went
+ *  away (see matchRecorder): it must not be saved again after that. */
+let leftByUnload = false;
 
 /** Let the next unload through without the "Leave site?" prompt — for reloads
  *  the app starts itself, like crash recovery. */
@@ -44,6 +48,7 @@ function snapshot(): Record<string, unknown> | null {
     playerCount: s.playerCount,
     stoneLayoutId: s.stoneLayoutId,
     settings: s.settings,
+    matchId: s.matchId,
     savedAt: Date.now(),
   };
 }
@@ -55,6 +60,7 @@ export function initSessionKeeper(): () => void {
   const flush = () => {
     window.clearTimeout(timer);
     timer = undefined;
+    if (leftByUnload) return;
     const snap = snapshot();
     if (!snap) return;
     try {
@@ -130,8 +136,33 @@ export function initSessionKeeper(): () => void {
   window.addEventListener('pagehide', onHide);
 
   review(); // a match restored during boot is live already
+  // After this module's own pagehide listener, so a rage quit's clean-up of the
+  // saves runs after the last autosave rather than being overwritten by it.
+  const stopRecorder = initMatchRecorder(
+    () => unloadAllowed,
+    () => {
+      // A visibilitychange can still fire after pagehide; flush now ignores it.
+      leftByUnload = true;
+      window.clearTimeout(timer);
+      timer = undefined;
+      try {
+        sessionStorage.removeItem(TAB_SAVE_KEY);
+        localStorage.removeItem(RESUME_KEY);
+      } catch {
+        /* storage blocked */
+      }
+    },
+  );
+  // Back from the back/forward cache: the old match is gone (the recorder
+  // sends the player to the menu), and any new one is saved as normal.
+  const onPageShow = (e: PageTransitionEvent) => {
+    if (e.persisted) leftByUnload = false;
+  };
+  window.addEventListener('pageshow', onPageShow);
 
   return () => {
+    stopRecorder();
+    window.removeEventListener('pageshow', onPageShow);
     unGame();
     unNet();
     window.clearTimeout(timer);

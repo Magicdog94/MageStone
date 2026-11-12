@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useNet } from '../../net/useNet';
-import { bossOf, type HotseatResult } from '../../net/hotseatResults';
+import { bossOf, outcomeClass, type HotseatResult } from '../../net/hotseatResults';
 
 function when(iso?: string): string {
   if (!iso) return '';
@@ -27,9 +27,9 @@ function ResultsTable({ rows }: { rows: HotseatResult[] }) {
         {rows.map((r, i) => (
           <tr key={r.rid ?? i}>
             <td className="lb-col-name">{r.name}</td>
-            <td className={`gr-outcome gr-${r.outcome.toLowerCase()}`}>{r.outcome}</td>
+            <td className={`gr-outcome ${outcomeClass(r.outcome)}`}>{r.outcome}</td>
             <td>{bossOf(r.opponents)}</td>
-            <td>{r.method === 'Draw' ? '—' : r.method}</td>
+            <td>{r.method === 'Draw' || r.method === 'Rage Quit' ? '—' : r.method}</td>
             <td>{r.rounds}</td>
             <td className="gr-hide-narrow">{r.kills}</td>
             <td className="gr-hide-narrow lb-col-name">{r.opponents.join(', ')}</td>
@@ -41,7 +41,8 @@ function ResultsTable({ rows }: { rows: HotseatResult[] }) {
   );
 }
 
-/** Bottom of the main page: EVERY finished hotseat game, newest first, by the
+/** Bottom of the main page: EVERY hotseat game (finished, or left part-way
+ *  as a "Defeat by Rage Quit"), newest first, by the
  *  name each player gave before starting. Never trimmed: the list grows as
  *  long as it needs to. */
 export function GameResults() {

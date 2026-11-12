@@ -6,7 +6,7 @@ import type { BotLevel } from '../game/bot';
 import { createGame } from '../game/setup';
 import { acceptState } from '../game/migrate';
 import { gameOver } from '../game/rules';
-import { useGame } from '../store';
+import { newMatchId, useGame } from '../store';
 import { GUEST_KEY, RESUME_KEY, RESUME_MAX_AGE_MS, TAB_SAVE_KEY } from './saveKeys';
 import {
   addPending,
@@ -196,6 +196,7 @@ interface LocalSnapshot {
   playerColors?: PlayerColor[];
   stoneLayoutId?: string;
   settings?: Partial<Settings>;
+  matchId?: string;
 }
 
 /** Put a saved local match back on the board. False when the save came from an
@@ -214,6 +215,7 @@ function restoreLocal(snap: LocalSnapshot, source: string): boolean {
     online: false,
     myColor: null,
     started: true,
+    matchId: typeof snap.matchId === 'string' && snap.matchId ? snap.matchId : newMatchId(),
     tutorial: false,
     tutRestrict: null,
     modal: null,
@@ -260,7 +262,7 @@ useGame.subscribe((state, prev) => {
   if (!over && state.game.turn === 1) hotseatArmed = true;
   if (!over || gameOver(prev.game) || !hotseatArmed) return;
   if (state.online || state.tutorial || !state.started) return;
-  const result = buildResult(state.game, state.bots, readHotseatName());
+  const result = buildResult(state.game, state.bots, readHotseatName(), state.matchId);
   if (!result) return;
   hotseatArmed = false;
   useNet.getState().sendHotseatResult(result);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../game/setup';
-import { bossOf, buildResult, cleanName } from './hotseatResults';
+import { bossOf, buildQuitResult, buildResult, cleanName, outcomeClass, RAGE_QUIT } from './hotseatResults';
 
 describe('hotseat results', () => {
   const base = createGame(2);
@@ -47,5 +47,32 @@ describe('hotseat results', () => {
   it('tidies names', () => {
     expect(cleanName('  Jacob   H  ')).toBe('Jacob H');
     expect(cleanName('x'.repeat(40))).toHaveLength(24);
+  });
+
+  it('records a match left part-way as a Defeat by Rage Quit', () => {
+    const g = { ...base, turn: 4, kills: { ...base.kills, [a]: 2 } };
+    const r = buildQuitResult(g, { [b]: 'medium' }, 'Jacob', 'match-1')!;
+    expect(r).toMatchObject({
+      rid: 'match-1',
+      name: 'Jacob',
+      outcome: RAGE_QUIT,
+      color: a,
+      winner: null,
+      method: 'Rage Quit',
+      rounds: 4,
+      kills: 2,
+    });
+    expect(bossOf(r.opponents)).toBe('Medium');
+    expect(outcomeClass(r.outcome)).toContain('gr-defeat');
+  });
+
+  it('records nothing for a rage quit with no name or no human seat', () => {
+    expect(buildQuitResult(base, {}, '', 'm')).toBeNull();
+    expect(buildQuitResult(base, { [a]: 'hard', [b]: 'hard' }, 'Jacob', 'm')).toBeNull();
+  });
+
+  it('stores a finished match under its match id', () => {
+    const g = { ...base, winner: a, winMethod: 'Conquest' as const };
+    expect(buildResult(g, {}, 'Jacob', 'match-7')!.rid).toBe('match-7');
   });
 });

@@ -222,8 +222,9 @@ async function savePnp(email) {
 
 // ---- Hotseat Game Results ---------------------------------------------------
 const COLORS_OK = new Set(['red', 'blue', 'green', 'yellow']);
-const OUTCOMES = new Set(['Victory', 'Defeat', 'Draw']);
-const METHODS = new Set(['MageStone', 'Ritual', 'Conquest', 'Draw']);
+// "Defeat by Rage Quit": the player left a started match before it ended.
+const OUTCOMES = new Set(['Victory', 'Defeat', 'Draw', 'Defeat by Rage Quit']);
+const METHODS = new Set(['MageStone', 'Ritual', 'Conquest', 'Draw', 'Rage Quit']);
 /** Validate a client-sent hotseat result; null when it doesn't look right. */
 function cleanHotseat(m) {
   const str = (v, n) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, n) : '');
@@ -893,7 +894,53 @@ const MIME = {
   '.woff': 'font/woff',
   '.map': 'application/json',
 };
+// Hotseat results sent with navigator.sendBeacon as the page closes (a rage
+// quit), when the WebSocket can't be trusted to get the message out. Same
+// checks as the socket route; 30 a minute per address.
+const beaconTimes = new Map();
+function hotseatBeacon(req, res) {
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  const now = Date.now();
+  const times = (beaconTimes.get(ip) || []).filter((t) => now - t < 60_000);
+  if (beaconTimes.size > 5000) beaconTimes.clear();
+  let body = '';
+  let tooBig = false;
+  req.on('data', (c) => {
+    body += c;
+    if (body.length > 4096) {
+      tooBig = true;
+      req.destroy();
+    }
+  });
+  req.on('end', async () => {
+    const done = (code) => {
+      res.writeHead(code, { 'access-control-allow-origin': '*' });
+      res.end();
+    };
+    if (tooBig) return;
+    if (times.length >= 30) return done(429);
+    let m;
+    try {
+      m = JSON.parse(body);
+    } catch {
+      return done(400);
+    }
+    const r = m && typeof m === 'object' ? cleanHotseat(m) : null;
+    if (!r) return done(400);
+    times.push(now);
+    beaconTimes.set(ip, times);
+    try {
+      await saveHotseat(r);
+      done(204);
+    } catch (e) {
+      console.error('hotseat beacon:', e.message);
+      done(500);
+    }
+  });
+}
+
 const httpServer = createServer((req, res) => {
+  if (req.method === 'POST' && req.url?.split('?')[0] === '/api/hotseat-result') return hotseatBeacon(req, res);
   if (!HAS_DIST) {
     res.writeHead(200, { 'content-type': 'text/plain' });
     return res.end('MageStone multiplayer server (run `npm run build` to serve the app here too)');

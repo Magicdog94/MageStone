@@ -8,7 +8,8 @@ export const HOTSEAT_NAME_KEY = 'ms-hotseat-name';
 const PENDING_KEY = 'ms-hotseat-pending';
 export const NAME_MAX = 24;
 
-export type Outcome = 'Victory' | 'Defeat' | 'Draw';
+export const RAGE_QUIT = 'Defeat by Rage Quit';
+export type Outcome = 'Victory' | 'Defeat' | 'Draw' | typeof RAGE_QUIT;
 
 /** One finished hotseat match, as sent to and returned by the server. */
 export interface HotseatResult {
@@ -20,7 +21,8 @@ export interface HotseatResult {
   color: PlayerColor;
   /** Winning colour; null for a draw. */
   winner: PlayerColor | null;
-  /** How the game ended: MageStone, Ritual, Conquest or Draw. */
+  /** How the game ended: MageStone, Ritual, Conquest, Draw, or Rage Quit when
+   *  the player left before the end. */
   method: string;
   /** The round the game ended in. */
   rounds: number;
@@ -54,20 +56,36 @@ export function saveHotseatName(name: string): void {
   }
 }
 
+/** The named player's seat: the first human one (null when all are bots). */
+function humanSeat(game: GameState, bots: Partial<Record<PlayerColor, BotLevel>>): PlayerColor | null {
+  return game.players.find((p) => !bots[p]) ?? null;
+}
+
+function opponentsOf(game: GameState, bots: Partial<Record<PlayerColor, BotLevel>>, color: PlayerColor) {
+  return game.players
+    .filter((p) => p !== color)
+    .map((p) => {
+      const lvl = bots[p];
+      return lvl ? `${cap(p)} (${cap(lvl)} AI)` : cap(p);
+    });
+}
+
 /** Build the record for a finished game, or null when there is nothing to
- *  record (game still running, no name, or no human seat). */
+ *  record (game still running, no name, or no human seat). `rid` is the
+ *  match's id, so a match can only be stored once. */
 export function buildResult(
   game: GameState,
   bots: Partial<Record<PlayerColor, BotLevel>>,
   name: string,
+  rid: string = newRid(),
 ): HotseatResult | null {
   const isOver = game.winner !== null || game.winMethod === 'Draw';
   if (!isOver || !name) return null;
-  const color = game.players.find((p) => !bots[p]);
+  const color = humanSeat(game, bots);
   if (!color) return null;
   const outcome: Outcome = game.winner === null ? 'Draw' : game.winner === color ? 'Victory' : 'Defeat';
   return {
-    rid: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+    rid,
     name,
     outcome,
     color,
@@ -75,13 +93,43 @@ export function buildResult(
     method: game.winMethod ?? 'Draw',
     rounds: game.turn,
     kills: game.kills?.[color] ?? 0,
-    opponents: game.players
-      .filter((p) => p !== color)
-      .map((p) => {
-        const lvl = bots[p];
-        return lvl ? `${cap(p)} (${cap(lvl)} AI)` : cap(p);
-      }),
+    opponents: opponentsOf(game, bots, color),
   };
+}
+
+/** The record for a match the player LEFT before it ended (quit to the menu,
+ *  started another game, closed or reloaded the page): a "Defeat by Rage Quit"
+ *  at the round and kill count it had reached. Null when nothing would be
+ *  recorded for it anyway (no name, or no human seat). */
+export function buildQuitResult(
+  game: GameState,
+  bots: Partial<Record<PlayerColor, BotLevel>>,
+  name: string,
+  rid: string,
+): HotseatResult | null {
+  if (!name) return null;
+  const color = humanSeat(game, bots);
+  if (!color) return null;
+  return {
+    rid,
+    name,
+    outcome: RAGE_QUIT,
+    color,
+    winner: null,
+    method: 'Rage Quit',
+    rounds: game.turn,
+    kills: game.kills?.[color] ?? 0,
+    opponents: opponentsOf(game, bots, color),
+  };
+}
+
+function newRid(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** CSS class for the Result cell. */
+export function outcomeClass(outcome: string): string {
+  return outcome === RAGE_QUIT ? 'gr-defeat gr-ragequit' : `gr-${outcome.toLowerCase()}`;
 }
 
 /** The "Boss" column: what kind of opponent the player faced, read from the
@@ -125,4 +173,42 @@ export function addPending(r: HotseatResult): void {
 }
 export function clearPending(rid: string): void {
   writePending(readPending().filter((p) => p.rid !== rid));
+}
+
+// ---- matches in progress ----------------------------------------------------
+// Every started match is written here (as the rage-quit result it WOULD be)
+// and kept up to date while it runs. Finishing it removes the entry; leaving
+// it turns the entry into a result. If the page dies without a chance to say
+// so (browser crash, app killed, the unload message lost), the entry is still
+// here on the next visit and is recorded then: no started match goes unrecorded.
+const LIVE_KEY = 'ms-hotseat-live';
+export interface LiveMatch {
+  result: HotseatResult;
+  /** Last time the tab playing it updated it (ms). */
+  seen: number;
+}
+export function readLive(): Record<string, LiveMatch> {
+  try {
+    const v = JSON.parse(localStorage.getItem(LIVE_KEY) || '{}');
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+function writeLive(map: Record<string, LiveMatch>): void {
+  try {
+    if (Object.keys(map).length) localStorage.setItem(LIVE_KEY, JSON.stringify(map));
+    else localStorage.removeItem(LIVE_KEY);
+  } catch {
+    /* storage blocked */
+  }
+}
+export function putLive(result: HotseatResult): void {
+  writeLive({ ...readLive(), [result.rid]: { result, seen: Date.now() } });
+}
+export function dropLive(rid: string): void {
+  const map = readLive();
+  if (!(rid in map)) return;
+  delete map[rid];
+  writeLive(map);
 }

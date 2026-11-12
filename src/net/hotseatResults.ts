@@ -212,3 +212,55 @@ export function dropLive(rid: string): void {
   delete map[rid];
   writeLive(map);
 }
+
+// ---- player leaderboard -------------------------------------------------------
+// Built in the browser from the full Game Results list, so every recorded game
+// (old and new) counts and nothing extra is stored on the server.
+export interface LeaderRow {
+  /** 1-based position; 1-3 get crowns. */
+  rank: number;
+  /** The name as the player last typed it. */
+  name: string;
+  played: number;
+  won: number;
+  /** Defeats, including Defeat by Rage Quit. */
+  lost: number;
+  kills: number;
+}
+
+/** Names are grouped ignoring case and spacing ("jacob" and "Jacob " are one
+ *  player). Ranked by wins; ties broken by fewer losses, then more kills, then
+ *  fewer games played, then name A-Z. Draws count as played, not won or lost. */
+export function buildLeaderboard(rows: HotseatResult[]): LeaderRow[] {
+  const byKey = new Map<string, Omit<LeaderRow, 'rank'> & { latest: number }>();
+  rows.forEach((r, i) => {
+    const name = cleanName(r.name ?? '');
+    if (!name) return;
+    const key = name.toLowerCase();
+    // Rows arrive newest first; fall back to list order when a date is missing.
+    const t = r.created ? Date.parse(r.created) : NaN;
+    const stamp = Number.isNaN(t) ? -i : t;
+    let p = byKey.get(key);
+    if (!p) {
+      p = { name, played: 0, won: 0, lost: 0, kills: 0, latest: stamp };
+      byKey.set(key, p);
+    } else if (stamp > p.latest) {
+      p.name = name;
+      p.latest = stamp;
+    }
+    p.played += 1;
+    if (r.outcome === 'Victory') p.won += 1;
+    else if (r.outcome === 'Defeat' || r.outcome === RAGE_QUIT) p.lost += 1;
+    p.kills += Number.isFinite(r.kills) ? r.kills : 0;
+  });
+  return [...byKey.values()]
+    .sort(
+      (a, b) =>
+        b.won - a.won ||
+        a.lost - b.lost ||
+        b.kills - a.kills ||
+        a.played - b.played ||
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+    )
+    .map(({ name, played, won, lost, kills }, i) => ({ rank: i + 1, name, played, won, lost, kills }));
+}

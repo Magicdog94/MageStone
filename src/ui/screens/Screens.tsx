@@ -10,7 +10,7 @@ import { Modals } from '../Modals';
 import { FeedbackModal } from '../FeedbackModal';
 import { Modal } from '../controls';
 import { cleanName, NAME_MAX, readHotseatName, saveHotseatName } from '../../net/hotseatResults';
-import { GameResults } from './GameResults';
+import { GameResults, PlayerLeaderboard } from './GameResults';
 
 /** A hooded mage casting toward the centre. Rendered as a glowing silhouette so
  *  it reads at any size; `flip` mirrors it for the opposing (right-hand) side. */
@@ -195,6 +195,7 @@ function Shell({ children, bare = false }: { children: React.ReactNode; bare?: b
       <div className="entry-bg" />
       <EntryModals />
       {bare && <GameResults />}
+      {bare && <PlayerLeaderboard />}
       {bare ? (
         // Cover mode (landing): the box-front art *is* the page — the title and
         // emblem come from the artwork, so we only float the controls onto it.

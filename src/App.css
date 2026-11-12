@@ -4135,7 +4135,7 @@ body.ui-mobile .hint-note {
 /* The cover fills the first screen; Game Results sits below it, reached by
    scrolling (or the "Game Results" menu item). */
 .entry--cover {
-  grid-template-rows: 100% auto;
+  grid-template-rows: 100% auto auto;
 }
 .game-results {
   grid-row: 2;
@@ -4175,6 +4175,53 @@ body.ui-mobile .hint-note {
 }
 .gr-draw {
   color: var(--ink-dim);
+}
+/* Leaderboard: its own panel straight under Game Results. */
+.game-results:has(+ .player-board) {
+  margin-bottom: var(--space-3);
+}
+.player-board {
+  grid-row: 3;
+  margin-top: 0;
+}
+.pl-table th.lb-col-name,
+.pl-table td.lb-col-name {
+  text-align: left;
+  width: 40%;
+}
+.pl-table .pl-rank {
+  text-align: center;
+  width: 3.2em;
+  color: var(--ink-dim);
+}
+.pl-crown {
+  width: 26px;
+  height: 20px;
+  vertical-align: middle;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+.crown-gold {
+  color: #f2c94c;
+}
+.crown-silver {
+  color: #d3d7de;
+}
+.crown-bronze {
+  color: #cd7f45;
+}
+.pl-top-1 td:not(.pl-rank) {
+  color: #f2d27a;
+  font-weight: 600;
+}
+.pl-top-2 td:not(.pl-rank),
+.pl-top-3 td:not(.pl-rank) {
+  font-weight: 600;
+}
+.pl-note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  color: var(--ink-dim);
+  text-align: center;
 }
 @media (max-width: 640px) {
   .gr-hide-narrow {

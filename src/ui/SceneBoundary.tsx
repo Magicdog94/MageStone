@@ -30,6 +30,7 @@ function hardRecover() {
               playerCount: s.playerCount,
               stoneLayoutId: s.stoneLayoutId,
               settings: s.settings,
+              matchId: s.matchId,
             },
       ),
     );

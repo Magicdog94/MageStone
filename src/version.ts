@@ -1,8 +1,9 @@
 // Bumped with each notable alpha update — shown in the landing footer.
-export const VERSION = 'v0.17.1-alpha';
+export const VERSION = 'v0.17.2-alpha';
 export const UPDATED = '12 November 2026';
 
 export const PATCH_NOTES = [
+  'v0.17.2 — A LEADERBOARD. Under Game Results there is now a Leaderboard ranking every hotseat player by wins, with Played, Win, Lost and Kills for each. First place wears a gold crown, second silver and third bronze, and everyone else is numbered from 4 down, with no limit. It counts every game already in Game Results and every game played from now on. Ties go to fewer losses, then more kills. A Defeat by Rage Quit counts as a loss, and a draw counts as a game played. Names are matched ignoring capitals and spaces. No result has been removed.',
   'v0.17.1 — RAGE QUITS ARE RECORDED. Every hotseat game you start now gets a Game Results row, finished or not. Leave a game before it ends (Main Menu, a New Game mid-match, closing the tab or window, reloading or navigating away) and it is saved as a Defeat by Rage Quit, with the round you reached. If the page dies without warning, the game is recorded the next time you visit. A game you rage-quit is not offered back as Resume Match. No result has been removed.',
   'v0.17.0 — CONQUEST: LOSE YOUR WARRIORS, LOSE THE GAME. A player with no live Warriors on the board is now eliminated on the spot, even if their Mage and Priest are still standing. Their remaining pieces leave the board (any MageStones their Mage held stay where it stood, still Activated) and a Rite they had running ends. In a 2-player game that is an instant Conquest Victory for the other side. In a 4-player game the rest play on and the eliminated player’s turns are skipped, until only one player is left. The AI guards its last Warriors and hunts yours, and Game Results record these wins as Conquest.',
   'v0.16.1 — GAME RESULTS SHOW THE BOSS. The Game Results table has a new Boss column saying who you played: an Easy, Medium or Hard bot, or a human. Results saved before this update did not record the bot’s level, so they show just “Bot”. No result has been removed.',
